@@ -31,6 +31,7 @@
   .paper-sheets { display: block; padding: 0; }
   .paper-page { width: auto; padding: 0; box-shadow: none; }
   .paper-page + .paper-page { break-before: page; }
+  .paper-sheets + .paper-sheets > .paper-page:first-child { break-before: page; }
   .paper thead { display: table-header-group; }
   .paper tr { break-inside: avoid; }
 }

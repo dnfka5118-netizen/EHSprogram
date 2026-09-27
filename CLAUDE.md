@@ -11,13 +11,20 @@
 | 이메일 알림 (단계별 + 매일 08:00 요약) | 코드 완료 · SMTP 계정 미설정 |
 | 기존 엑셀 이관 스크립트 (`ehs-web/scripts/import-legacy.mjs`) | 완료 · 실제 반영 전 (사용자 등록 선행 필요) |
 | 사내점검 : 유해화학물질 자체점검, 관리감독자 일일점검 | 예정 |
-| 사외점검, 위험성평가, 안전작업허가서 | 예정 |
+| 공통 전자결재 (양식별 기본 결재선 · 상신 시 수정 · 전자결재함) | 완료 (0004) |
+| 수시 위험성평가 JSA (CF112-01/02 R02, 엑셀 불러오기/내보내기, 인쇄) | 완료 (0005) |
+| 안전작업허가서 (CF430-01 R04, 현장 기록·손서명, TBM, 금일 작업 현황, 인쇄+JSA 첨부) | 완료 (0006) |
+| 사외점검(외부점검), 정기 위험성평가 | 예정 |
 
 ## 구조
 - 앱: `ehs-web/` (Next.js 16 App Router, Tailwind 4) — Next.js 16 은 이전 버전과 다름. 코드 작성 전 `ehs-web/node_modules/next/dist/docs/` 확인 (`middleware` → `proxy.ts`, 요청 API 는 모두 async).
 - DB: Supabase (서울 리전). 스키마는 `ehs-web/supabase/migrations/000N_*.sql` 을 **번호 순서대로 SQL Editor 에서 실행**해 적용. 이미 적용된 파일은 수정하지 말고 새 번호 파일을 추가한다.
 - 배포: GitHub `dnfka5118-netizen/EHSprogram` 의 `main` 에 push 하면 Vercel 이 자동 배포 (Root Directory = `ehs-web`, 함수 리전 icn1). 운영 주소 https://sypcehs-web.vercel.app
 - 로컬 개발과 Vercel 이 **같은 Supabase DB** 를 사용 중 (오픈 전에는 개발/운영 DB 분리 검토).
+
+## 원본 자료
+- 허가서·JSA 는 팀장이 Claude 웹에서 만든 HTML 아티팩트(안전작업허가서, 작업 위험성평가서)를 이식한 것. 체크리스트 문구·부표1·인쇄 셀 배치는 원본 그대로 `src/lib/permit.ts`, `src/lib/jsa.ts`, `src/components/print/*` 에 있다.
+- 결재가 있는 양식은 공통 전자결재(`_submit_approval`, `approval_template_steps`)를 재사용하고, 결재 결과 후처리는 `_on_approval_result` 를 확장한다.
 
 ## 설계 원칙
 - 처리 단계 전환과 권한 검사는 화면이 아니라 DB 의 `security definer` RPC 함수에서 강제한다. 테이블 쓰기는 RPC 로만, 조회는 RLS 정책으로.

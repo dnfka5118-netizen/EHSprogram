@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -260,6 +260,59 @@ await db.exec(`set role authenticated`);
 await as(U.W1); ok((await one(`select count(*)::int c from jsa_overview`)).c === 1, "임직원 목록 조회");
 await as(U.C); ok((await one(`select count(*)::int c from jsa_overview`)).c === 0, "권한 없는 협력업체 조회 불가");
 await expectError("번호 발급 함수 직접 호출 차단", `select next_doc_no('RA')`, [], "permission");
+await db.exec(`reset role`); await as(null);
+
+console.log("\n[안전작업허가서]");
+const pData = (over = {}) => JSON.stringify({
+  department_id: PROD, work_type: "화기", supp: ["confined", "bogus"], grade: "B", work_name: "R-201 맨홀 용접보수",
+  work_place: "2공장 반응동", start_dt: "2026-09-28T09:00", end_dt: "2026-09-28T15:00",
+  managers: [{ org: "생산팀", name: "작업자1", phone: "010" }], witnesses: [{ org: "EHS부서", name: "", phone: "" }],
+  checks: { docs_0: true, docs_risk: true, docs_0_ok: true }, fields: { risk_no: "" }, ...over,
+});
+await as(U.C); await expectError("협력업체 허가서 작성 차단", `select save_permit(null,$1)`, [pData()], "권한");
+await as(U.I);
+const pId = (await one(`select save_permit(null,$1) id`, [pData()])).id;
+const pr = await one(`select permit_no, supp, checks from permits where id=$1`, [pId]);
+ok(/^CF430-\d{8}-001$/.test(pr.permit_no) && pr.supp.join() === "confined" && pr.checks.docs_0_ok === undefined, `저장 → ${pr.permit_no}, 잘못된 보충작업·○확인 키 제거`);
+const pLine = line([["담당", "담당", U.I], ["검토", "검토(EHS부서장)", U.A], ["승인", "승인(해당부서장)", U.H]]);
+await expectError("B등급 입회자 누락 차단", `select submit_permit($1,$2)`, [pId, pLine], "입회자");
+await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ org: "EHS부서", name: "관리자", phone: "" }] })]);
+await expectError("위험성평가 미연결·번호 없음 차단", `select submit_permit($1,$2)`, [pId, pLine], "위험성평가서를 불러오거나");
+// 결재 완료 전 JSA 연결 차단
+const draftJsa = (await one(`select save_jsa(null,$1) id`, [jsaData()])).id;
+await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ name: "관리자" }], risk_eval_id: draftJsa })]);
+await expectError("미결재 위험성평가 연결 차단", `select submit_permit($1,$2)`, [pId, pLine], "결재 완료되지");
+// 1년 넘은 결재완료 JSA
+await as(null); await db.query(`update jsa_evals set eval_date='2025-01-10' where id=$1`, [jsaId]); await as(U.I);
+await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ name: "관리자" }], risk_eval_id: jsaId })]);
+await expectError("1년 경과 위험성평가 차단", `select submit_permit($1,$2)`, [pId, pLine], "1년 이상");
+await as(null); await db.query(`update jsa_evals set eval_date='2026-09-20' where id=$1`, [jsaId]); await as(U.I);
+await expectError("현장 기록은 발급 전 불가", `select save_permit_field($1,'{}')`, [pId], "발급된");
+const pAp = (await one(`select submit_permit($1,$2) id`, [pId, pLine])).id;
+await expectError("결재 중 신청 내용 수정 차단", `select save_permit($1,$2)`, [pId, pData()], "수정할 수 없습니다");
+await as(U.A); await db.query(`select approve_step($1,null)`, [pAp]);
+await as(U.H); await db.query(`select approve_step($1,null)`, [pAp]);
+const pv = await one(`select status, phase, risk_eval_no from permit_overview where id=$1`, [pId]);
+ok(pv.status === "issued" && pv.risk_eval_no?.startsWith("RA-"), "최종 승인 → 발급, 위험성평가 번호 표시");
+await as(U.W1);
+const fieldData = (sigs, done = "") => JSON.stringify({ checks_ok: { docs_0_ok: true }, sigs, fields: { complete_time: done }, acks: [{ id: "a1", name: "작업자1", sig: "data:x" }] });
+await db.query(`select save_permit_field($1,$2)`, [pId, fieldData({ prework_mgr: "data:x" })]);
+ok((await one(`select field->'checks_ok'->>'docs_0_ok' v, field_saved_by from permits where id=$1`, [pId])).v === "true", "다른 임직원도 현장 기록 저장");
+await expectError("입회자 서명 없이 완료 차단", `select complete_permit($1)`, [pId], "입회자 서명");
+await db.query(`select save_permit_field($1,$2)`, [pId, fieldData({ prework_mgr: "d", prework_wit: "d" })]);
+await expectError("EHS 확인 서명 없이 완료 차단", `select complete_permit($1)`, [pId], "EHS 확인");
+await db.query(`select save_permit_field($1,$2)`, [pId, fieldData({ prework_mgr: "d", prework_wit: "d", prework_ehs: "d" })]);
+await expectError("완료 시간 없이 완료 차단", `select complete_permit($1)`, [pId], "완료 시간");
+await db.query(`select save_permit_field($1,$2)`, [pId, fieldData({ prework_mgr: "d", prework_wit: "d", prework_ehs: "d", complete_mgr: "d", complete_wit: "d" }, "2026-09-28T15:10")]);
+await expectError("TBM 일시 필수", `select save_permit_tbm($1,'{}')`, [pId], "TBM 일시");
+await db.query(`select save_permit_tbm($1,$2)`, [pId, JSON.stringify({ tbm_dt: "2026-09-28T08:50", content: "질식 주의" })]);
+await db.query(`select complete_permit($1)`, [pId]);
+const pc = await one(`select status, has_tbm from permit_overview where id=$1`, [pId]);
+ok(pc.status === "completed" && pc.has_tbm, "작업완료 + TBM 기록");
+await expectError("완료 후 현장 기록 수정 차단", `select save_permit_field($1,'{}')`, [pId], "발급된");
+await as(U.I); await expectError("발급된 허가서 삭제 차단", `select delete_permit($1)`, [pId], "삭제할 수 없습니다");
+await db.exec(`set role authenticated`); await as(U.C);
+ok((await one(`select count(*)::int c from permit_overview`)).c === 0, "권한 없는 협력업체 허가서 조회 불가");
 await db.exec(`reset role`); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);

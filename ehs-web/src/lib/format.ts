@@ -25,3 +25,8 @@ export function fmtMonth(value: string): string {
   const [y, m] = value.split("-");
   return `${y.slice(2)}년 ${Number(m)}월`;
 }
+
+// 한국 시간 현재 시각 (datetime-local 입력용 YYYY-MM-DDTHH:MM)
+export function nowKstLocal(): string {
+  return new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16);
+}

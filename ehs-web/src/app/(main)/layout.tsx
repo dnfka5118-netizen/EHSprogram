@@ -17,7 +17,9 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
     supabase.from("approval_steps").select("id", { count: "exact", head: true }).eq("approver_id", profile.id).eq("status", "pending"),
   ]);
 
-  const riskAdhoc = (await getModuleAccess()).some((m) => m.code === "risk_adhoc" && m.is_enabled && m.level !== "none");
+  const access = await getModuleAccess();
+  const riskAdhoc = access.some((m) => m.code === "risk_adhoc" && m.is_enabled && m.level !== "none");
+  const permitOn = access.some((m) => m.code === "permit" && m.is_enabled && m.level !== "none");
 
   const menu: MenuGroup[] = [
     {
@@ -33,7 +35,17 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
     ...(riskAdhoc
       ? [{ label: "위험성평가", items: [{ label: "수시 위험성평가(JSA)", href: "/risk/adhoc" }] }]
       : [{ label: "위험성평가", soon: true }]),
-    { label: "안전작업허가", soon: true },
+    ...(permitOn
+      ? [
+          {
+            label: "안전작업허가",
+            items: [
+              { label: "안전작업허가 현황", href: "/permit", match: ["/permit"] },
+              { label: "금일 작업 현황", href: "/permit?tab=today" },
+            ],
+          },
+        ]
+      : [{ label: "안전작업허가", soon: true }]),
     ...(profile.is_admin ? [{ label: "환경설정", href: "/settings" }] : []),
   ];
 
