@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-noto), system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #f4f6f8;
+  color: #1f2937;
+}
+
+/* iOS 입력창 자동 확대 방지 (16px 이상) */
+input, select, textarea {
+  font-size: 16px;
+}
+@media (min-width: 768px) {
+  input, select, textarea { font-size: 14px; }
+}
