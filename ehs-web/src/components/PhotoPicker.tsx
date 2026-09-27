@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { processPhoto, type ProcessedPhoto } from "@/lib/image";
+import { preloadHeic, processPhoto, type ProcessedPhoto } from "@/lib/image";
 
 const MAX_FILES = 6;
 
@@ -70,7 +70,10 @@ export function PhotoPicker({ photos, onChange }: { photos: ProcessedPhoto[]; on
               <span className="text-2xl leading-none">📷</span>
               카메라 촬영
             </button>
-            <button type="button" className={btn} disabled={busy > 0} onClick={() => albumRef.current?.click()}>
+            <button type="button" className={btn} disabled={busy > 0} onClick={() => {
+                preloadHeic();
+                albumRef.current?.click();
+              }}>
               <span className="text-2xl leading-none">🖼️</span>
               앨범 선택
             </button>

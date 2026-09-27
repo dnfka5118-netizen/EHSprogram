@@ -35,9 +35,16 @@ async function heicToJpeg(file: File): Promise<Blob> {
   return heicTo({ blob: file, type: "image/jpeg", quality: 0.92 });
 }
 
+// 읽는 단계에서 바로 축소 (휴대폰 1,200만 화소 사진 전체를 풀지 않아 빠르고 메모리도 적게 씀)
+async function fromBitmapResized(blob: Blob): Promise<Drawable> {
+  const bmp = await createImageBitmap(blob, { imageOrientation: "from-image", resizeWidth: MAIN.side, resizeQuality: "high" });
+  return { source: bmp, width: bmp.width, height: bmp.height, close: () => bmp.close() };
+}
+
 async function decode(file: File): Promise<Drawable> {
   const attempts: (() => Promise<Drawable>)[] = [];
   if (looksHeic(file)) attempts.push(async () => fromBitmap(await heicToJpeg(file)));
+  if (file.size > 1_000_000) attempts.push(() => fromBitmapResized(file)); // 큰 사진만 (작은 사진은 확대되지 않게)
   attempts.push(() => fromBitmap(file), () => fromImgElement(file));
   if (!looksHeic(file)) attempts.push(async () => fromBitmap(await heicToJpeg(file))); // 확장자 없는 HEIC 대비
 
@@ -53,30 +60,41 @@ async function decode(file: File): Promise<Drawable> {
   throw new Error(`'${file.name}' 사진을 읽을 수 없습니다. 다른 사진을 선택하거나 카메라 버튼으로 다시 촬영해 주세요.`);
 }
 
-function render(d: Drawable, side: number, quality: number): Promise<Blob> {
-  const scale = Math.min(1, side / Math.max(d.width, d.height));
+function draw(source: CanvasImageSource, width: number, height: number, side: number): HTMLCanvasElement {
+  const scale = Math.min(1, side / Math.max(width, height));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(d.width * scale));
-  canvas.height = Math.max(1, Math.round(d.height * scale));
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("이미지를 처리할 수 없습니다.");
   ctx.fillStyle = "#fff"; // PNG 투명 배경 → 흰색
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(d.source, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) =>
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+const toJpeg = (canvas: HTMLCanvasElement, quality: number) =>
+  new Promise<Blob>((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("이미지 변환에 실패했습니다."))), "image/jpeg", quality),
   );
-}
 
 export async function processPhoto(file: File): Promise<ProcessedPhoto> {
   const d = await decode(file);
+  let main: HTMLCanvasElement;
   try {
-    const main = await render(d, MAIN.side, MAIN.quality);
-    const thumb = await render(d, THUMB.side, THUMB.quality);
-    return { main, thumb, preview: URL.createObjectURL(thumb), name: file.name };
+    main = draw(d.source, d.width, d.height, MAIN.side);
   } finally {
     d.close();
   }
+  const thumb = draw(main, main.width, main.height, THUMB.side); // 원본 대신 축소본에서 → 빠름
+  const [mainBlob, thumbBlob] = await Promise.all([toJpeg(main, MAIN.quality), toJpeg(thumb, THUMB.quality)]);
+  return { main: mainBlob, thumb: thumbBlob, preview: URL.createObjectURL(thumbBlob), name: file.name };
+}
+
+// 사진 버튼을 누르는 순간 HEIC 변환기를 미리 받아 둠 (사진 고르는 동안 내려받기)
+let heicPreload: Promise<unknown> | null = null;
+export function preloadHeic() {
+  heicPreload ??= import("heic-to/next").catch(() => (heicPreload = null));
 }
 
 export { thumbPathOf } from "./photo-path";

@@ -37,7 +37,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
     { data: memberRows },
     { data: creator },
   ] = await Promise.all([
-    supabase.from("finding_measures").select("*").eq("finding_id", id),
+    supabase.from("finding_measures").select("*, measure_date_history(*)").eq("finding_id", id),
     supabase.from("finding_photos").select("*").eq("finding_id", id).order("created_at"),
     supabase.from("finding_progress").select("*, profiles(name)").eq("finding_id", id).order("created_at", { ascending: false }),
     supabase.from("finding_comments").select("*, profiles(name)").eq("finding_id", id).order("created_at"),
@@ -53,9 +53,9 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const dept = deptRow as Department;
   const assigneeIds = (assigneeRows ?? []).map((a) => a.user_id as string);
 
-  const { data: historyRows } = measures.length
-    ? await supabase.from("measure_date_history").select("*").in("measure_id", measures.map((m) => m.id)).order("changed_at")
-    : { data: [] };
+  const historyRows = measures
+    .flatMap((m) => ((m as Measure & { measure_date_history?: { measure_id: string; new_date: string; changed_at: string }[] }).measure_date_history ?? []))
+    .sort((x, y) => x.changed_at.localeCompare(y.changed_at));
 
   const signed = photos.length
     ? (await supabase.storage.from("findings").createSignedUrls(photos.flatMap((p) => [p.path, thumbPathOf(p.path)]), 3600)).data ?? []

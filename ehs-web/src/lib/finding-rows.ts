@@ -48,16 +48,12 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   const ids = findings.map((f) => f.id);
 
   const [measures, progress, comments, photos] = await Promise.all([
-    inChunks(ids, (p) => supabase.from("finding_measures").select("*").in("finding_id", p)),
+    inChunks(ids, (p) => supabase.from("finding_measures").select("*, measure_date_history(new_date, changed_at)").in("finding_id", p)),
     inChunks(ids, (p) => supabase.from("finding_progress").select("finding_id, reason, progress, created_at, profiles(name)").in("finding_id", p).order("created_at", { ascending: false })),
     inChunks(ids, (p) => supabase.from("finding_comments").select("finding_id, body").eq("is_directive", true).in("finding_id", p).order("created_at")),
     inChunks(ids, (p) => supabase.from("finding_photos").select("finding_id, kind, path").in("finding_id", p).order("created_at")),
   ]);
 
-  const history = await inChunks(
-    measures.map((m) => m.id as string),
-    (p) => supabase.from("measure_date_history").select("measure_id, new_date").in("measure_id", p).order("changed_at"),
-  );
 
   // 필요한 사진만 서명 URL 발급 (썸네일 1장 + 개선 전/후 각 2장)
   const picked = new Map<string, { thumb?: string; before: string[]; after: string[] }>();
@@ -91,7 +87,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
         content: m.content,
         target: m.target_date,
         original: m.original_target_date,
-        changes: history.filter((h) => h.measure_id === m.id).map((h) => h.new_date as string),
+        changes: ((m.measure_date_history ?? []) as { new_date: string; changed_at: string }[])
+          .sort((x, y) => x.changed_at.localeCompare(y.changed_at))
+          .map((h) => h.new_date),
         done: m.is_done,
         doneAt: m.done_at,
         late: !m.is_done && m.target_date < today && f.status !== "closed",
