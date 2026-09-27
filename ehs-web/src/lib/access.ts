@@ -28,3 +28,8 @@ export async function getModuleBySlug(slug: string) {
   const list = await getModuleAccess();
   return list.find((m) => m.slug === slug && m.is_enabled && m.form === "finding") ?? null;
 }
+
+// 내부점검(사내점검) 탭 : 사용 중이고 열람 권한이 있는 지적사항형 점검
+export async function getInternalModules() {
+  return (await getModuleAccess()).filter((m) => m.is_enabled && m.form === "finding" && m.category === "사내점검" && m.level !== "none");
+}

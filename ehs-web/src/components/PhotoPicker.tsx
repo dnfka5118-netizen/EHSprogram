@@ -39,7 +39,7 @@ export function PhotoPicker({ photos, onChange }: { photos: ProcessedPhoto[]; on
 
   const full = photos.length >= MAX_FILES;
   const btn =
-    "flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-gray-300 text-xs text-gray-600 hover:border-emerald-700 hover:text-emerald-800 disabled:opacity-50";
+    "flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed border-gray-300 text-xs text-gray-600 hover:border-brand-700 hover:text-brand-800 disabled:opacity-50";
 
   return (
     <div>

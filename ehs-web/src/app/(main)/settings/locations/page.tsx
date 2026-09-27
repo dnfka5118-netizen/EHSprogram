@@ -22,7 +22,7 @@ export default async function LocationsPage({ searchParams }: PageProps<"/settin
           <Link
             key={s.id}
             href={`/settings/locations?site=${s.id}`}
-            className={`rounded-full border px-3 py-1 text-sm ${s.id === siteId ? "border-emerald-800 bg-emerald-800 text-white" : "border-gray-300 bg-white"}`}
+            className={`rounded-full border px-3 py-1 text-sm ${s.id === siteId ? "border-brand-800 bg-brand-800 text-white" : "border-gray-300 bg-white"}`}
           >
             {s.name}
           </Link>

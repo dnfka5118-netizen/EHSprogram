@@ -4,12 +4,27 @@
   --font-sans: var(--font-noto), system-ui, sans-serif;
 }
 
+/* 브랜드 색 : 사내 EHS 시스템과 같은 남색·파란색 계열 */
+@theme {
+  --color-brand-50: #eef3fb;
+  --color-brand-100: #dbe5f5;
+  --color-brand-200: #b9cbeb;
+  --color-brand-300: #8eaadc;
+  --color-brand-400: #5f82c7;
+  --color-brand-500: #3b62b0;
+  --color-brand-600: #2a56a8;
+  --color-brand-700: #22488f;
+  --color-brand-800: #1d3a73;
+  --color-brand-900: #182f5c;
+  --color-brand-950: #11234a;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  background: #f4f6f8;
+  background: #eceff3;
   color: #1f2937;
 }
 

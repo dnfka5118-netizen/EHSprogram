@@ -1,6 +1,7 @@
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { enrichFindings } from "@/lib/finding-rows";
 import type { FindingOverview } from "@/lib/types";
@@ -47,12 +48,13 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   return (
     <div className="space-y-4">
+      <PageHeader title="내 할 일" crumbs={[{ label: "홈" }]} />
       {pw === "changed" && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">비밀번호가 변경되었습니다.</p>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {sections.map((s) => (
           <div key={s.title} className="rounded-lg border border-gray-200 bg-white p-4">
             <p className="text-xs text-gray-500">{s.title}</p>
-            <p className={`mt-1 text-2xl font-bold ${s.items.length ? "text-emerald-800" : "text-gray-300"}`}>{s.items.length}</p>
+            <p className={`mt-1 text-2xl font-bold ${s.items.length ? "text-brand-800" : "text-gray-300"}`}>{s.items.length}</p>
           </div>
         ))}
       </div>

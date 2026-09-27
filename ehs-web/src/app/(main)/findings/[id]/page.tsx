@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { MEASURE_KINDS, MEASURE_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
@@ -79,11 +80,20 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
 
   return (
     <div className="space-y-4">
+      <PageHeader
+        title={`${f.module_name} #${f.seq}`}
+        crumbs={[
+          { label: "점검" },
+          { label: "내부점검", href: "/insp/internal" },
+          { label: f.module_name, href: `/insp/${f.module_slug}` },
+          { label: f.inspection_title, href: `/insp/${f.module_slug}/${f.inspection_id}` },
+        ]}
+        actions={canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}/${f.inspection_id}`} />}
+      />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link href={`/insp/${f.module_slug}/${f.inspection_id}`} className="text-sm text-gray-600 hover:underline">
           ← {f.inspection_title}
         </Link>
-        {canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}/${f.inspection_id}`} />}
       </div>
 
       <Card

@@ -34,27 +34,13 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold text-gray-900">{mod.name}</h1>
-        <div className="flex gap-2">
-          <Link href={`/insp/${slug}/report`} className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50">
-            월별 보고서
-          </Link>
-          {mod.level === "write" && (
-            <Link href={`/insp/${slug}/new`} className="rounded-md bg-emerald-800 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-900">
-              + 점검 등록
-            </Link>
-          )}
-        </div>
-      </div>
-
       <Card title="점검 회차">
         {(sessions ?? []).length === 0 ? (
           <p className="text-sm text-gray-500">등록된 점검이 없습니다.</p>
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {((sessions ?? []) as Inspection[]).map((s) => (
-              <Link key={s.id} href={`/insp/${slug}/${s.id}`} className="shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm hover:border-emerald-700">
+              <Link key={s.id} href={`/insp/${slug}/${s.id}`} className="shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm hover:border-brand-700">
                 <p className="font-medium text-gray-900">{s.title}</p>
                 <p className="text-xs text-gray-500">
                   {siteName(s.site_id)} · {fmtDate(s.inspection_date)}

@@ -67,7 +67,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
   }
 
   return (
-    <Card title="조치결과 보고" className="border-emerald-300">
+    <Card title="조치결과 보고" className="border-brand-300">
       <ul className="space-y-3">
         {measures.map((m) => {
           const c = choices[m.id];
@@ -83,7 +83,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
                   <button
                     type="button"
                     onClick={() => set(m.id, { done: true })}
-                    className={`px-4 py-1.5 ${c.done === true ? "bg-emerald-700 text-white" : "bg-white text-gray-700"}`}
+                    className={`px-4 py-1.5 ${c.done === true ? "bg-emerald-600 text-white" : "bg-white text-gray-700"}`}
                   >
                     완료
                   </button>

@@ -96,11 +96,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/settings/u
               {((users ?? []) as Profile[]).map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-2 py-2">
-                    <Link href={`/settings/users/${u.id}`} className="font-medium text-emerald-800 hover:underline">
+                    <Link href={`/settings/users/${u.id}`} className="font-medium text-brand-800 hover:underline">
                       {u.name}
                     </Link>
                     {u.position && <span className="ml-1 text-xs text-gray-500">{u.position}</span>}
-                    {u.is_admin && <span className="ml-1 rounded bg-emerald-100 px-1 text-xs text-emerald-800">관리자</span>}
+                    {u.is_admin && <span className="ml-1 rounded bg-brand-100 px-1 text-xs text-brand-800">관리자</span>}
                   </td>
                   <td className="px-2 py-2 text-gray-600">{u.email}</td>
                   <td className="px-2 py-2 text-gray-600">{siteName(u.site_id)}</td>

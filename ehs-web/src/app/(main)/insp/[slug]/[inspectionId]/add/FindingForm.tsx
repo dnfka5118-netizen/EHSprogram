@@ -111,7 +111,7 @@ export function FindingForm({ inspectionId, backHref, locations, types, departme
               type="button"
               onClick={() => setTypeId(t.id)}
               className={`rounded-full border px-3 py-1.5 text-sm ${
-                typeId === t.id ? "border-emerald-800 bg-emerald-800 text-white" : "border-gray-300 bg-white text-gray-700"
+                typeId === t.id ? "border-brand-800 bg-brand-800 text-white" : "border-gray-300 bg-white text-gray-700"
               }`}
             >
               {t.name}

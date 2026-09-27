@@ -34,7 +34,7 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
           mod.level === "write" && (
             <Link
               href={`/insp/${slug}/${inspectionId}/add`}
-              className="rounded-md bg-emerald-800 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-900"
+              className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900"
             >
               + 지적사항 추가
             </Link>

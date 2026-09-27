@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/auth";
-import { SettingsTab } from "./SettingsTab";
+import { PageHeader } from "@/components/PageHeader";
+import { TabLinks } from "@/components/TabLinks";
 
 const TABS = [
   { href: "/settings/users", label: "사용자·권한" },
@@ -14,14 +15,9 @@ export default async function SettingsLayout({ children }: LayoutProps<"/setting
   await requireAdmin();
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">환경설정</h1>
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
-        {TABS.map((t) => (
-          <SettingsTab key={t.href} href={t.href}>
-            {t.label}
-          </SettingsTab>
-        ))}
-      </div>
+      <PageHeader title="환경설정" crumbs={[{ label: "관리" }, { label: "환경설정" }]}>
+        <TabLinks tabs={TABS} />
+      </PageHeader>
       {children}
     </div>
   );

@@ -19,7 +19,7 @@ export function AssignPanel({ findingId, members, selected, initialOpen }: {
   if (!open) {
     return (
       <div className="text-right">
-        <button onClick={() => setOpen(true)} className="text-sm text-emerald-800 hover:underline">
+        <button onClick={() => setOpen(true)} className="text-sm text-brand-800 hover:underline">
           조치담당자 변경
         </button>
       </div>
@@ -29,7 +29,7 @@ export function AssignPanel({ findingId, members, selected, initialOpen }: {
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   return (
-    <Card title={selected.length ? "조치담당자 변경" : "조치담당자 지정"} className="border-emerald-300">
+    <Card title={selected.length ? "조치담당자 변경" : "조치담당자 지정"} className="border-brand-300">
       {members.length === 0 ? (
         <p className="text-sm text-gray-500">이 부서에 등록된 사용자가 없습니다. 환경설정에서 사용자의 부서를 지정해 주세요.</p>
       ) : (
@@ -40,7 +40,7 @@ export function AssignPanel({ findingId, members, selected, initialOpen }: {
               type="button"
               onClick={() => toggle(m.id)}
               className={`rounded-full border px-3 py-1.5 text-sm ${
-                picked.includes(m.id) ? "border-emerald-800 bg-emerald-800 text-white" : "border-gray-300 bg-white text-gray-700"
+                picked.includes(m.id) ? "border-brand-800 bg-brand-800 text-white" : "border-gray-300 bg-white text-gray-700"
               }`}
             >
               {m.name}

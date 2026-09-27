@@ -24,7 +24,7 @@ export function PlanForm({ findingId, measures, mode }: { findingId: string; mea
   if (!open) {
     return (
       <div className="text-right">
-        <button onClick={() => setOpen(true)} className="text-sm text-emerald-800 hover:underline">
+        <button onClick={() => setOpen(true)} className="text-sm text-brand-800 hover:underline">
           조치계획 수정 / 추가
         </button>
       </div>
@@ -49,7 +49,7 @@ export function PlanForm({ findingId, measures, mode }: { findingId: string; mea
   }
 
   return (
-    <Card title={mode === "create" ? "조치계획 등록" : "조치계획 수정"} className="border-emerald-300">
+    <Card title={mode === "create" ? "조치계획 등록" : "조치계획 수정"} className="border-brand-300">
       <p className="mb-3 text-sm text-gray-600">해당하는 조치만 입력하세요. 조치마다 개선 목표일을 따로 정합니다.</p>
       <div className="space-y-4">
         {MEASURE_KINDS.map((k) => (

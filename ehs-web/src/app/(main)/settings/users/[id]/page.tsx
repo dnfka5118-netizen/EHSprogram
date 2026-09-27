@@ -38,7 +38,7 @@ export default async function UserEditPage({ params }: PageProps<"/settings/user
       <Card title="프로세스별 권한">
         <p className="mb-3 text-sm text-gray-600">
           기본값: 임직원은 모든 프로세스 <b>작성</b>, 협력업체는 <b>없음</b>. 필요한 프로세스만 따로 지정하세요.
-          {u.is_admin && <span className="text-emerald-800"> (관리자는 항상 전체 권한)</span>}
+          {u.is_admin && <span className="text-brand-800"> (관리자는 항상 전체 권한)</span>}
         </p>
         <ActionForm action={savePermissions} className="space-y-3">
           <input type="hidden" name="id" value={u.id} />

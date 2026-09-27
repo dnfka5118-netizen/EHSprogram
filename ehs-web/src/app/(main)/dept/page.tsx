@@ -4,6 +4,7 @@ import { getModuleAccess } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 import { enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
+import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
 import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
@@ -54,11 +55,10 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">부서별 현황</h1>
-          <p className="text-sm text-gray-500">모든 점검에서 우리 부서로 조치 요청된 지적사항을 한 번에 봅니다.</p>
-        </div>
+      <PageHeader
+        title="부서별 현황"
+        crumbs={[{ label: "점검" }, { label: "부서별 현황" }]}
+        actions={
         <form className="flex gap-2">
           {/* 부서만 바꾸고 나머지 조건은 유지 */}
           <input type="hidden" name="status" value={filters.status} />
@@ -74,21 +74,24 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
                 </option>
               ))}
           </select>
-          <button className="rounded-md bg-emerald-800 px-4 py-2 text-sm text-white">보기</button>
+          <button className="rounded-md bg-brand-800 px-4 py-2 text-sm text-white">보기</button>
         </form>
-      </div>
+        }
+      >
+        <p className="pb-3 text-sm text-gray-500">모든 점검에서 우리 부서로 조치 요청된 지적사항을 한 번에 봅니다.</p>
+      </PageHeader>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {summary.map((s) => (
           <Link
             key={s.code}
             href={`/dept?dept=${filters.dept}&module=${s.code}&status=open`}
-            className={`rounded-lg border bg-white p-4 hover:border-emerald-700 ${filters.module === s.code ? "border-emerald-700" : "border-gray-200"}`}
+            className={`rounded-lg border bg-white p-4 hover:border-brand-700 ${filters.module === s.code ? "border-brand-700" : "border-gray-200"}`}
           >
             <p className="text-sm font-medium text-gray-900">{s.name}</p>
             <p className="mt-2 flex items-baseline gap-3 text-sm text-gray-600">
               <span>
-                미완료 <b className="text-xl text-emerald-800">{s.open}</b>
+                미완료 <b className="text-xl text-brand-800">{s.open}</b>
               </span>
               {s.overdue > 0 && (
                 <span className="text-red-600">

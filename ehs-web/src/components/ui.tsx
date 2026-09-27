@@ -7,7 +7,7 @@ import type { ActionState } from "@/lib/types";
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
 
 const BUTTON = {
-  primary: "bg-emerald-800 text-white hover:bg-emerald-900 disabled:bg-emerald-800/50",
+  primary: "bg-brand-800 text-white hover:bg-brand-900 disabled:bg-brand-800/50",
   secondary: "bg-white text-gray-800 border border-gray-300 hover:bg-gray-50 disabled:opacity-50",
   danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-red-600/50",
   ghost: "text-gray-700 hover:bg-gray-100",
@@ -81,7 +81,7 @@ export function Field({ label, required, hint, children }: { label: string; requ
   );
 }
 
-const INPUT = "w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-emerald-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 disabled:bg-gray-100";
+const INPUT = "w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-700 disabled:bg-gray-100";
 
 export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input {...props} className={cx(INPUT, className)} />;

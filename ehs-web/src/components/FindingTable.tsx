@@ -55,7 +55,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
       {/* ---------- PC : 표 ---------- */}
       <div className="hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[1400px] border-collapse text-xs">
-          <thead className="bg-emerald-50 text-gray-700">
+          <thead className="bg-brand-50 text-gray-700">
             <tr>
               {showModule && <Th rowSpan={2}>점검</Th>}
               <Th rowSpan={2}>시행일자</Th>
@@ -83,7 +83,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 onClick={(e) => open(e, r.id)}
                 onKeyDown={(e) => e.key === "Enter" && router.push(`/findings/${r.id}`)}
                 tabIndex={0}
-                className="cursor-pointer align-top hover:bg-emerald-50/60 focus:bg-emerald-50/60 focus:outline-none"
+                className="cursor-pointer align-top hover:bg-brand-50/60 focus:bg-brand-50/60 focus:outline-none"
               >
                 {showModule && <Td className="whitespace-nowrap">{r.module_name}</Td>}
                 <Td className="whitespace-nowrap">{fmtDate(r.inspection_date)}</Td>
@@ -254,7 +254,7 @@ function ReasonPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
           <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
             닫기
           </button>
-          <Link href={`/findings/${row.id}`} className="rounded-md bg-emerald-800 px-3 py-2 text-sm text-white">
+          <Link href={`/findings/${row.id}`} className="rounded-md bg-brand-800 px-3 py-2 text-sm text-white">
             상세 보기
           </Link>
         </div>
