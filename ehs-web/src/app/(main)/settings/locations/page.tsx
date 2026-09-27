@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Input, SubmitButton } from "@/components/ui";
+import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { saveLocation, saveSubLocation } from "../actions";
 import type { Location, Site, SubLocation } from "@/lib/types";
@@ -50,6 +50,7 @@ export default async function LocationsPage({ searchParams }: PageProps<"/settin
                 <input type="checkbox" name="is_active" defaultChecked={l.is_active} className="h-4 w-4" /> 사용
               </label>
               <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
+              <DeleteSubmit what={l.name} warning="세부장소도 함께 삭제됩니다." />
             </ActionForm>
           }
         >
@@ -66,6 +67,7 @@ export default async function LocationsPage({ searchParams }: PageProps<"/settin
                     <input type="checkbox" name="is_active" defaultChecked={s.is_active} className="h-4 w-4" /> 사용
                   </label>
                   <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
+                  <DeleteSubmit what={s.name} />
                 </ActionForm>
               ))}
             <ActionForm action={saveSubLocation} resetOnSuccess className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">

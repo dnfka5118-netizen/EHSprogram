@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { reportProgress, type ReportItem } from "../actions";
 import { uploadPhotos, removePhotos } from "@/lib/upload";
 import { PhotoPicker } from "@/components/PhotoPicker";
+import type { ProcessedPhoto } from "@/lib/image";
 import { Button, Card, Field, FormMessage, Input, Textarea } from "@/components/ui";
 import { MEASURE_LABEL } from "@/lib/labels";
 import { fmtDate } from "@/lib/format";
@@ -22,7 +23,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
   );
   const [reason, setReason] = useState("");
   const [progress, setProgress] = useState("");
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<ProcessedPhoto[]>([]);
   const [state, setState] = useState<ActionState>();
   const [pending, start] = useTransition();
 
@@ -122,7 +123,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
 
       <div className="mt-4">
         <Field label="개선 후 사진" required={allDone && !hasAfterPhotos} hint={hasAfterPhotos ? "이미 등록된 사진이 있습니다" : undefined}>
-          <PhotoPicker files={photos} onChange={setPhotos} label="촬영/선택" />
+          <PhotoPicker photos={photos} onChange={setPhotos} />
         </Field>
       </div>
 

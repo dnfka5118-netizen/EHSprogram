@@ -1,7 +1,8 @@
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
-import { FindingList } from "@/components/FindingList";
+import { FindingTable } from "@/components/FindingTable";
+import { enrichFindings } from "@/lib/finding-rows";
 import type { FindingOverview } from "@/lib/types";
 
 export default async function HomePage({ searchParams }: PageProps<"/">) {
@@ -33,11 +34,15 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
     .filter((f) => f.status === "in_progress")
     .sort((a, b) => Number(b.is_overdue) - Number(a.is_overdue) || (a.next_due ?? "").localeCompare(b.next_due ?? ""));
 
+  const [assignRows, planRows, doingRows, approveRows] = await Promise.all(
+    [(toAssign.data ?? []) as FindingOverview[], toPlan, doing, (toApprove.data ?? []) as FindingOverview[]].map((list) => enrichFindings(supabase, list)),
+  );
+
   const sections = [
-    { title: "조치담당자 지정 필요", desc: "우리 부서로 조치 요청된 지적사항", items: (toAssign.data ?? []) as FindingOverview[] },
-    { title: "조치계획 수립 필요", desc: "내가 조치담당자로 지정된 건", items: toPlan },
-    { title: "조치 진행 중", desc: "완료 또는 미완료 보고가 필요한 건", items: doing },
-    { title: "종결 승인 필요", desc: "개선 후 사진 확인 후 승인/반려", items: (toApprove.data ?? []) as FindingOverview[] },
+    { title: "조치담당자 지정 필요", desc: "우리 부서로 조치 요청된 지적사항", items: assignRows },
+    { title: "조치계획 수립 필요", desc: "내가 조치담당자로 지정된 건", items: planRows },
+    { title: "조치 진행 중", desc: "완료 또는 미완료 보고가 필요한 건", items: doingRows },
+    { title: "종결 승인 필요", desc: "개선 후 사진 확인 후 승인/반려", items: approveRows },
   ];
 
   return (
@@ -54,7 +59,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       {sections.map((s) =>
         s.items.length ? (
           <Card key={s.title} title={<>{s.title} <span className="ml-1 text-sm font-normal text-gray-500">{s.desc}</span></>}>
-            <FindingList items={s.items} showModule />
+            <FindingTable rows={s.items} showModule />
           </Card>
         ) : null,
       )}

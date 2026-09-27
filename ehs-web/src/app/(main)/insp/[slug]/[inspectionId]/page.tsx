@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
-import { FindingList } from "@/components/FindingList";
+import { FindingTable } from "@/components/FindingTable";
+import { ExcelButton } from "@/components/ExcelButton";
+import { enrichFindings } from "@/lib/finding-rows";
 import { fmtDate } from "@/lib/format";
 import type { FindingOverview, Inspection } from "@/lib/types";
 
@@ -19,6 +21,7 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
   ]);
   if (!insp) notFound();
   const inspection = insp as Inspection & { sites: { name: string } | null };
+  const rows = await enrichFindings(supabase, (findings ?? []) as FindingOverview[]);
 
   return (
     <div className="space-y-4">
@@ -58,8 +61,8 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
         </dl>
         {inspection.note && <p className="mt-3 text-sm whitespace-pre-wrap text-gray-700">{inspection.note}</p>}
       </Card>
-      <Card title="지적사항">
-        <FindingList items={(findings ?? []) as FindingOverview[]} empty="아직 등록된 지적사항이 없습니다." />
+      <Card title={`지적사항 (${rows.length}건)`} actions={<ExcelButton rows={rows} title={`${inspection.title} 현황`} fileName={`${inspection.title}.xlsx`} />}>
+        <FindingTable rows={rows} empty="아직 등록된 지적사항이 없습니다." />
       </Card>
     </div>
   );

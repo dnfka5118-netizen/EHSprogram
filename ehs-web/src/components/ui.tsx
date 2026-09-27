@@ -33,13 +33,38 @@ export function Button({
 export function SubmitButton({
   children,
   pendingText = "처리 중…",
+  confirmText,
   ...props
-}: ComponentProps<typeof Button> & { pendingText?: string }) {
+}: ComponentProps<typeof Button> & { pendingText?: string; confirmText?: string }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending || props.disabled} {...props}>
+    <Button
+      type="submit"
+      disabled={pending || props.disabled}
+      {...props}
+      onClick={(e) => {
+        if (confirmText && !confirm(confirmText)) e.preventDefault();
+        props.onClick?.(e);
+      }}
+    >
       {pending ? pendingText : children}
     </Button>
+  );
+}
+
+// 행 삭제 버튼 : 같은 폼으로 intent=delete 를 보낸다
+export function DeleteSubmit({ what, warning }: { what: string; warning?: string }) {
+  return (
+    <SubmitButton
+      name="intent"
+      value="delete"
+      variant="ghost"
+      pendingText="…"
+      className="px-2 py-1.5 text-red-600 hover:bg-red-50"
+      confirmText={`'${what}'을(를) 삭제할까요?${warning ? `\n${warning}` : ""}`}
+    >
+      삭제
+    </SubmitButton>
   );
 }
 

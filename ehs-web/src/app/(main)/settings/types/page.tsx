@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, Input, SubmitButton } from "@/components/ui";
+import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { saveType } from "../actions";
 import type { FindingType } from "@/lib/types";
@@ -20,6 +20,7 @@ export default async function TypesPage() {
               <input type="checkbox" name="is_active" defaultChecked={t.is_active} className="h-4 w-4" /> 사용
             </label>
             <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
+            <DeleteSubmit what={t.name} />
           </ActionForm>
         ))}
         <ActionForm action={saveType} resetOnSuccess className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, Input, SubmitButton } from "@/components/ui";
+import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { saveDepartment } from "../actions";
 import type { Department, Profile, Site } from "@/lib/types";
@@ -33,6 +33,7 @@ export default async function DepartmentsPage() {
                 <span>종결 승인자 (부서장)</span>
                 <span>사용</span>
                 <span />
+                <span />
               </div>
               {list.map((d) => {
                 const members = people.filter((p) => p.department_id === d.id);
@@ -56,7 +57,7 @@ export default async function DepartmentsPage() {
                   <ActionForm
                     key={d.id}
                     action={saveDepartment}
-                    className="grid grid-cols-2 items-center gap-2 rounded-md border border-gray-100 p-2 md:grid-cols-[1fr_70px_1fr_1fr_60px_70px] md:border-0 md:p-1"
+                    className="grid grid-cols-2 items-center gap-2 rounded-md border border-gray-100 p-2 md:grid-cols-[1fr_70px_1fr_1fr_60px_70px_56px] md:border-0 md:p-1"
                   >
                     <input type="hidden" name="id" value={d.id} />
                     <Input name="name" defaultValue={d.name} className="col-span-2 md:col-span-1" />
@@ -71,6 +72,7 @@ export default async function DepartmentsPage() {
                       <input type="checkbox" name="is_active" defaultChecked={d.is_active} className="h-4 w-4" /> 사용
                     </label>
                     <SubmitButton variant="secondary" className="px-2 py-1.5">저장</SubmitButton>
+                    <DeleteSubmit what={d.name} warning="소속 사용자는 부서 없음으로 바뀝니다. 지적사항이 있는 부서는 삭제되지 않습니다." />
                   </ActionForm>
                 );
               })}

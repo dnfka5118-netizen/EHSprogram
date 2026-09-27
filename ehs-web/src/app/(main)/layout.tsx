@@ -31,6 +31,7 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
         </div>
         <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-2 pb-2 text-sm">
           <NavLink href="/" exact>내 할 일</NavLink>
+          <NavLink href="/dept">부서별 현황</NavLink>
           {modules.map((m) => (
             <NavLink key={m.code} href={`/insp/${m.slug}`}>
               {m.name}

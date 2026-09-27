@@ -12,6 +12,7 @@ import { ReportForm } from "./ReportForm";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { CommentForm } from "./CommentForm";
 import { DeleteButton } from "./DeleteButton";
+import { thumbPathOf } from "@/lib/photo-path";
 import type { Department, FindingOverview, Measure, Photo } from "@/lib/types";
 
 type Named = { profiles: { name: string } | null };
@@ -57,9 +58,10 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
     : { data: [] };
 
   const signed = photos.length
-    ? (await supabase.storage.from("findings").createSignedUrls(photos.map((p) => p.path), 3600)).data ?? []
+    ? (await supabase.storage.from("findings").createSignedUrls(photos.flatMap((p) => [p.path, thumbPathOf(p.path)]), 3600)).data ?? []
     : [];
   const urlOf = (path: string) => signed.find((s) => s.path === path)?.signedUrl ?? "";
+  const thumbOf = (path: string) => urlOf(thumbPathOf(path)) || urlOf(path);
   const before = photos.filter((p) => p.kind === "before");
   const after = photos.filter((p) => p.kind === "after");
 
@@ -108,7 +110,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           <p className="mb-1 text-xs text-gray-500">문제점</p>
           <p className="rounded-md bg-gray-50 p-3 text-sm whitespace-pre-wrap text-gray-900">{f.problem}</p>
         </div>
-        <PhotoGrid title="개선 전 사진" photos={before} urlOf={urlOf} />
+        <PhotoGrid title="개선 전 사진" photos={before} urlOf={urlOf} thumbOf={thumbOf} />
       </Card>
 
       {showRejectNotice && (
@@ -164,7 +166,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
             })}
           </ul>
         )}
-        <PhotoGrid title="개선 후 사진" photos={after} urlOf={urlOf} />
+        <PhotoGrid title="개선 후 사진" photos={after} urlOf={urlOf} thumbOf={thumbOf} />
         {(progressRows ?? []).length > 0 && (
           <div className="mt-4">
             <p className="mb-2 text-xs text-gray-500">미완료 이유 및 진행현황</p>
@@ -229,7 +231,7 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PhotoGrid({ title, photos, urlOf }: { title: string; photos: Photo[]; urlOf: (p: string) => string }) {
+function PhotoGrid({ title, photos, urlOf, thumbOf }: { title: string; photos: Photo[]; urlOf: (p: string) => string; thumbOf: (p: string) => string }) {
   if (photos.length === 0) return null;
   return (
     <div className="mt-4">
@@ -238,7 +240,7 @@ function PhotoGrid({ title, photos, urlOf }: { title: string; photos: Photo[]; u
         {photos.map((p) => (
           <a key={p.id} href={urlOf(p.path)} target="_blank" rel="noreferrer" className="block aspect-square overflow-hidden rounded-md border border-gray-200">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={urlOf(p.path)} alt={title} className="h-full w-full object-cover" loading="lazy" />
+            <img src={thumbOf(p.path)} alt={title} className="h-full w-full object-cover" loading="lazy" />
           </a>
         ))}
       </div>

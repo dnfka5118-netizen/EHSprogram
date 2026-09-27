@@ -381,15 +381,15 @@ async function inspectionFor(month) {
   return id;
 }
 
+// 원본(1600px) + 목록용 썸네일(360px, 같은 이름 + .thumb.jpg) — 앱의 사진 저장 규칙과 동일
 async function uploadPhoto(fid, kind, media, i) {
-  const buf = await sharp(Buffer.from(media.buffer))
-    .rotate()
-    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: 80 })
-    .toBuffer();
+  const src = sharp(Buffer.from(media.buffer)).rotate().flatten({ background: "#ffffff" });
+  const size = (side, quality) =>
+    src.clone().resize({ width: side, height: side, fit: "inside", withoutEnlargement: true }).jpeg({ quality }).toBuffer();
   const path = `${fid}/${kind}-legacy-${i}.jpg`;
-  must(await db.storage.from("findings").upload(path, buf, { contentType: "image/jpeg", upsert: true }), "사진 업로드");
+  for (const [target, buf] of [[path, await size(1600, 80)], [path.replace(/\.jpg$/, ".thumb.jpg"), await size(360, 70)]]) {
+    must(await db.storage.from("findings").upload(target, buf, { contentType: "image/jpeg", upsert: true }), "사진 업로드");
+  }
   return path;
 }
 
@@ -492,7 +492,7 @@ for (const p of plans) {
   } catch (e) {
     console.error(`\n  ✗ NO.${p.r.no} 실패: ${e.message} → 해당 건 되돌림`);
     await db.from("findings").delete().eq("id", fid);
-    if (uploaded.length) await db.storage.from("findings").remove(uploaded);
+    if (uploaded.length) await db.storage.from("findings").remove([...uploaded, ...uploaded.map((x) => x.replace(/\.jpg$/, ".thumb.jpg"))]);
   }
 }
 console.log(`\n\n완료: ${imported}건 이관`);

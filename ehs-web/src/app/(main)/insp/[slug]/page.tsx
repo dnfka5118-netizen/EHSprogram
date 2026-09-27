@@ -2,55 +2,35 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
+import { enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
-import { FindingList } from "@/components/FindingList";
-import { STATUS_LABEL } from "@/lib/labels";
-import { fmtDate } from "@/lib/format";
+import { FindingTable } from "@/components/FindingTable";
+import { ExcelButton } from "@/components/ExcelButton";
+import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
+import { fmtDate, todayKst } from "@/lib/format";
 import type { Department, FindingOverview, Inspection, Site } from "@/lib/types";
-
-const STATUS_FILTERS = [
-  { value: "open", label: "미종결 전체" },
-  { value: "overdue", label: "기한 초과" },
-  ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
-  { value: "all", label: "전체" },
-];
-
-const str = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
   const { slug } = await params;
-  const sp = await searchParams;
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level === "none") notFound();
-
-  const status = str(sp.status) || "open";
-  const site = str(sp.site);
-  const dept = str(sp.dept);
-  const month = str(sp.month);
+  const filters = readFilters(await searchParams);
 
   const supabase = await createClient();
-  let query = supabase.from("finding_overview").select("*").eq("module_code", mod.code);
-  if (status === "open") query = query.neq("status", "closed");
-  else if (status === "overdue") query = query.eq("is_overdue", true);
-  else if (status !== "all") query = query.eq("status", status);
-  if (site) query = query.eq("site_id", site);
-  if (dept) query = query.eq("request_department_id", dept);
-  if (/^\d{4}-\d{2}$/.test(month)) {
-    const [y, m] = month.split("-").map(Number);
-    const end = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-    query = query.gte("inspection_date", `${month}-01`).lt("inspection_date", end);
-  }
-
-  const [{ data: findings }, { data: sessions }, { data: sites }, { data: depts }] = await Promise.all([
-    query.order("inspection_date", { ascending: false }).order("seq").limit(500),
+  const [{ data: sessions }, { data: sites }, { data: depts }] = await Promise.all([
     supabase.from("inspections").select("*").eq("module_code", mod.code).order("inspection_date", { ascending: false }).limit(12),
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
-    supabase.from("departments").select("*").eq("is_active", true).order("sort_order"),
+    supabase.from("departments").select("*").order("sort_order"),
   ]);
-
   const siteList = (sites ?? []) as Site[];
-  const deptList = ((depts ?? []) as Department[]).filter((d) => !site || d.site_id === site);
+  const deptList = (depts ?? []) as Department[];
+
+  const query = applyFindingFilters(supabase.from("finding_overview").select("*").eq("module_code", mod.code), filters);
+  const { data } = await query.order("inspection_date", { ascending: false }).order("seq").limit(500);
+  const rows = await enrichFindings(supabase, (data ?? []) as FindingOverview[]);
+
   const siteName = (id: string) => siteList.find((s) => s.id === id)?.name ?? "";
+  const condition = describeFilters(filters, siteList, deptList);
 
   return (
     <div className="space-y-4">
@@ -85,32 +65,20 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
         )}
       </Card>
 
-      <Card title={`지적사항 (${findings?.length ?? 0}건)`}>
-        <form className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
-          <select name="status" defaultValue={status} className="rounded-md border border-gray-300 bg-white px-2 py-1.5">
-            {STATUS_FILTERS.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-          <select name="site" defaultValue={site} className="rounded-md border border-gray-300 bg-white px-2 py-1.5">
-            <option value="">전체 사업장</option>
-            {siteList.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          <select name="dept" defaultValue={dept} className="rounded-md border border-gray-300 bg-white px-2 py-1.5">
-            <option value="">전체 부서</option>
-            {deptList.map((d) => (
-              <option key={d.id} value={d.id}>
-                {siteList.length > 1 ? `${siteName(d.site_id)} · ` : ""}
-                {d.name}
-              </option>
-            ))}
-          </select>
-          <input type="month" name="month" defaultValue={month} className="rounded-md border border-gray-300 bg-white px-2 py-1.5" />
-          <button className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-white">조회</button>
-        </form>
-        <FindingList items={(findings ?? []) as FindingOverview[]} />
+      <Card
+        title={`지적사항 현황 (${rows.length}건)`}
+        actions={
+          <ExcelButton
+            rows={rows}
+            title={`${mod.name} 현황 (${condition})`}
+            fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
+            currentMonth={filters.month || undefined}
+          />
+        }
+      >
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} />
+        <FindingTable rows={rows} />
+        {rows.length >= 500 && <p className="mt-2 text-xs text-gray-500">최근 500건까지만 표시합니다. 조건을 좁혀 조회하세요.</p>}
       </Card>
     </div>
   );

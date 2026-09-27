@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { processOutbox } from "@/lib/mail";
 import { createClient } from "@/lib/supabase/server";
 import { toMessage } from "@/lib/errors";
+import { thumbPathOf } from "@/lib/photo-path";
 import type { ActionState } from "@/lib/types";
 
 export async function createInspection(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -59,7 +60,7 @@ export async function deleteFinding(findingId: string, backTo: string): Promise<
   const { data, error } = await supabase.rpc("delete_finding", { p_finding: findingId });
   if (error) return { error: toMessage(error) };
   const paths = (data as string[]) ?? [];
-  if (paths.length) await supabase.storage.from("findings").remove(paths);
+  if (paths.length) await supabase.storage.from("findings").remove([...paths, ...paths.map(thumbPathOf)]);
   revalidatePath("/", "layout");
   redirect(backTo);
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createFinding } from "../../../actions";
 import { uploadPhotos, removePhotos } from "@/lib/upload";
 import { PhotoPicker } from "@/components/PhotoPicker";
+import type { ProcessedPhoto } from "@/lib/image";
 import { Button, Field, FormMessage, Input, Select, Textarea } from "@/components/ui";
 import type { ActionState, Department, FindingType, Location, SubLocation } from "@/lib/types";
 
@@ -27,7 +28,7 @@ export function FindingForm({ inspectionId, backHref, locations, types, departme
   const [typeId, setTypeId] = useState("");
   const [problem, setProblem] = useState("");
   const [deptId, setDeptId] = useState("");
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<ProcessedPhoto[]>([]);
 
   const subs = locations.find((l) => l.id === locationId)?.sub_locations ?? [];
 
@@ -124,7 +125,7 @@ export function FindingForm({ inspectionId, backHref, locations, types, departme
       </Field>
 
       <Field label="개선 전 사진" required>
-        <PhotoPicker files={photos} onChange={setPhotos} label="촬영/선택" />
+        <PhotoPicker photos={photos} onChange={setPhotos} />
       </Field>
 
       <Field label="조치 요청 부서" required>

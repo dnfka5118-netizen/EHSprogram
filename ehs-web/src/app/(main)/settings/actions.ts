@@ -170,9 +170,29 @@ export async function savePermissions(_prev: ActionState, fd: FormData): Promise
   return done("권한을 저장했습니다.");
 }
 
+// ---------------------------------------------------------------- 공통 삭제
+// 이미 점검·지적사항에서 쓰인 항목은 과거 기록 보호를 위해 삭제 대신 "사용 해제" 를 안내
+async function removeRow(table: string, id: string, label: string): Promise<ActionState> {
+  if (!id) return { error: "삭제할 항목을 찾지 못했습니다." };
+  const supabase = await createClient();
+  const { error, count } = await supabase.from(table).delete({ count: "exact" }).eq("id", id);
+  if (error) {
+    if (error.code === "23503")
+      return {
+        error:
+          `이 ${label}은(는) 이미 등록된 점검·지적사항에서 사용 중이라 삭제할 수 없습니다.\n` +
+          "'사용' 체크를 해제하고 저장하면 새로 입력할 때 목록에서 숨겨집니다 (과거 기록은 유지).",
+      };
+    return { error: toMessage(error) };
+  }
+  if (!count) return { error: "삭제하지 못했습니다. 이미 삭제되었는지 확인해 주세요." };
+  return done(`${label}을(를) 삭제했습니다.`);
+}
+
 // ---------------------------------------------------------------- 사업장 / 부서
 export async function saveSite(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  if (fd.get("intent") === "delete") return removeRow("sites", s(fd, "id"), "사업장");
   const supabase = await createClient();
   const id = s(fd, "id");
   const row = { code: s(fd, "code").toUpperCase(), name: s(fd, "name"), sort_order: n(fd, "sort_order"), is_active: id ? fd.get("is_active") === "on" : true };
@@ -183,6 +203,7 @@ export async function saveSite(_prev: ActionState, fd: FormData): Promise<Action
 
 export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  if (fd.get("intent") === "delete") return removeRow("departments", s(fd, "id"), "부서");
   const supabase = await createClient();
   const id = s(fd, "id");
   const name = s(fd, "name");
@@ -205,6 +226,7 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
 // ---------------------------------------------------------------- 장소 / 유형
 export async function saveLocation(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  if (fd.get("intent") === "delete") return removeRow("locations", s(fd, "id"), "장소");
   const supabase = await createClient();
   const id = s(fd, "id");
   const name = s(fd, "name");
@@ -217,6 +239,7 @@ export async function saveLocation(_prev: ActionState, fd: FormData): Promise<Ac
 
 export async function saveSubLocation(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  if (fd.get("intent") === "delete") return removeRow("sub_locations", s(fd, "id"), "세부장소");
   const supabase = await createClient();
   const id = s(fd, "id");
   const name = s(fd, "name");
@@ -229,6 +252,7 @@ export async function saveSubLocation(_prev: ActionState, fd: FormData): Promise
 
 export async function saveType(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  if (fd.get("intent") === "delete") return removeRow("finding_types", s(fd, "id"), "유형");
   const supabase = await createClient();
   const id = s(fd, "id");
   const name = s(fd, "name");
