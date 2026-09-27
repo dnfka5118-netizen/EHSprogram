@@ -41,7 +41,7 @@ export async function sendMail(to: string, subject: string, html: string, text: 
   await getTransporter().sendMail({ from: process.env.MAIL_FROM, to, subject, html, text });
 }
 
-type Claimed = { id: string; finding_id: string | null; subject: string; body: string; email: string; name: string };
+type Claimed = { id: string; finding_id: string | null; link: string | null; subject: string; body: string; email: string; name: string };
 
 // 발송 대기열 처리 : 처리 직후(after) 와 매일 아침(cron) 에 호출
 export async function processOutbox(limit = 30): Promise<{ sent: number; failed: number }> {
@@ -55,7 +55,9 @@ export async function processOutbox(limit = 30): Promise<{ sent: number; failed:
   let sent = 0;
   let failed = 0;
   for (const n of (data ?? []) as Claimed[]) {
-    const link = n.finding_id && process.env.APP_URL ? `${process.env.APP_URL}/findings/${n.finding_id}` : process.env.APP_URL ?? null;
+    const base = process.env.APP_URL ?? "";
+    const path = n.link ?? (n.finding_id ? `/findings/${n.finding_id}` : "");
+    const link = base ? `${base}${path}` : null;
     const { html, text } = renderMail(n.name, n.body, link);
     try {
       await sendMail(n.email, n.subject, html, text);

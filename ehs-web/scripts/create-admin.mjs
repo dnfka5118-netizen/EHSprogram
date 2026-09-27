@@ -23,7 +23,8 @@ const password = env.INITIAL_PASSWORD || "000000";
 
 const { data: site } = await supabase.from("sites").select("id").eq("code", "CA").maybeSingle();
 const { data: dept } = site
-  ? await supabase.from("departments").select("id").eq("site_id", site.id).eq("name", "환경안전팀").maybeSingle()
+  ? await supabase.from("departments").select("id").eq("site_id", site.id).in("name", ["EHS부서", "환경안전팀"]).limit(1)
+      .maybeSingle()
   : { data: null };
 
 const { data, error } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });

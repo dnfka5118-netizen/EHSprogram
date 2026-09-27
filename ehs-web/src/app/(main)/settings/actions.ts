@@ -274,3 +274,40 @@ export async function sendTestMail(): Promise<ActionState> {
     return { error: `발송 실패: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
+
+// ---------------------------------------------------------------- 양식별 기본 결재선
+export type TemplateInput = {
+  step_kind: string;
+  label: string;
+  resolver: string;
+  department_id: string | null;
+  user_id: string | null;
+  required: boolean;
+};
+
+export async function saveApprovalTemplate(moduleCode: string, steps: TemplateInput[]): Promise<ActionState> {
+  await requireAdmin();
+  if (steps.length === 0) return { error: "결재 단계를 1개 이상 등록해 주세요." };
+  for (const [i, st] of steps.entries()) {
+    if (!st.label.trim()) return { error: `${i + 1}단계 표시명을 입력해 주세요.` };
+    if (st.resolver === "dept_head" && !st.department_id) return { error: `${i + 1}단계 : 부서를 선택해 주세요.` };
+    if (st.resolver === "user" && !st.user_id) return { error: `${i + 1}단계 : 결재자를 선택해 주세요.` };
+  }
+  const supabase = await createClient();
+  const { error: delErr } = await supabase.from("approval_template_steps").delete().eq("module_code", moduleCode);
+  if (delErr) return { error: toMessage(delErr) };
+  const { error } = await supabase.from("approval_template_steps").insert(
+    steps.map((st, i) => ({
+      module_code: moduleCode,
+      step_order: i + 1,
+      step_kind: st.step_kind,
+      label: st.label.trim(),
+      resolver: st.resolver,
+      department_id: st.resolver === "dept_head" ? st.department_id : null,
+      user_id: st.resolver === "user" ? st.user_id : null,
+      required: st.required,
+    })),
+  );
+  if (error) return { error: toMessage(error) };
+  return done("결재선을 저장했습니다. 다음 상신부터 적용됩니다.");
+}

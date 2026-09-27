@@ -37,7 +37,7 @@ export function NewInspectionForm({ slug, moduleCode, moduleName, sites, default
       <Field label="점검명" required>
         <Input name="title" key={autoTitle} defaultValue={autoTitle} required />
       </Field>
-      <Field label="점검 참여자" hint="예: 대표이사, 공장장, 환경안전팀장">
+      <Field label="점검 참여자" hint="예: 대표이사, 공장장, EHS부서장">
         <Input name="inspectors" />
       </Field>
       <Field label="비고">

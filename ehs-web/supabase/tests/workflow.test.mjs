@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -45,7 +45,7 @@ ok(counts.loc === 11 && counts.sub === 32 && counts.dept === 6 && counts.typ ===
 // ---- 사용자
 const site = (await one(`select id from sites where code='CA'`)).id;
 const dept = async (n) => (await one(`select id from departments where name=$1`, [n])).id;
-const PROD = await dept("생산팀"), QA = await dept("품질팀"), EHS = await dept("환경안전팀");
+const PROD = await dept("생산팀"), QA = await dept("품질팀"), EHS = await dept("EHS부서");
 const U = {};
 for (const [k, name, d, type, admin] of [
   ["A", "관리자", EHS, "employee", true], ["I", "점검자", EHS, "employee", false],
@@ -186,6 +186,43 @@ await db.query(`select finish_notification($1,true,null)`, [claimed[0].id]);
 ok((await one(`select count(*)::int c from notifications where status='sending'`)).c === 4, "발송 상태 갱신");
 await db.exec(`set role authenticated`); await as(U.W1);
 await expectError("일반 사용자는 발송 대기열 조작 불가", `select * from claim_notifications(5)`, [], "permission");
+await db.exec(`reset role`); await as(null);
+
+console.log("\n[공통 전자결재]");
+ok((await one(`select count(*)::int c from departments where name='EHS부서'`)).c === 1 && (await one(`select count(*)::int c from departments where name='환경안전팀'`)).c === 0, "부서명 환경안전팀 → EHS부서");
+const tpl = (await db.query(`select step_order, step_kind, label, resolver, department_id from approval_template_steps where module_code='permit' order by step_order`)).rows;
+ok(tpl.map((t) => t.label).join(">") === "담당>검토(EHS부서장)>협조(관련부서)>승인(해당부서장)" && tpl[1].department_id === EHS, "허가서 기본 결재선 · 검토 = EHS부서 부서장");
+await db.query(`delete from notifications`);
+const docId = "22222222-2222-2222-2222-222222222222";
+const line = (arr) => JSON.stringify(arr.map(([k, l, a]) => ({ step_kind: k, label: l, approver_id: a })));
+await as(U.I);
+await expectError("결재자 누락 차단", `select _submit_approval('permit',$1,'t',$2,$3,$4)`, [docId, site, PROD, line([["담당", "담당", U.I], ["검토", "검토", null]])], "결재자를 지정");
+await expectError("작성자만 있는 결재선 차단", `select _submit_approval('permit',$1,'t',$2,$3,$4)`, [docId, site, PROD, line([["담당", "담당", U.I]])], "1명 이상");
+const apId = (await one(`select _submit_approval('permit',$1,'R-201 맨홀 작업',$2,$3,$4) id`, [docId, site, PROD,
+  line([["담당", "담당", U.I], ["검토", "검토(EHS부서장)", U.A], ["협조", "협조(품질팀)", U.Q], ["승인", "승인(해당부서장)", U.H]])])).id;
+const st = async () => (await db.query(`select label, status from approval_steps where approval_id=$1 and round=(select round from approvals where id=$1) order by step_order`, [apId])).rows.map((r) => `${r.label}:${r.status}`).join(" ");
+ok((await st()) === "담당:approved 검토(EHS부서장):pending 협조(품질팀):waiting 승인(해당부서장):waiting", "상신 → 담당 자동 결재, 검토 차례");
+await expectError("재상신 중복 차단", `select _submit_approval('permit',$1,'t',$2,$3,$4)`, [docId, site, PROD, line([["검토", "검토", U.A]])], "이미 결재");
+await as(U.H); await expectError("차례 아닌 사람 결재 차단", `select approve_step($1,null)`, [apId], "차례가 아닙니다");
+await as(U.A); await db.query(`select approve_step($1,'확인')`, [apId]);
+await as(U.I); await expectError("결재 진행 후 상신 취소 차단", `select withdraw_approval($1)`, [apId], "취소할 수 없습니다");
+await as(U.Q); await expectError("반려 사유 필수", `select reject_step($1,'')`, [apId], "사유");
+await db.query(`select reject_step($1,'작업 인원 명단 누락')`, [apId]);
+ok((await one(`select status from approvals where id=$1`, [apId])).status === "rejected" && (await st()).endsWith("협조(품질팀):rejected 승인(해당부서장):skipped"), "협조 반려 → 문서 반려, 이후 단계 생략");
+await as(U.I);
+await db.query(`select _submit_approval('permit',$1,'R-201 맨홀 작업 (수정)',$2,$3,$4)`, [docId, site, PROD, line([["담당", "담당", U.I], ["검토", "검토", U.A], ["승인", "승인", U.H]])]);
+ok((await one(`select round, status from approvals where id=$1`, [apId])).round === 2 && (await st()) === "담당:approved 검토:pending 승인:waiting", "반려 후 재상신 → 2차, 결재선 변경 반영");
+await as(U.A); ok((await one(`select approve_step($1,null) r`, [apId])).r === "in_review", "검토 승인 → 다음 단계");
+await as(U.H); ok((await one(`select approve_step($1,'승인') r`, [apId])).r === "approved", "최종 승인 → 결재 완료");
+ok((await one(`select count(*)::int c from approval_steps where approval_id=$1`, [apId])).c === 7, "1차·2차 결재 이력 모두 보존");
+await as(null);
+const apMails = (await db.query(`select n.kind, p.name, n.link from notifications n join profiles p on p.id=n.user_id order by n.created_at`)).rows;
+console.log("  " + apMails.map((m) => `${m.kind}:${m.name}`).join("  "));
+ok(apMails.filter((m) => m.kind === "approval_request").map((m) => m.name).join(",") === "관리자,품질직원,관리자,생산팀장", "결재 차례마다 결재 요청 메일");
+ok(apMails.some((m) => m.kind === "approval_rejected" && m.name === "점검자") && apMails.some((m) => m.kind === "approval_approved" && m.name === "점검자"), "반려·완료 결과 메일 → 상신자");
+ok(apMails.every((m) => m.link === `/permit/${docId}`), "메일 링크 = 문서 화면");
+await db.exec(`set role authenticated`); await as(U.W1);
+await expectError("양식 RPC 거치지 않은 직접 상신 차단", `select _submit_approval('permit',gen_random_uuid(),'t',null,null,'[]')`, [], "permission");
 await db.exec(`reset role`); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);

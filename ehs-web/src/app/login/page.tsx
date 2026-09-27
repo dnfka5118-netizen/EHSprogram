@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">사용할 수 없는 계정입니다. 관리자에게 문의하세요.</p>
         )}
         <LoginForm />
-        <p className="mt-4 text-center text-xs text-gray-500">비밀번호를 잊은 경우 환경안전팀에 초기화를 요청하세요.</p>
+        <p className="mt-4 text-center text-xs text-gray-500">비밀번호를 잊은 경우 EHS부서에 초기화를 요청하세요.</p>
       </div>
     </main>
   );

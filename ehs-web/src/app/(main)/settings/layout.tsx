@@ -5,6 +5,7 @@ import { TabLinks } from "@/components/TabLinks";
 const TABS = [
   { href: "/settings/users", label: "사용자·권한" },
   { href: "/settings/departments", label: "부서·결재자" },
+  { href: "/settings/approvals", label: "양식별 결재선" },
   { href: "/settings/sites", label: "사업장" },
   { href: "/settings/locations", label: "장소" },
   { href: "/settings/types", label: "유형" },

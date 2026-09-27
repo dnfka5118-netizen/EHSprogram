@@ -10,10 +10,11 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
   if (profile.must_change_password) redirect("/account/password");
 
   const supabase = await createClient();
-  const [internal, { data: site }, { data: dept }] = await Promise.all([
+  const [internal, { data: site }, { data: dept }, { count: approvalCount }] = await Promise.all([
     getInternalModules(),
     profile.site_id ? supabase.from("sites").select("name").eq("id", profile.site_id).maybeSingle() : Promise.resolve({ data: null }),
     profile.department_id ? supabase.from("departments").select("name").eq("id", profile.department_id).maybeSingle() : Promise.resolve({ data: null }),
+    supabase.from("approval_steps").select("id", { count: "exact", head: true }).eq("approver_id", profile.id).eq("status", "pending"),
   ]);
 
   const menu: MenuGroup[] = [
@@ -40,6 +41,7 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
         contractor: profile.user_type === "contractor",
       }}
       menu={menu}
+      approvalCount={approvalCount ?? 0}
       logout={logout}
     >
       {children}

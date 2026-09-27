@@ -12,7 +12,13 @@ const isActive = (pathname: string, leaf: { href: string; match?: string[] }) =>
   [leaf.href, ...(leaf.match ?? [])].some((p) => (p === "/" ? pathname === "/" : pathname === p || pathname.startsWith(p + "/")));
 
 // 좌측 메뉴 + 상단 바 (PC : 고정 사이드바 / 휴대폰 : ☰ 서랍)
-export function AppShell({ user, menu, logout, children }: { user: ShellUser; menu: MenuGroup[]; logout: () => Promise<void>; children: ReactNode }) {
+export function AppShell({ user, menu, approvalCount, logout, children }: {
+  user: ShellUser;
+  menu: MenuGroup[];
+  approvalCount: number;
+  logout: () => Promise<void>;
+  children: ReactNode;
+}) {
   const pathname = usePathname();
   const [drawer, setDrawer] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -43,6 +49,19 @@ export function AppShell({ user, menu, logout, children }: { user: ShellUser; me
         >
           <MenuIcon />
         </button>
+      </div>
+
+      <div className="shrink-0 bg-brand-800 px-3 pb-3">
+        <Link
+          href="/approvals"
+          onClick={close}
+          className={`flex items-center justify-center gap-2 rounded border border-white/40 py-1.5 text-sm hover:bg-white/10 ${pathname.startsWith("/approvals") ? "bg-white/15" : ""}`}
+        >
+          전자결재
+          {approvalCount > 0 && (
+            <span className="min-w-5 rounded-full bg-orange-500 px-1.5 text-center text-xs leading-5 font-bold">{approvalCount}</span>
+          )}
+        </Link>
       </div>
 
       <div className="flex-1 overflow-y-auto">
