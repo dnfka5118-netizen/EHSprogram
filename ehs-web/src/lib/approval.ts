@@ -1,23 +1,9 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type StepKind = "담당" | "검토" | "협조" | "승인" | "확인";
+import { resolveLine, type LineStep, type StepKind, type TemplateStep } from "./approval-line";
+export type { LineStep, StepKind, TemplateStep, Resolver } from "./approval-line";
 export const STEP_KINDS: StepKind[] = ["담당", "검토", "협조", "승인", "확인"];
-export type Resolver = "drafter" | "dept_head" | "doc_dept_head" | "user" | "pick";
-
-export type TemplateStep = {
-  id?: string;
-  step_order: number;
-  step_kind: StepKind;
-  label: string;
-  resolver: Resolver;
-  department_id: string | null;
-  user_id: string | null;
-  required: boolean;
-};
-
-// 상신 화면에서 편집하는 결재선 한 줄
-export type LineStep = { step_kind: StepKind; label: string; approver_id: string | null; required: boolean; hint?: string };
 
 export type ApprovalStep = {
   id: string;
@@ -60,27 +46,13 @@ export async function resolveDefaultLine(
   moduleCode: string,
   ctx: { drafterId: string; docDepartmentId: string | null },
 ): Promise<LineStep[]> {
-  const tpl = await getTemplate(supabase, moduleCode);
-  const deptIds = [...new Set(tpl.map((t) => t.department_id).concat(ctx.docDepartmentId).filter((x): x is string => !!x))];
-  const { data: depts } = deptIds.length
-    ? await supabase.from("departments").select("id, name, approver_id").in("id", deptIds)
-    : { data: [] as { id: string; name: string; approver_id: string | null }[] };
-  const head = (id: string | null) => depts?.find((d) => d.id === id);
+  const [tpl, depts] = await Promise.all([getTemplate(supabase, moduleCode), getDeptHeads(supabase)]);
+  return resolveLine(tpl, { ...ctx, depts });
+}
 
-  return tpl.map((t) => {
-    let approver: string | null = null;
-    let hint: string | undefined;
-    if (t.resolver === "drafter") approver = ctx.drafterId;
-    else if (t.resolver === "user") approver = t.user_id;
-    else if (t.resolver === "dept_head") {
-      approver = head(t.department_id)?.approver_id ?? null;
-      if (!approver) hint = `${head(t.department_id)?.name ?? "지정 부서"}의 부서장(승인자)이 환경설정에 없습니다`;
-    } else if (t.resolver === "doc_dept_head") {
-      approver = head(ctx.docDepartmentId)?.approver_id ?? null;
-      if (!approver) hint = ctx.docDepartmentId ? `${head(ctx.docDepartmentId)?.name ?? "해당 부서"}의 부서장이 지정되지 않았습니다` : "해당 부서를 먼저 선택하세요";
-    } else hint = t.required ? "결재자를 선택하세요" : "필요할 때만 지정 (비워두면 제외)";
-    return { step_kind: t.step_kind, label: t.label, approver_id: approver, required: t.required, hint };
-  });
+export async function getDeptHeads(supabase: SupabaseClient) {
+  const { data } = await supabase.from("departments").select("id, name, approver_id").eq("is_active", true).order("sort_order");
+  return (data ?? []) as { id: string; name: string; approver_id: string | null }[];
 }
 
 export async function getPeople(supabase: SupabaseClient): Promise<Person[]> {

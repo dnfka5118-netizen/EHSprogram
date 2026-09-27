@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -223,6 +223,43 @@ ok(apMails.some((m) => m.kind === "approval_rejected" && m.name === "점검자")
 ok(apMails.every((m) => m.link === `/permit/${docId}`), "메일 링크 = 문서 화면");
 await db.exec(`set role authenticated`); await as(U.W1);
 await expectError("양식 RPC 거치지 않은 직접 상신 차단", `select _submit_approval('permit',gen_random_uuid(),'t',null,null,'[]')`, [], "permission");
+await db.exec(`reset role`); await as(null);
+
+console.log("\n[수시 위험성평가 JSA]");
+const jsaData = (over = {}) => JSON.stringify({
+  department_id: PROD, eval_date: "2026-09-27", work_name: "R-201 맨홀 개방 후 배관 용접", super_count: "1", worker_count: "2",
+  steps: [
+    { cat: "준비작업", content: "질소 치환", safe: "가스농도 측정", hazards: [{ type: "질식", content: "산소결핍", freq: "2", sev: "4" }, { type: "화재/폭발", content: "잔류가스", freq: "2", sev: "5" }],
+      control: { needed: true, checks: ["공학적"], desc: "치환 후 산소 18% 확인", impNo: "IMP-01", target: "2026-10-01", owner: "최안전", done: "", postFreq: "1", postSev: "3" } },
+  ],
+  ...over,
+});
+await as(U.C); await expectError("협력업체 작성 차단", `select save_jsa(null,$1)`, [jsaData()], "권한");
+await as(U.I);
+const jsaId = (await one(`select save_jsa(null,$1) id`, [jsaData()])).id;
+const jr = await one(`select eval_no, max_risk, super_count, created_by from jsa_evals where id=$1`, [jsaId]);
+ok(/^RA-\d{8}-001$/.test(jr.eval_no) && jr.max_risk === 10 && jr.super_count === 1 && jr.created_by === U.I, `저장 → 일련번호 ${jr.eval_no}, 최대위험도 10`);
+const jsa2 = (await one(`select save_jsa(null,$1) id`, [jsaData({ work_name: "" })])).id;
+ok((await one(`select eval_no from jsa_evals where id=$1`, [jsa2])).eval_no.endsWith("-002"), "같은 날 두 번째 → -002 (덮어쓰기 없음)");
+await expectError("작업명 없이 상신 차단", `select submit_jsa($1,$2)`, [jsa2, line([["담당", "담당", U.I], ["검토", "검토", U.A]])], "작업명");
+await db.query(`select save_jsa($1,$2)`, [jsa2, jsaData({ steps: [{ cat: "", content: "x", hazards: [{ type: "질식", content: "", freq: "7", sev: "2" }], control: { needed: false } }] })]);
+await expectError("빈도 범위 초과 상신 차단", `select submit_jsa($1,$2)`, [jsa2, line([["담당", "담당", U.I], ["검토", "검토", U.A]])], "1~5");
+await as(U.W1); await expectError("타인 평가서 수정 차단", `select save_jsa($1,$2)`, [jsaId, jsaData()], "작성자만");
+await as(U.I);
+const jsaAp = (await one(`select submit_jsa($1,$2) id`, [jsaId, line([["담당", "담당", U.I], ["검토", "검토(EHS부서장)", U.A], ["승인", "승인(해당부서장)", U.H]])])).id;
+ok((await one(`select approval_status from jsa_overview where id=$1`, [jsaId])).approval_status === "in_review", "상신 → 결재 중");
+await expectError("결재 중 수정 차단", `select save_jsa($1,$2)`, [jsaId, jsaData()], "수정할 수 없습니다");
+await expectError("결재 중 삭제 차단", `select delete_jsa($1)`, [jsaId], "삭제할 수 없습니다");
+await as(U.A); await db.query(`select approve_step($1,null)`, [jsaAp]);
+await as(U.H); await db.query(`select approve_step($1,null)`, [jsaAp]);
+ok((await one(`select approval_status from jsa_overview where id=$1`, [jsaId])).approval_status === "approved", "결재 완료");
+ok((await one(`select link from notifications where kind='approval_approved' order by created_at desc limit 1`)).link === `/risk/adhoc/${jsaId}`, "완료 메일 링크 = 평가서 화면");
+await as(U.I); await db.query(`select delete_jsa($1)`, [jsa2]);
+ok((await one(`select count(*)::int c from jsa_evals where id=$1`, [jsa2])).c === 0, "작성 중 평가서 삭제");
+await db.exec(`set role authenticated`);
+await as(U.W1); ok((await one(`select count(*)::int c from jsa_overview`)).c === 1, "임직원 목록 조회");
+await as(U.C); ok((await one(`select count(*)::int c from jsa_overview`)).c === 0, "권한 없는 협력업체 조회 불가");
+await expectError("번호 발급 함수 직접 호출 차단", `select next_doc_no('RA')`, [], "permission");
 await db.exec(`reset role`); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
