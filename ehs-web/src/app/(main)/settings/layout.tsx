@@ -16,7 +16,7 @@ export default async function SettingsLayout({ children }: LayoutProps<"/setting
   await requireAdmin();
   return (
     <div className="space-y-4">
-      <PageHeader title="환경설정" crumbs={[{ label: "관리" }, { label: "환경설정" }]}>
+      <PageHeader title="환경설정" crumbs={[{ label: "공통" }, { label: "환경설정" }]}>
         <TabLinks tabs={TABS} />
       </PageHeader>
       {children}

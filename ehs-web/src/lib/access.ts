@@ -1,25 +1,17 @@
 import "server-only";
 import { cache } from "react";
-import { createClient } from "./supabase/server";
-import { getProfile } from "./auth";
-import type { Module, PermLevel } from "./types";
+import { getSession, type ModuleAccess } from "./auth";
+import type { PermLevel } from "./types";
 
-export type ModuleAccess = Module & { level: PermLevel };
+export type { ModuleAccess };
 
-// SQL perm_level() 과 같은 규칙 (화면 표시용, 실제 권한은 DB 가 강제)
+// SQL perm_level() 과 같은 규칙 (화면 표시용, 실제 권한은 DB 가 강제) — 추가 DB 조회 없음
 export const getModuleAccess = cache(async (): Promise<ModuleAccess[]> => {
-  const profile = await getProfile();
-  if (!profile) return [];
-  const supabase = await createClient();
-  const [{ data: modules }, { data: perms }] = await Promise.all([
-    supabase.from("modules").select("*").order("sort_order"),
-    supabase.from("user_permissions").select("module_code, level").eq("user_id", profile.id),
-  ]);
-  const map = new Map((perms ?? []).map((p) => [p.module_code as string, p.level as PermLevel]));
-  return ((modules ?? []) as Module[]).map((m) => {
-    let level: PermLevel;
-    if (profile.is_admin) level = "write";
-    else level = map.get(m.code) ?? (profile.user_type === "employee" ? "write" : "none");
+  const s = await getSession();
+  if (!s) return [];
+  const map = new Map(s.perms.map((p) => [p.module_code, p.level as PermLevel]));
+  return s.modules.map((m) => {
+    const level: PermLevel = s.profile.is_admin ? "write" : (map.get(m.code) ?? (s.profile.user_type === "employee" ? "write" : "none"));
     return { ...m, level };
   });
 });

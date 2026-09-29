@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
-import { enrichFindings } from "@/lib/finding-rows";
+import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
@@ -28,7 +28,7 @@ export default async function ReportPage({ params, searchParams }: PageProps<"/i
   const start = `${month}-01`;
   const end = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
 
-  const base = () => supabase.from("finding_overview").select("*").eq("module_code", mod.code).eq("site_id", siteId);
+  const base = () => supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code).eq("site_id", siteId);
   const [{ data: current }, { data: carried }] = await Promise.all([
     base().gte("inspection_date", start).lt("inspection_date", end),
     base().lt("inspection_date", start).or(`status.neq.closed,closed_at.gte.${start}`),

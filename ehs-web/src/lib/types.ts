@@ -14,6 +14,7 @@ export type Profile = {
   is_admin: boolean;
   must_change_password: boolean;
   is_active: boolean;
+  favorites?: string[];
 };
 
 export type Site = { id: string; code: string; name: string; sort_order: number; is_active: boolean };

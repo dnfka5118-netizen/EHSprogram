@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
-import { enrichFindings } from "@/lib/finding-rows";
+import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
@@ -17,17 +17,19 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const filters = readFilters(await searchParams);
 
   const supabase = await createClient();
-  const [{ data: sessions }, { data: sites }, { data: depts }] = await Promise.all([
+  const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
+  const [{ data: sessions }, { data: sites }, { data: depts }, rows] = await Promise.all([
     supabase.from("inspections").select("*").eq("module_code", mod.code).order("inspection_date", { ascending: false }).limit(12),
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
+    query
+      .order("inspection_date", { ascending: false })
+      .order("seq")
+      .limit(500)
+      .then(({ data }) => enrichFindings(supabase, (data ?? []) as unknown as FindingOverview[])),
   ]);
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
-
-  const query = applyFindingFilters(supabase.from("finding_overview").select("*").eq("module_code", mod.code), filters);
-  const { data } = await query.order("inspection_date", { ascending: false }).order("seq").limit(500);
-  const rows = await enrichFindings(supabase, (data ?? []) as FindingOverview[]);
 
   const siteName = (id: string) => siteList.find((s) => s.id === id)?.name ?? "";
   const condition = describeFilters(filters, siteList, deptList);

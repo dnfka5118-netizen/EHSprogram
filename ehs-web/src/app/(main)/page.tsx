@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
-import { enrichFindings } from "@/lib/finding-rows";
+import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import type { FindingOverview } from "@/lib/types";
 
 export default async function HomePage({ searchParams }: PageProps<"/">) {
@@ -20,7 +20,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const approveDeptIds = (myDepts ?? []).filter((d) => d.approver_id === profile.id).map((d) => d.id);
   const assignedIds = (myAssigned ?? []).map((a) => a.finding_id);
 
-  const q = () => supabase.from("finding_overview").select("*").order("created_at", { ascending: false });
+  const q = () => supabase.from("finding_overview").select(FINDING_ROW_SELECT).order("created_at", { ascending: false });
   const none = Promise.resolve({ data: [] as FindingOverview[] });
 
   const [toAssign, toApprove, mine] = await Promise.all([
@@ -48,7 +48,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="내 할 일" crumbs={[{ label: "홈" }]} />
+      <PageHeader title="내 할 일" crumbs={[{ label: "공통" }]} />
       {pw === "changed" && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">비밀번호가 변경되었습니다.</p>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {sections.map((s) => (

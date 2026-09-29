@@ -1,68 +1,42 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { requireProfile } from "@/lib/auth";
-import { getInternalModules, getModuleAccess } from "@/lib/access";
+import { getSession, getUid, requireProfile } from "@/lib/auth";
+import { getModuleAccess } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
+import { filterMenu } from "@/lib/menu";
 import { logout } from "@/app/login/actions";
-import { AppShell, type MenuGroup } from "@/components/AppShell";
+import { AppShell } from "@/components/AppShell";
 
+// 로그인 후 공통 틀 — 메뉴 정의는 src/lib/menu.ts
 export default async function MainLayout({ children }: LayoutProps<"/">) {
-  const profile = await requireProfile();
+  // 사용자·소속·권한과 결재 대기 건수를 동시에 조회 (DB 왕복 1번)
+  const uid = await getUid();
+  const supabase = await createClient();
+  const [profile, session, access, { count: approvalCount }] = await Promise.all([
+    requireProfile(),
+    getSession(),
+    getModuleAccess(),
+    uid
+      ? supabase.from("approval_steps").select("id", { count: "exact", head: true }).eq("approver_id", uid).eq("status", "pending")
+      : Promise.resolve({ count: 0 }),
+  ]);
   if (profile.must_change_password) redirect("/account/password");
 
-  const supabase = await createClient();
-  const [internal, { data: site }, { data: dept }, { count: approvalCount }] = await Promise.all([
-    getInternalModules(),
-    profile.site_id ? supabase.from("sites").select("name").eq("id", profile.site_id).maybeSingle() : Promise.resolve({ data: null }),
-    profile.department_id ? supabase.from("departments").select("name").eq("id", profile.department_id).maybeSingle() : Promise.resolve({ data: null }),
-    supabase.from("approval_steps").select("id", { count: "exact", head: true }).eq("approver_id", profile.id).eq("status", "pending"),
-  ]);
-
-  const access = await getModuleAccess();
-  const riskAdhoc = access.some((m) => m.code === "risk_adhoc" && m.is_enabled && m.level !== "none");
-  const permitOn = access.some((m) => m.code === "permit" && m.is_enabled && m.level !== "none");
-
-  const menu: MenuGroup[] = [
-    {
-      label: "점검",
-      icon: "inspect",
-      items: [
-        { label: "부서별 현황", href: "/dept" },
-        { label: "외부점검", href: "/insp/external" },
-        ...(internal.length
-          ? [{ label: "내부점검", href: "/insp/internal", match: [...internal.map((m) => `/insp/${m.slug}`), "/findings"] }]
-          : []),
-      ],
-    },
-    ...(riskAdhoc
-      ? [{ label: "위험성평가", icon: "risk" as const, items: [{ label: "수시 위험성평가(JSA)", href: "/risk/adhoc" }] }]
-      : [{ label: "위험성평가", icon: "risk" as const, soon: true }]),
-    ...(permitOn
-      ? [
-          {
-            label: "안전작업허가",
-            icon: "permit" as const,
-            items: [
-              { label: "안전작업허가 현황", href: "/permit", match: ["/permit"] },
-              { label: "금일 작업 현황", href: "/permit?tab=today" },
-            ],
-          },
-        ]
-      : [{ label: "안전작업허가", icon: "permit" as const, soon: true }]),
-    ...(profile.is_admin ? [{ label: "환경설정", icon: "settings" as const, href: "/settings" }] : []),
-  ];
-
   return (
-    <AppShell
-      user={{
-        name: profile.name,
-        orgLabel: [site?.name, dept?.name, profile.position].filter(Boolean).join(" "),
-        contractor: profile.user_type === "contractor",
-      }}
-      menu={menu}
-      approvalCount={approvalCount ?? 0}
-      logout={logout}
-    >
-      {children}
-    </AppShell>
+    <Suspense>
+      <AppShell
+        user={{
+          name: profile.name,
+          orgLabel: [session?.siteName, session?.departmentName, profile.position].filter(Boolean).join(" "),
+          contractor: profile.user_type === "contractor",
+        }}
+        domains={filterMenu(access, profile.is_admin)}
+        favorites={profile.favorites ?? []}
+        approvalCount={approvalCount ?? 0}
+        logout={logout}
+      >
+        {children}
+      </AppShell>
+    </Suspense>
   );
 }

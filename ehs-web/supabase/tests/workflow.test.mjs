@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -314,6 +314,13 @@ await as(U.I); await expectError("발급된 허가서 삭제 차단", `select de
 await db.exec(`set role authenticated`); await as(U.C);
 ok((await one(`select count(*)::int c from permit_overview`)).c === 0, "권한 없는 협력업체 허가서 조회 불가");
 await db.exec(`reset role`); await as(null);
+
+console.log("\n[즐겨찾기]");
+await as(U.W1); await db.query("select set_favorites($1)", [["/permit", "/insp/ceo", "/permit", "javascript:alert(1)"]]);
+await as(null);
+const fav = (await one("select favorites from profiles where id=$1", [U.W1])).favorites;
+ok(fav.length === 2 && fav.includes("/permit") && fav.includes("/insp/ceo"), "중복·잘못된 주소 제거 후 저장");
+ok((await one("select favorites from profiles where id=$1", [U.I])).favorites.length === 0, "다른 사람 즐겨찾기는 그대로");
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
-import { enrichFindings } from "@/lib/finding-rows";
+import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import { fmtDate } from "@/lib/format";
 import type { FindingOverview, Inspection } from "@/lib/types";
 
@@ -17,7 +17,7 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
   const supabase = await createClient();
   const [{ data: insp }, { data: findings }] = await Promise.all([
     supabase.from("inspections").select("*, sites(name)").eq("id", inspectionId).eq("module_code", mod.code).maybeSingle(),
-    supabase.from("finding_overview").select("*").eq("inspection_id", inspectionId).order("seq"),
+    supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("inspection_id", inspectionId).order("seq"),
   ]);
   if (!insp) notFound();
   const inspection = insp as Inspection & { sites: { name: string } | null };

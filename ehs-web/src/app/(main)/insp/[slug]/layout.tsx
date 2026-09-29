@@ -15,7 +15,7 @@ export default async function InternalInspectionLayout({ params, children }: Lay
     <>
       <PageHeader
         title={mod.name}
-        crumbs={[{ label: "점검" }, { label: "내부점검", href: "/insp/internal" }, { label: mod.name }]}
+        crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "점검" }, { label: mod.name }]}
         actions={
           <>
             <Link href={`/insp/${slug}/report`} className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50">

@@ -11,7 +11,7 @@ export default async function JsaLayout({ children }: LayoutProps<"/risk/adhoc">
     <>
       <PageHeader
         title="수시 위험성평가 (JSA)"
-        crumbs={[{ label: "위험성평가" }, { label: "수시 위험성평가", href: "/risk/adhoc" }]}
+        crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "측정·평가" }, { label: "수시 위험성평가", href: "/risk/adhoc" }]}
         actions={
           mod.level === "write" && (
             <Link href="/risk/adhoc/new" className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">

@@ -9,7 +9,7 @@ export default async function InternalInspectionIndex() {
   if (first) redirect(`/insp/${first.slug}`);
   return (
     <>
-      <PageHeader title="내부점검" crumbs={[{ label: "점검" }, { label: "내부점검" }]} />
+      <PageHeader title="내부점검" crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "점검" }]} />
       <Card>
         <p className="py-8 text-center text-sm text-gray-500">열람 권한이 있는 내부점검이 없습니다. 관리자에게 문의하세요.</p>
       </Card>

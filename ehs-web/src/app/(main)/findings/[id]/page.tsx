@@ -23,34 +23,46 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  const { data: row } = await supabase.from("finding_overview").select("*").eq("id", id).maybeSingle();
+  // 지적사항 + 하위 기록을 한 번에 조회 (DB 왕복 1번)
+  const { data: row } = await supabase
+    .from("finding_overview")
+    .select(
+      "*, finding_measures(*, measure_date_history(*)), finding_photos(*), finding_progress(*, profiles(name)), finding_comments(*, profiles(name)), finding_events(*, profiles(name)), finding_assignees(user_id)",
+    )
+    .eq("id", id)
+    .order("created_at", { referencedTable: "finding_photos" })
+    .order("created_at", { referencedTable: "finding_progress", ascending: false })
+    .order("created_at", { referencedTable: "finding_comments" })
+    .order("created_at", { referencedTable: "finding_events", ascending: false })
+    .maybeSingle();
   if (!row) notFound();
-  const f = row as FindingOverview;
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const {
+    finding_measures: measureRows,
+    finding_photos: photoRows,
+    finding_progress: progressRows,
+    finding_comments: commentRows,
+    finding_events: eventRows,
+    finding_assignees: assigneeRows,
+    ...rest
+  } = row as Record<string, any[]>;
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+  const f = rest as unknown as FindingOverview;
+  const measures = ((measureRows ?? []) as Measure[]).sort((a, b) => MEASURE_KINDS.indexOf(a.kind) - MEASURE_KINDS.indexOf(b.kind));
+  const photos = (photoRows ?? []) as Photo[];
 
-  const [
-    { data: measureRows },
-    { data: photoRows },
-    { data: progressRows },
-    { data: commentRows },
-    { data: eventRows },
-    { data: assigneeRows },
-    { data: deptRow },
-    { data: memberRows },
-    { data: creator },
-  ] = await Promise.all([
-    supabase.from("finding_measures").select("*, measure_date_history(*)").eq("finding_id", id),
-    supabase.from("finding_photos").select("*").eq("finding_id", id).order("created_at"),
-    supabase.from("finding_progress").select("*, profiles(name)").eq("finding_id", id).order("created_at", { ascending: false }),
-    supabase.from("finding_comments").select("*, profiles(name)").eq("finding_id", id).order("created_at"),
-    supabase.from("finding_events").select("*, profiles(name)").eq("finding_id", id).order("created_at", { ascending: false }),
-    supabase.from("finding_assignees").select("user_id").eq("finding_id", id),
+  // 부서·구성원·등록자·사진 주소를 동시에 (DB 왕복 1번)
+  const [{ data: deptRow }, { data: memberRows }, { data: creator }, signed] = await Promise.all([
     supabase.from("departments").select("*").eq("id", f.request_department_id).single(),
     supabase.from("profiles").select("id, name, position").eq("department_id", f.request_department_id).eq("is_active", true).order("name"),
     f.created_by ? supabase.from("profiles").select("name").eq("id", f.created_by).maybeSingle() : Promise.resolve({ data: null }),
+    photos.length
+      ? supabase.storage
+          .from("findings")
+          .createSignedUrls(photos.flatMap((p) => [p.path, thumbPathOf(p.path)]), 3600)
+          .then((r) => r.data ?? [])
+      : Promise.resolve([]),
   ]);
-
-  const measures = ((measureRows ?? []) as Measure[]).sort((a, b) => MEASURE_KINDS.indexOf(a.kind) - MEASURE_KINDS.indexOf(b.kind));
-  const photos = (photoRows ?? []) as Photo[];
   const dept = deptRow as Department;
   const assigneeIds = (assigneeRows ?? []).map((a) => a.user_id as string);
 
@@ -58,9 +70,6 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
     .flatMap((m) => ((m as Measure & { measure_date_history?: { measure_id: string; new_date: string; changed_at: string }[] }).measure_date_history ?? []))
     .sort((x, y) => x.changed_at.localeCompare(y.changed_at));
 
-  const signed = photos.length
-    ? (await supabase.storage.from("findings").createSignedUrls(photos.flatMap((p) => [p.path, thumbPathOf(p.path)]), 3600)).data ?? []
-    : [];
   const urlOf = (path: string) => signed.find((s) => s.path === path)?.signedUrl ?? "";
   const thumbOf = (path: string) => urlOf(thumbPathOf(path)) || urlOf(path);
   const before = photos.filter((p) => p.kind === "before");
@@ -83,8 +92,8 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
       <PageHeader
         title={`${f.module_name} #${f.seq}`}
         crumbs={[
+          { label: "안전", href: "/ehs/safety" },
           { label: "점검" },
-          { label: "내부점검", href: "/insp/internal" },
           { label: f.module_name, href: `/insp/${f.module_slug}` },
           { label: f.inspection_title, href: `/insp/${f.module_slug}/${f.inspection_id}` },
         ]}

@@ -58,7 +58,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps<"/approv
 
   return (
     <div className="space-y-4">
-      <PageHeader title="전자결재" crumbs={[{ label: "홈" }, { label: "전자결재" }]}>
+      <PageHeader title="전자결재" crumbs={[{ label: "공통" }, { label: "전자결재" }]}>
         <div className="-mb-px flex gap-1 overflow-x-auto">
           {TABS.map((t) => (
             <Link

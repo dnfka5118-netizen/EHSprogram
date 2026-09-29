@@ -5,7 +5,7 @@ import { Card } from "@/components/ui";
 export default function ExternalInspectionPage() {
   return (
     <>
-      <PageHeader title="외부점검" crumbs={[{ label: "점검" }, { label: "외부점검" }]} />
+      <PageHeader title="외부점검" crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "점검" }, { label: "외부점검" }]} />
       <Card>
         <div className="py-10 text-center">
           <p className="font-medium text-gray-800">외부점검 기능은 준비 중입니다.</p>

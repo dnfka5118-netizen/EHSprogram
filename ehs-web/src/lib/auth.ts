@@ -2,17 +2,46 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase/server";
-import type { Profile } from "./types";
+import type { Module, PermLevel, Profile } from "./types";
 
-// 요청 단위로 1회만 조회
-export const getProfile = cache(async (): Promise<Profile | null> => {
+export type ModuleAccess = Module & { level: PermLevel };
+export type SessionData = {
+  profile: Profile;
+  siteName: string | null;
+  departmentName: string | null;
+  modules: Module[];
+  perms: { module_code: string; level: PermLevel }[];
+};
+
+// 로그인 토큰의 사용자 ID (서버 안에서 서명 확인 · DB 왕복 없음)
+export const getUid = cache(async (): Promise<string | null> => {
   const supabase = await createClient();
-  const { data: claims } = await supabase.auth.getClaims();
-  const uid = claims?.claims?.sub;
-  if (!uid) return null;
-  const { data } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-  return (data as Profile) ?? null;
+  const { data } = await supabase.auth.getClaims();
+  return data?.claims?.sub ?? null;
 });
+
+// 요청 단위로 1회 : 로그인 사용자 · 소속 · 메뉴 권한을 DB 왕복 1번(동시 조회)으로
+export const getSession = cache(async (): Promise<SessionData | null> => {
+  const uid = await getUid();
+  if (!uid) return null;
+  const supabase = await createClient();
+  const [{ data: profile }, { data: modules }, { data: perms }] = await Promise.all([
+    supabase.from("profiles").select("*, sites(name), departments!profiles_department_fk(name)").eq("id", uid).maybeSingle(),
+    supabase.from("modules").select("*").order("sort_order"),
+    supabase.from("user_permissions").select("module_code, level").eq("user_id", uid),
+  ]);
+  if (!profile) return null;
+  const { sites, departments, ...rest } = profile as Profile & { sites: { name: string } | null; departments: { name: string } | null };
+  return {
+    profile: rest as Profile,
+    siteName: sites?.name ?? null,
+    departmentName: departments?.name ?? null,
+    modules: (modules ?? []) as Module[],
+    perms: (perms ?? []) as SessionData["perms"],
+  };
+});
+
+export const getProfile = cache(async (): Promise<Profile | null> => (await getSession())?.profile ?? null);
 
 export async function requireProfile(): Promise<Profile> {
   const profile = await getProfile();

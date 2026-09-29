@@ -15,7 +15,7 @@ export default async function PermitLayout({ children }: LayoutProps<"/permit">)
     <>
       <PageHeader
         title="안전작업허가"
-        crumbs={[{ label: "안전작업허가", href: "/permit" }]}
+        crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "작업·시설관리" }, { label: "안전작업허가", href: "/permit" }]}
         actions={
           canWrite && (
             <Link href="/permit/new" className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">

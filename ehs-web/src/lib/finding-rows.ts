@@ -28,50 +28,39 @@ export type FindingRow = FindingOverview & {
   afterUrls: string[];
 };
 
+// finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
+export const FINDING_ROW_SELECT =
+  "*, finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
+
+type Embedded = FindingOverview & {
+  finding_measures?: { kind: MeasureKind; content: string; target_date: string; original_target_date: string; is_done: boolean; done_at: string | null; measure_date_history?: { new_date: string; changed_at: string }[] }[];
+  finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
+  finding_progress?: { reason: string; progress: string; created_at: string; profiles: { name: string } | null }[];
+  finding_comments?: { body: string; is_directive: boolean; created_at: string }[];
+};
+
 const PHOTOS_PER_KIND = 2;
-const CHUNK = 150; // .in() 조건이 URL 에 들어가므로 나눠서 조회
+const byTime = (a: { created_at: string }, b: { created_at: string }) => a.created_at.localeCompare(b.created_at);
 
-type Rows = Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
-async function inChunks(ids: string[], run: (part: string[]) => PromiseLike<{ data: unknown }>): Promise<Rows> {
-  const out: Rows = [];
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const { data } = await run(ids.slice(i, i + CHUNK));
-    out.push(...((data as Rows | null) ?? []));
-  }
-  return out;
-}
-
-// finding_overview 목록에 조치계획·진행현황·지시사항·사진 주소를 붙인다
+// FINDING_ROW_SELECT 로 받은 행 → 현황 표 데이터 (추가 왕복은 사진 서명 URL 1번뿐)
 export async function enrichFindings(supabase: SupabaseClient, findings: FindingOverview[]): Promise<FindingRow[]> {
   if (findings.length === 0) return [];
+  const rows = findings as Embedded[];
   const today = todayKst();
-  const ids = findings.map((f) => f.id);
 
-  const [measures, progress, comments, photos] = await Promise.all([
-    inChunks(ids, (p) => supabase.from("finding_measures").select("*, measure_date_history(new_date, changed_at)").in("finding_id", p)),
-    inChunks(ids, (p) => supabase.from("finding_progress").select("finding_id, reason, progress, created_at, profiles(name)").in("finding_id", p).order("created_at", { ascending: false })),
-    inChunks(ids, (p) => supabase.from("finding_comments").select("finding_id, body").eq("is_directive", true).in("finding_id", p).order("created_at")),
-    inChunks(ids, (p) => supabase.from("finding_photos").select("finding_id, kind, path").in("finding_id", p).order("created_at")),
-  ]);
-
-
-  // 필요한 사진만 서명 URL 발급 (썸네일 1장 + 개선 전/후 각 2장)
   const picked = new Map<string, { thumb?: string; before: string[]; after: string[] }>();
-  for (const p of photos ?? []) {
-    const e = picked.get(p.finding_id) ?? { before: [], after: [] };
-    const list = p.kind === "before" ? e.before : e.after;
-    if (list.length < PHOTOS_PER_KIND) list.push(p.path);
-    if (p.kind === "before" && !e.thumb) e.thumb = p.path;
-    picked.set(p.finding_id, e);
-  }
   const wanted = new Set<string>();
-  for (const e of picked.values()) {
-    if (e.thumb) {
-      wanted.add(thumbPathOf(e.thumb));
-      wanted.add(e.thumb);
+  for (const f of rows) {
+    const e = { before: [] as string[], after: [] as string[], thumb: undefined as string | undefined };
+    for (const p of [...(f.finding_photos ?? [])].sort(byTime)) {
+      const list = p.kind === "before" ? e.before : e.after;
+      if (list.length < PHOTOS_PER_KIND) list.push(p.path);
+      if (p.kind === "before" && !e.thumb) e.thumb = p.path;
     }
+    if (e.thumb) wanted.add(thumbPathOf(e.thumb)).add(e.thumb);
     e.before.forEach((x) => wanted.add(x));
     e.after.forEach((x) => wanted.add(x));
+    picked.set(f.id, e);
   }
   const signed = new Map<string, string>();
   if (wanted.size) {
@@ -79,17 +68,17 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     for (const s of data ?? []) if (s.signedUrl && s.path) signed.set(s.path, s.signedUrl);
   }
 
-  return findings.map((f) => {
+  return rows.map((f) => {
+    const { finding_measures, finding_photos: _p, finding_progress, finding_comments, ...base } = f;
+    void _p;
     const ms: FindingRow["measures"] = {};
-    for (const m of measures.filter((x) => x.finding_id === f.id)) {
-      ms[m.kind as MeasureKind] = {
+    for (const m of finding_measures ?? []) {
+      ms[m.kind] = {
         kind: m.kind,
         content: m.content,
         target: m.target_date,
         original: m.original_target_date,
-        changes: ((m.measure_date_history ?? []) as { new_date: string; changed_at: string }[])
-          .sort((x, y) => x.changed_at.localeCompare(y.changed_at))
-          .map((h) => h.new_date),
+        changes: [...(m.measure_date_history ?? [])].sort((x, y) => x.changed_at.localeCompare(y.changed_at)).map((h) => h.new_date),
         done: m.is_done,
         doneAt: m.done_at,
         late: !m.is_done && m.target_date < today && f.status !== "closed",
@@ -97,15 +86,15 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     }
     const ph = picked.get(f.id);
     return {
-      ...f,
+      ...base,
       measures: Object.fromEntries(MEASURE_KINDS.filter((k) => ms[k]).map((k) => [k, ms[k]])),
-      progress: progress
-        .filter((p) => p.finding_id === f.id)
-        .map((p) => ({ reason: p.reason, progress: p.progress, at: p.created_at, by: (p.profiles as unknown as { name: string } | null)?.name ?? null })),
-      directives: comments.filter((c) => c.finding_id === f.id).map((c) => c.body as string),
-      thumb: ph?.thumb ? signed.get(thumbPathOf(ph.thumb)) ?? signed.get(ph.thumb) ?? null : null,
+      progress: [...(finding_progress ?? [])]
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((p) => ({ reason: p.reason, progress: p.progress, at: p.created_at, by: p.profiles?.name ?? null })),
+      directives: [...(finding_comments ?? [])].filter((c) => c.is_directive).sort(byTime).map((c) => c.body),
+      thumb: ph?.thumb ? (signed.get(thumbPathOf(ph.thumb)) ?? signed.get(ph.thumb) ?? null) : null,
       beforeUrls: (ph?.before ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       afterUrls: (ph?.after ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
-    };
+    } as FindingRow;
   });
 }
