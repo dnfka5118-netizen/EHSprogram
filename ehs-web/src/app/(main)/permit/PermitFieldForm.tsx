@@ -218,7 +218,7 @@ export function PermitFieldForm({ id, permit, initial, readOnly }: { id: string;
       </Panel>
 
       {edit && (
-        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur lg:left-60">
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur left-[var(--sidebar-w)]">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
               {state ? (

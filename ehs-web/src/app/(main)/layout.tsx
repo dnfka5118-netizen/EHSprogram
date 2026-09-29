@@ -24,6 +24,7 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
   const menu: MenuGroup[] = [
     {
       label: "점검",
+      icon: "inspect",
       items: [
         { label: "부서별 현황", href: "/dept" },
         { label: "외부점검", href: "/insp/external" },
@@ -33,20 +34,21 @@ export default async function MainLayout({ children }: LayoutProps<"/">) {
       ],
     },
     ...(riskAdhoc
-      ? [{ label: "위험성평가", items: [{ label: "수시 위험성평가(JSA)", href: "/risk/adhoc" }] }]
-      : [{ label: "위험성평가", soon: true }]),
+      ? [{ label: "위험성평가", icon: "risk" as const, items: [{ label: "수시 위험성평가(JSA)", href: "/risk/adhoc" }] }]
+      : [{ label: "위험성평가", icon: "risk" as const, soon: true }]),
     ...(permitOn
       ? [
           {
             label: "안전작업허가",
+            icon: "permit" as const,
             items: [
               { label: "안전작업허가 현황", href: "/permit", match: ["/permit"] },
               { label: "금일 작업 현황", href: "/permit?tab=today" },
             ],
           },
         ]
-      : [{ label: "안전작업허가", soon: true }]),
-    ...(profile.is_admin ? [{ label: "환경설정", href: "/settings" }] : []),
+      : [{ label: "안전작업허가", icon: "permit" as const, soon: true }]),
+    ...(profile.is_admin ? [{ label: "환경설정", icon: "settings" as const, href: "/settings" }] : []),
   ];
 
   return (
