@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition, type MouseEvent } from "react";
 import { assignFinding, getAssignOptions } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
 import { MemberPicker } from "@/components/MemberPicker";
 import { PlanForm } from "@/app/(main)/findings/[id]/PlanForm";
+import { ReportForm } from "@/app/(main)/findings/[id]/ReportForm";
 
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
@@ -20,6 +21,12 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
   const closeAssign = useCallback(() => setAssign(null), []);
   const [plan, setPlan] = useState<FindingRow | null>(null);
   const closePlan = useCallback(() => setPlan(null), []);
+  const [report, setReport] = useState<FindingRow | null>(null);
+  const closeReport = useCallback(() => setReport(null), []);
+  const showReport = (e: MouseEvent, r: FindingRow) => {
+    e.stopPropagation();
+    setReport(r);
+  };
   const showPlan = (e: MouseEvent, r: FindingRow) => {
     e.stopPropagation();
     setPlan(r);
@@ -64,6 +71,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 </span>
                 <AssignButton row={r} onClick={showAssign} />
                 {r.canPlan && <PlanButton row={r} onClick={showPlan} />}
+                {r.canReport && <ReportButton row={r} onClick={showReport} />}
               </div>
               <Schedule row={r} className="mt-1 text-xs" inline />
             </div>
@@ -146,6 +154,11 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 </Td>
                 <Td className="text-center">
                   <DoneChip row={r} onReason={showReason} stacked />
+                  {r.canReport && (
+                    <div className="mt-1.5">
+                      <ReportButton row={r} onClick={showReport} />
+                    </div>
+                  )}
                 </Td>
               </tr>
             ))}
@@ -156,6 +169,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
       {plan && <PlanPopup row={plan} onClose={closePlan} />}
+      {report && <ReportPopup row={report} onClose={closeReport} />}
     </>
   );
 }
@@ -291,6 +305,68 @@ function ReasonPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
             상세 보기
           </Link>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// 완료여부 칸 : 조치담당자가 결과를 보고할 차례일 때
+function ReportButton({ row, onClick }: { row: FindingRow; onClick: (e: MouseEvent, r: FindingRow) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => onClick(e, row)}
+      className="rounded-md bg-brand-800 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-brand-900"
+    >
+      완료 여부 처리
+    </button>
+  );
+}
+
+// 현황표에서 바로 조치결과 보고 (완료 → 개선 후 사진 / 미완료 → 새 목표일·미완료 이유·진행현황) — 상세 화면과 같은 입력 화면
+function ReportPopup({ row, onClose }: { row: FindingRow; onClose: () => void }) {
+  const router = useRouter();
+  const [today] = useState(todayKst);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-xl"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">완료 여부 처리</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {row.module_name} · {fmtDate(row.inspection_date)} · {row.location_name ?? "-"}
+              {row.sub_location_name && ` / ${row.sub_location_name}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <div className="mb-3 flex gap-3 rounded-md bg-gray-50 p-3">
+          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          <p className="line-clamp-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
+        </div>
+        <ReportForm
+          findingId={row.id}
+          measures={row.measureList}
+          today={today}
+          hasAfterPhotos={row.afterUrls.length > 0}
+          onDone={() => {
+            router.refresh();
+            onClose();
+          }}
+        />
       </div>
     </div>
   );

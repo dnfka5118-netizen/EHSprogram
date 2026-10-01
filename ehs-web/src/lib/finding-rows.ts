@@ -4,7 +4,7 @@ import { MEASURE_KINDS } from "./labels";
 import { thumbPathOf } from "./photo-path";
 import { todayKst } from "./format";
 import { getProfile } from "./auth";
-import type { FindingOverview, MeasureKind } from "./types";
+import type { FindingOverview, Measure, MeasureKind } from "./types";
 
 // 현황 표·엑셀 공용 행 데이터
 export type RowMeasure = {
@@ -29,6 +29,8 @@ export type FindingRow = FindingOverview & {
   afterUrls: string[];
   canAssign: boolean; // 보는 사람이 조치담당자를 지정/변경할 수 있는지 (관리자 · 해당 부서 지정자/승인자)
   canPlan: boolean; // 보는 사람이 지금 조치계획을 작성할 차례인지 (계획 수립 대기 + 조치담당자 또는 관리자)
+  canReport: boolean; // 보는 사람이 지금 완료/미완료를 보고할 차례인지 (조치 중 + 조치담당자 또는 관리자)
+  measureList: Measure[]; // 결과 보고 창에 넘길 조치 원본 (즉시 → 단기 → 장기)
 };
 
 // finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
@@ -38,7 +40,7 @@ export const FINDING_ROW_SELECT =
 type Embedded = FindingOverview & {
   departments?: { assigner_id: string | null; approver_id: string | null } | null;
   finding_assignees?: { user_id: string }[];
-  finding_measures?: { kind: MeasureKind; content: string; target_date: string; original_target_date: string; is_done: boolean; done_at: string | null; measure_date_history?: { new_date: string; changed_at: string }[] }[];
+  finding_measures?: (Measure & { measure_date_history?: { new_date: string; changed_at: string }[] })[];
   finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
   finding_progress?: { reason: string; progress: string; created_at: string; profiles: { name: string } | null }[];
   finding_comments?: { body: string; is_directive: boolean; created_at: string }[];
@@ -77,7 +79,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   return rows.map((f) => {
     const { finding_measures, finding_photos: _p, finding_progress, finding_comments, departments: dept, finding_assignees: assignees, ...base } = f;
     void _p;
-    const canPlan = !!me && f.status === "plan_wait" && (me.is_admin || (assignees ?? []).some((a) => a.user_id === me.id));
+    const isAssignee = !!me && (me.is_admin || (assignees ?? []).some((a) => a.user_id === me.id));
+    const canPlan = isAssignee && f.status === "plan_wait";
+    const canReport = isAssignee && f.status === "in_progress" && (finding_measures ?? []).length > 0;
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));
     const ms: FindingRow["measures"] = {};
     for (const m of finding_measures ?? []) {
@@ -105,6 +109,10 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
       afterUrls: (ph?.after ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       canAssign,
       canPlan,
+      canReport,
+      measureList: [...(finding_measures ?? [])]
+        .sort((a, b) => MEASURE_KINDS.indexOf(a.kind) - MEASURE_KINDS.indexOf(b.kind))
+        .map(({ measure_date_history: _h, ...m }) => (void _h, m)),
     } as FindingRow;
   });
 }

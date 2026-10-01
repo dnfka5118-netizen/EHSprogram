@@ -12,7 +12,9 @@ import type { ActionState, Measure } from "@/lib/types";
 
 type Choice = { done: boolean | null; newDate: string };
 
-export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
+// onDone : 현황표 팝업에서 쓸 때 보고 후 닫기
+export function ReportForm({ findingId, measures, today, hasAfterPhotos, onDone }: {
+  onDone?: () => void;
   findingId: string;
   measures: Measure[];
   today: string;
@@ -57,6 +59,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos }: {
       }));
       const res = await reportProgress(findingId, items, reason, progress, paths);
       if (res?.error) await removePhotos(paths);
+      else if (onDone) return onDone();
       else {
         setPhotos([]);
         setReason("");
