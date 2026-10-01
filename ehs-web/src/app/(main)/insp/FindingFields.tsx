@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { SimilarSuggestions } from "./SimilarSuggestions";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import type { ProcessedPhoto } from "@/lib/image";
 import { Field, Input, Select, Textarea } from "@/components/ui";
@@ -74,6 +75,13 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
       <Field label="개선 전 사진" required>
         <PhotoPicker photos={value.photos} onChange={(photos) => set({ photos })} />
       </Field>
+
+      <SimilarSuggestions
+        photo={value.photos[0]?.main ?? null}
+        location={locations.find((l) => l.id === value.locationId)?.name}
+        types={types}
+        onPick={(p) => set({ problem: p.problem, ...(p.typeId ? { typeId: p.typeId } : {}) })}
+      />
 
       {fixed}
 

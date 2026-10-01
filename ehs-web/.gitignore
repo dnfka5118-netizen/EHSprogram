@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+
+# 과거 점검 사례 미리보기·모델 (현장 문구 포함 — 올리지 않음)
+/.cache

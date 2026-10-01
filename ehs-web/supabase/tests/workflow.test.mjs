@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -374,6 +374,17 @@ await as(U.C);
 await expectError("권한 없는 사람 차단", `select register_finding('insp_monthly','',$1)`, [fd("x")], "권한");
 await as(null);
 await db.query("update profiles set site_id=$1 where id=$2", [site, U.W2]);
+
+console.log("\n[비슷한 과거 지적 사례]");
+await db.query("insert into finding_examples (problem, emb) values ('소화기 압력 미달', 'AAAA')");
+await db.exec("set role authenticated");
+await as(U.I); ok((await one("select count(*)::int c from finding_examples")).c === 1, "등록 사용자는 사례 조회");
+await as(null); ok((await one("select count(*)::int c from finding_examples")).c === 0, "로그인 안 한 상태는 조회 불가");
+await as(U.I);
+let blocked = false;
+try { await db.query("insert into finding_examples (problem, emb) values ('x','x')"); } catch { blocked = true; }
+ok(blocked, "화면 사용자는 사례를 넣을 수 없음");
+await db.exec("reset role"); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
