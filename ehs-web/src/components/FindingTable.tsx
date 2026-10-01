@@ -8,15 +8,22 @@ import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
 import { MemberPicker } from "@/components/MemberPicker";
+import { PlanForm } from "@/app/(main)/findings/[id]/PlanForm";
 
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
-// 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" 를 누르면 미완료 이유 팝업, "지정" 을 누르면 조치담당자 지정 팝업
+// 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" → 미완료 이유 팝업, 조치 담당자 칸 "담당자 지정" → 지정 팝업, 개선 계획 칸 "조치계획 작성" → 계획 팝업
 export function FindingTable({ rows, showModule, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; empty?: string }) {
   const router = useRouter();
   const [popup, setPopup] = useState<FindingRow | null>(null);
   const [assign, setAssign] = useState<FindingRow | null>(null);
   const closeAssign = useCallback(() => setAssign(null), []);
+  const [plan, setPlan] = useState<FindingRow | null>(null);
+  const closePlan = useCallback(() => setPlan(null), []);
+  const showPlan = (e: MouseEvent, r: FindingRow) => {
+    e.stopPropagation();
+    setPlan(r);
+  };
   const showAssign = (e: MouseEvent, r: FindingRow) => {
     e.stopPropagation();
     setAssign(r);
@@ -51,11 +58,12 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 <DoneChip row={r} onReason={showReason} />
               </div>
               <p className="mt-0.5 line-clamp-2 text-sm text-gray-900">{r.problem}</p>
-              <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>
                   {r.department_name} · {r.assignee_names ?? "담당자 미지정"}
                 </span>
                 <AssignButton row={r} onClick={showAssign} />
+                {r.canPlan && <PlanButton row={r} onClick={showPlan} />}
               </div>
               <Schedule row={r} className="mt-1 text-xs" inline />
             </div>
@@ -80,7 +88,6 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
               <Th rowSpan={2}>조치 담당부서</Th>
               <Th rowSpan={2}>조치 담당자</Th>
               <Th rowSpan={2}>완료여부</Th>
-              <Th rowSpan={2}>조치담당자 지정</Th>
             </tr>
             <tr>
               <Th className="min-w-40">즉시조치</Th>
@@ -108,28 +115,37 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 <Td>
                   <Thumb url={r.thumb} className="h-20 w-24" />
                 </Td>
-                {MEASURE_KINDS.map((k) => (
-                  <Td key={k}>
-                    {r.measures[k] ? (
-                      <span className={`line-clamp-4 whitespace-pre-wrap ${r.measures[k]!.done ? "text-gray-500" : ""}`}>
-                        {r.measures[k]!.done && <span className="mr-1 text-emerald-700">✔</span>}
-                        {r.measures[k]!.content}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">-</span>
-                    )}
+                {r.canPlan ? (
+                  // 조치계획을 작성할 차례 : 즉시조치·단기대책·장기대책 칸을 합쳐 작성 버튼
+                  <Td colSpan={3} className="text-center align-middle">
+                    <PlanButton row={r} onClick={showPlan} />
                   </Td>
-                ))}
+                ) : (
+                  MEASURE_KINDS.map((k) => (
+                    <Td key={k}>
+                      {r.measures[k] ? (
+                        <span className={`line-clamp-4 whitespace-pre-wrap ${r.measures[k]!.done ? "text-gray-500" : ""}`}>
+                          {r.measures[k]!.done && <span className="mr-1 text-emerald-700">✔</span>}
+                          {r.measures[k]!.content}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">-</span>
+                      )}
+                    </Td>
+                  ))
+                )}
                 <Td className="whitespace-nowrap">
                   <Schedule row={r} />
                 </Td>
                 <Td className="whitespace-nowrap">{r.department_name}</Td>
-                <Td>{r.assignee_names ?? <span className="text-gray-400">미지정</span>}</Td>
-                <Td className="text-center">
-                  <DoneChip row={r} onReason={showReason} stacked />
+                <Td>
+                  {r.assignee_names ?? <span className="text-gray-400">미지정</span>}
+                  <div className="mt-1">
+                    <AssignButton row={r} onClick={showAssign} />
+                  </div>
                 </Td>
                 <Td className="text-center">
-                  <AssignButton row={r} onClick={showAssign} />
+                  <DoneChip row={r} onReason={showReason} stacked />
                 </Td>
               </tr>
             ))}
@@ -139,6 +155,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
 
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
+      {plan && <PlanPopup row={plan} onClose={closePlan} />}
     </>
   );
 }
@@ -151,8 +168,8 @@ function Th({ children, className = "", ...rest }: React.ThHTMLAttributes<HTMLTa
   );
 }
 
-function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`border border-gray-200 px-2 py-2 ${className}`}>{children}</td>;
+function Td({ children, className = "", colSpan }: { children: React.ReactNode; className?: string; colSpan?: number }) {
+  return <td colSpan={colSpan} className={`border border-gray-200 px-2 py-2 ${className}`}>{children}</td>;
 }
 
 function Thumb({ url, className }: { url: string | null; className: string }) {
@@ -279,19 +296,83 @@ function ReasonPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
   );
 }
 
+// 조치 담당자 칸 : 미지정이면 "담당자 지정" 버튼, 지정돼 있으면 작은 "변경" (지정 권한자에게만)
 function AssignButton({ row, onClick }: { row: FindingRow; onClick: (e: MouseEvent, r: FindingRow) => void }) {
-  if (!row.canAssign) return <span className="text-gray-300">-</span>;
-  const first = row.status === "assign_wait";
+  if (!row.canAssign) return null;
+  if (!row.assignee_names)
+    return (
+      <button
+        type="button"
+        onClick={(e) => onClick(e, row)}
+        className="rounded-md bg-brand-800 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-brand-900"
+      >
+        담당자 지정
+      </button>
+    );
+  return (
+    <button type="button" onClick={(e) => onClick(e, row)} className="text-[11px] whitespace-nowrap text-brand-800 underline-offset-2 hover:underline">
+      담당자 변경
+    </button>
+  );
+}
+
+// 개선 계획 칸 : 조치담당자가 계획을 세울 차례일 때
+function PlanButton({ row, onClick }: { row: FindingRow; onClick: (e: MouseEvent, r: FindingRow) => void }) {
   return (
     <button
       type="button"
       onClick={(e) => onClick(e, row)}
-      className={`rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap ${
-        first ? "bg-brand-800 text-white hover:bg-brand-900" : "border border-gray-300 bg-white text-gray-700 hover:border-brand-700"
-      }`}
+      className="rounded-md bg-brand-800 px-3 py-1.5 text-xs font-medium whitespace-nowrap text-white hover:bg-brand-900"
     >
-      {first ? "지정" : "변경"}
+      조치계획 작성
     </button>
+  );
+}
+
+// 현황표에서 바로 조치계획(즉시조치·단기대책·장기대책 + 목표일) 작성 — 상세 화면과 같은 입력 화면
+function PlanPopup({ row, onClose }: { row: FindingRow; onClose: () => void }) {
+  const router = useRouter();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white p-4 shadow-xl sm:max-w-xl sm:rounded-xl"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">조치계획 작성</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {row.module_name} · {fmtDate(row.inspection_date)} · {row.location_name ?? "-"}
+              {row.sub_location_name && ` / ${row.sub_location_name}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <div className="mb-3 flex gap-3 rounded-md bg-gray-50 p-3">
+          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          <p className="line-clamp-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
+        </div>
+        <PlanForm
+          findingId={row.id}
+          measures={[]}
+          mode="create"
+          onDone={() => {
+            router.refresh();
+            onClose();
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

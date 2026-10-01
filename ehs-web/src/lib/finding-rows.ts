@@ -28,14 +28,16 @@ export type FindingRow = FindingOverview & {
   beforeUrls: string[]; // 엑셀용 (최대 2장)
   afterUrls: string[];
   canAssign: boolean; // 보는 사람이 조치담당자를 지정/변경할 수 있는지 (관리자 · 해당 부서 지정자/승인자)
+  canPlan: boolean; // 보는 사람이 지금 조치계획을 작성할 차례인지 (계획 수립 대기 + 조치담당자 또는 관리자)
 };
 
 // finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
 export const FINDING_ROW_SELECT =
-  "*, departments(assigner_id, approver_id), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
+  "*, departments(assigner_id, approver_id), finding_assignees(user_id), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
 
 type Embedded = FindingOverview & {
   departments?: { assigner_id: string | null; approver_id: string | null } | null;
+  finding_assignees?: { user_id: string }[];
   finding_measures?: { kind: MeasureKind; content: string; target_date: string; original_target_date: string; is_done: boolean; done_at: string | null; measure_date_history?: { new_date: string; changed_at: string }[] }[];
   finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
   finding_progress?: { reason: string; progress: string; created_at: string; profiles: { name: string } | null }[];
@@ -73,8 +75,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   }
 
   return rows.map((f) => {
-    const { finding_measures, finding_photos: _p, finding_progress, finding_comments, departments: dept, ...base } = f;
+    const { finding_measures, finding_photos: _p, finding_progress, finding_comments, departments: dept, finding_assignees: assignees, ...base } = f;
     void _p;
+    const canPlan = !!me && f.status === "plan_wait" && (me.is_admin || (assignees ?? []).some((a) => a.user_id === me.id));
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));
     const ms: FindingRow["measures"] = {};
     for (const m of finding_measures ?? []) {
@@ -101,6 +104,7 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
       beforeUrls: (ph?.before ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       afterUrls: (ph?.after ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       canAssign,
+      canPlan,
     } as FindingRow;
   });
 }

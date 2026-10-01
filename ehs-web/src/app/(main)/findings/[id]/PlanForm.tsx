@@ -8,7 +8,8 @@ import type { ActionState, Measure, MeasureKind } from "@/lib/types";
 
 type Row = { content: string; target_date: string; done: boolean };
 
-export function PlanForm({ findingId, measures, mode }: { findingId: string; measures: Measure[]; mode: "create" | "edit" }) {
+// onDone : 현황표 팝업에서 쓸 때 저장 후 닫기
+export function PlanForm({ findingId, measures, mode, onDone }: { findingId: string; measures: Measure[]; mode: "create" | "edit"; onDone?: () => void }) {
   const [open, setOpen] = useState(mode === "create");
   const [rows, setRows] = useState<Record<MeasureKind, Row>>(() => {
     const init = {} as Record<MeasureKind, Row>;
@@ -44,6 +45,7 @@ export function PlanForm({ findingId, measures, mode }: { findingId: string; mea
     start(async () => {
       const res = await savePlan(findingId, payload);
       setState(res);
+      if (res?.ok && onDone) return onDone();
       if (res?.ok && mode === "edit") setOpen(false);
     });
   }
