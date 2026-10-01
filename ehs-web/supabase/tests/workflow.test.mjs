@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -58,7 +58,7 @@ for (const [k, name, d, type, admin] of [
     [id, `${k.toLowerCase()}@test.kr`, name, site, d, type, admin]);
   U[k] = id;
 }
-await db.query(`update departments set assigner_id=$1, approver_id=$2 where id=$3`, [U.S, U.H, PROD]);
+await db.query(`insert into department_roles (department_id, user_id, role) values ($1,$2,'assigner'), ($1,$3,'approver')`, [PROD, U.S, U.H]);
 
 console.log("\n[권한]");
 await as(U.I); ok((await one(`select perm_level('insp_ceo') v`)).v === 2, "임직원 기본 = 작성");
@@ -410,6 +410,25 @@ const hp2F = (await one(`select id from findings where inspection_id=$1 order by
 await as(U.W2); await db.query(`select self_assign_finding($1)`, [hp2F]); await as(null);
 ok((await one(`select count(*)::int c from finding_assignees where finding_id=$1 and user_id=$2`, [hp2F, U.W2])).c === 1, "파트 직원도 생산팀 건 자진 담당");
 await db.query("update profiles set department_id=$1 where id=$2", [PROD, U.W2]);
+
+console.log("\n[지정자·승인자 여러 명]");
+ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "첫 번째 승인자가 부서장(결재선용)으로 유지");
+await as(U.H); await expectError("관리자 아닌 사람은 목록 변경 불가", "select set_department_roles($1,$2,$3)", [PROD, [U.S], [U.H]], "관리자"); await as(null);
+await as(U.A); await db.query("select set_department_roles($1,$2,$3)", [PROD, [U.S, U.W1], [U.H, U.Q]]); await as(null);
+const mr = await reg("insp_plant", U.I, "여러 승인자");
+const mrF = (await one("select id from findings where inspection_id=$1 order by seq desc limit 1", [mr])).id;
+ok((await one("select count(distinct user_id)::int c from notifications where finding_id=$1 and kind='request'", [mrF])).c === 4, "등록 알림 → 지정자 2명 + 승인자 2명");
+await as(U.W1); await db.query("select assign_finding($1,$2)", [mrF, [U.W2]]); await as(null);
+ok((await one("select status from findings where id=$1", [mrF])).status === "plan_wait", "두 번째 지정자도 담당자 지정");
+await as(U.W2);
+await db.query("select save_plan($1,$2)", [mrF, JSON.stringify([{ kind: "immediate", content: "조치", target_date: today }])]);
+const mrM = (await one("select id from finding_measures where finding_id=$1", [mrF])).id;
+await db.query("select report_progress($1,$2,'','완료',$3)", [mrF, JSON.stringify([{ measure_id: mrM, done: true }]), [`${mrF}/after.jpg`]]);
+await as(null);
+await as(U.Q); await db.query("select approve_finding($1,'')", [mrF]); await as(null);
+ok((await one("select status from findings where id=$1", [mrF])).status === "closed", "두 번째 승인자가 종결 승인");
+await as(U.A); await db.query("select set_department_roles($1,$2,$3)", [PROD, [U.S], [U.H]]); await as(null);
+ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "목록을 바꾸면 부서장도 첫 번째 사람으로 맞춰짐");
 
 console.log("\n[비슷한 과거 지적 사례]");
 await db.query("insert into finding_examples (problem, emb) values ('소화기 압력 미달', 'AAAA')");

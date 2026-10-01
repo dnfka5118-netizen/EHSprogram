@@ -15,7 +15,7 @@ import { CommentForm } from "./CommentForm";
 import { DeleteButton } from "./DeleteButton";
 import { SelfAssignButton } from "./SelfAssignButton";
 import { thumbPathOf } from "@/lib/photo-path";
-import type { Department, FindingOverview, Measure, Photo } from "@/lib/types";
+import type { FindingOverview, Measure, Photo } from "@/lib/types";
 
 type Named = { profiles: { name: string } | null };
 
@@ -54,7 +54,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
 
   // 부서·구성원·등록자·사진 주소를 동시에 (DB 왕복 1번)
   const [{ data: deptRow }, { data: memberRows }, { data: creator }, signed] = await Promise.all([
-    supabase.from("departments").select("*").eq("id", f.request_department_id).single(),
+    supabase.from("departments").select("*, department_roles(user_id, role)").eq("id", f.request_department_id).single(),
     supabase
       .from("profiles")
       .select("id, name, position, departments!profiles_department_fk!inner(id, parent_id)")
@@ -69,7 +69,6 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           .then((r) => r.data ?? [])
       : Promise.resolve([]),
   ]);
-  const dept = deptRow as Department;
   const assigneeIds = (assigneeRows ?? []).map((a) => a.user_id as string);
 
   const historyRows = measures
@@ -83,8 +82,9 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
 
   // 화면 표시용 권한 (실제 권한은 DB 함수가 검사)
   const isAdmin = profile.is_admin;
-  const canAssign = isAdmin || profile.id === dept.assigner_id || profile.id === dept.approver_id;
-  const canApprove = isAdmin || profile.id === dept.approver_id;
+  const roles = ((deptRow as { department_roles?: { user_id: string; role: string }[] } | null)?.department_roles ?? []).filter((r) => r.user_id === profile.id);
+  const canAssign = isAdmin || roles.length > 0;
+  const canApprove = isAdmin || roles.some((r) => r.role === "approver");
   const isAssignee = assigneeIds.includes(profile.id) || isAdmin;
   const canSelfAssign =
     !assigneeIds.includes(profile.id) && (profile.team_id ?? profile.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);

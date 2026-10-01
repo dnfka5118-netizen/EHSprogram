@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { saveDepartment } from "../actions";
+import { RolePicker } from "./RolePicker";
 import type { Department, Profile, Site } from "@/lib/types";
 
 const SELECT = "w-full rounded-md border border-gray-300 bg-white px-2 py-1.5";
@@ -12,17 +13,20 @@ export default async function DepartmentsPage() {
   const supabase = await createClient();
   const [{ data: sites }, { data: depts }, { data: users }] = await Promise.all([
     supabase.from("sites").select("*").order("sort_order"),
-    supabase.from("departments").select("*").order("sort_order"),
+    supabase.from("departments").select("*, department_roles(user_id, role, sort_order)").order("sort_order"),
     supabase.from("profiles").select("id, name, position, site_id, department_id").eq("is_active", true).order("name"),
   ]);
   const people = (users ?? []) as Pick<Profile, "id" | "name" | "position" | "site_id" | "department_id">[];
-  const all = (depts ?? []) as Department[];
+  type Row = Department & { department_roles?: { user_id: string; role: string; sort_order: number }[] };
+  const all = (depts ?? []) as Row[];
+  const roleIds = (d: Row, role: string) =>
+    (d.department_roles ?? []).filter((r) => r.role === role).sort((a, b) => a.sort_order - b.sort_order).map((r) => r.user_id);
 
   return (
     <div className="space-y-4">
       <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
-        조직은 <b>사업장 › 부문 › 부서 › 파트</b> 순입니다. 조치 요청·<b>지정자</b>(조치담당자를 지정하는 사람)·<b>승인자</b>(종결 승인하는 부서장)는{" "}
-        <b>부서 단위</b>로 정하고, 파트 소속 직원은 상위 부서 소속으로 봅니다(지정 대상·자진 담당 가능). 파트를 만들려면 <b>상위 부서</b>를 고르세요.
+        조직은 <b>사업장 › 부문 › 부서 › 파트</b> 순입니다. 조치 요청·<b>지정자</b>(조치담당자를 지정하는 사람)·<b>승인자</b>(종결 승인하는 사람)는 <b>여러 명</b> 둘 수 있고{" "}
+        <b>부서 단위</b>로 정하고, 파트 소속 직원은 상위 부서 소속으로 봅니다(지정 대상·자진 담당 가능). 파트를 만들려면 <b>상위 부서</b>를 고르세요. 승인자 중 <b>첫 번째 사람</b>이 전자결재의 &quot;해당 부서장&quot;이 됩니다.
       </p>
       {((sites ?? []) as Site[]).map((site) => {
         const list = all.filter((d) => d.site_id === site.id);
@@ -42,8 +46,8 @@ export default async function DepartmentsPage() {
                 <span>부서 / 파트</span>
                 <span>상위 부서 (파트일 때)</span>
                 <span>순서</span>
-                <span>조치담당자 지정자</span>
-                <span>종결 승인자 (부서장)</span>
+                <span>조치담당자 지정자 (여러 명)</span>
+                <span>종결 승인자 (여러 명)</span>
                 <span>사용</span>
                 <span />
                 <span />
@@ -55,21 +59,6 @@ export default async function DepartmentsPage() {
                     const team = d.parent_id ?? d.id;
                     const members = people.filter((p) => p.department_id === team || list.some((x) => x.id === p.department_id && x.parent_id === team));
                     const others = people.filter((p) => p.site_id === site.id && !members.includes(p));
-                    const options = (
-                      <>
-                        <option value="">(미지정)</option>
-                        <optgroup label={`${d.name} 소속 (파트 포함)`}>
-                          {members.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name} {p.position ?? ""}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="기타 인원">
-                          {others.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name} {p.position ?? ""}</option>
-                          ))}
-                        </optgroup>
-                      </>
-                    );
                     const isPart = !!d.parent_id;
                     return (
                       <ActionForm
@@ -100,12 +89,8 @@ export default async function DepartmentsPage() {
                           <span className="col-span-2 text-xs text-gray-500">상위 부서의 지정자·승인자가 맡습니다</span>
                         ) : (
                           <>
-                            <select name="assigner_id" defaultValue={d.assigner_id ?? ""} className={SELECT}>
-                              {options}
-                            </select>
-                            <select name="approver_id" defaultValue={d.approver_id ?? ""} className={SELECT}>
-                              {options}
-                            </select>
+                            <RolePicker name="assigner_ids" members={members} others={others} initial={roleIds(d, "assigner")} />
+                            <RolePicker name="approver_ids" members={members} others={others} initial={roleIds(d, "approver")} firstHint="결재선 부서장" />
                           </>
                         )}
                         <label className="flex items-center gap-1 text-sm">

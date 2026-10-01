@@ -220,12 +220,17 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
           parent_id: parent,
           sort_order: n(fd, "sort_order"),
           is_active: fd.get("is_active") === "on",
-          assigner_id: parent ? null : nullable(s(fd, "assigner_id")),
-          approver_id: parent ? null : nullable(s(fd, "approver_id")),
         })
         .eq("id", id)
     : await supabase.from("departments").insert({ site_id: s(fd, "site_id"), name, division, parent_id: parent, sort_order: n(fd, "sort_order") });
-  return error ? { error: toMessage(error) } : done();
+  if (error) return { error: toMessage(error) };
+  // 지정자·승인자 여러 명 (부서만, 순서 = 고른 순서 · 첫 번째 승인자 = 결재선 부서장)
+  if (id && !parent) {
+    const ids = (k: string) => fd.getAll(k).map(String).filter(Boolean);
+    const r = await supabase.rpc("set_department_roles", { p_dept: id, p_assigners: ids("assigner_ids"), p_approvers: ids("approver_ids") });
+    if (r.error) return { error: toMessage(r.error) };
+  }
+  return done();
 }
 
 // ---------------------------------------------------------------- 장소 / 유형

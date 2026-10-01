@@ -38,10 +38,10 @@ export type FindingRow = FindingOverview & {
 
 // finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
 export const FINDING_ROW_SELECT =
-  "*, departments(assigner_id, approver_id), finding_assignees(user_id, assigned_by, profiles!finding_assignees_user_id_fkey(name)), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
+  "*, departments(department_roles(user_id, role)), finding_assignees(user_id, assigned_by, profiles!finding_assignees_user_id_fkey(name)), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
 
 type Embedded = FindingOverview & {
-  departments?: { assigner_id: string | null; approver_id: string | null } | null;
+  departments?: { department_roles: { user_id: string; role: "assigner" | "approver" }[] } | null;
   finding_assignees?: { user_id: string; assigned_by: string | null; profiles: { name: string } | null }[];
   finding_measures?: (Measure & { measure_date_history?: { new_date: string; changed_at: string }[] })[];
   finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
@@ -86,9 +86,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     const canPlan = isAssignee && f.status === "plan_wait";
     const mine = (assignees ?? []).some((a) => a.user_id === me?.id);
     const canSelfAssign = !!me && !mine && (me.team_id ?? me.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
-    const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || dept?.approver_id === me.id);
+    const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.role === "approver" && r.user_id === me.id));
     const canReport = isAssignee && f.status === "in_progress" && (finding_measures ?? []).length > 0;
-    const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));
+    const canAssign = !!me && f.status !== "closed" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.user_id === me.id));
     const ms: FindingRow["measures"] = {};
     for (const m of finding_measures ?? []) {
       ms[m.kind] = {

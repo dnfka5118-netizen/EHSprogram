@@ -24,12 +24,12 @@ export async function GET(request: Request) {
     admin.from("finding_overview").select("*").neq("status", "closed"),
     admin.from("finding_measures").select("finding_id, kind, target_date").eq("is_done", false).lte("target_date", soon),
     admin.from("finding_assignees").select("finding_id, user_id"),
-    admin.from("departments").select("id, assigner_id, approver_id"),
+    admin.from("department_roles").select("department_id, user_id, role"),
     admin.from("profiles").select("id").eq("is_admin", true).eq("is_active", true),
   ]);
 
   const findings = new Map(((open ?? []) as FindingOverview[]).map((f) => [f.id, f]));
-  const deptOf = (id: string) => depts?.find((d) => d.id === id);
+  const roleUsers = (dept: string, role?: string) => (depts ?? []).filter((r) => r.department_id === dept && (!role || r.role === role)).map((r) => r.user_id as string);
   const adminIds = (admins ?? []).map((a) => a.id as string);
   const lines = new Map<string, { overdue: string[]; soon: string[]; assign: string[]; approve: string[] }>();
   const bucket = (uid: string) => {
@@ -49,13 +49,13 @@ export async function GET(request: Request) {
   }
   // 2) 지정자 : 하루 이상 담당자 미지정 / 3) 부서장 : 승인 대기
   for (const f of findings.values()) {
-    const d = deptOf(f.request_department_id);
     if (f.status === "assign_wait" && f.created_at < yesterday) {
-      const to = [d?.assigner_id, d?.approver_id].filter(Boolean) as string[];
+      const to = roleUsers(f.request_department_id);
       for (const uid of new Set(to.length ? to : adminIds)) bucket(uid).assign.push(label(f));
     }
     if (f.status === "approval_wait") {
-      for (const uid of d?.approver_id ? [d.approver_id] : adminIds) bucket(uid).approve.push(label(f));
+      const ap = roleUsers(f.request_department_id, "approver");
+      for (const uid of ap.length ? ap : adminIds) bucket(uid).approve.push(label(f));
     }
   }
 

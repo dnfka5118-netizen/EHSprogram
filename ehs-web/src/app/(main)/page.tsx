@@ -12,12 +12,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const supabase = await createClient();
 
   const [{ data: myDepts }, { data: myAssigned }] = await Promise.all([
-    supabase.from("departments").select("id, assigner_id, approver_id").or(`assigner_id.eq.${profile.id},approver_id.eq.${profile.id}`),
+    supabase.from("department_roles").select("department_id, role").eq("user_id", profile.id),
     supabase.from("finding_assignees").select("finding_id").eq("user_id", profile.id),
   ]);
 
-  const assignDeptIds = (myDepts ?? []).map((d) => d.id);
-  const approveDeptIds = (myDepts ?? []).filter((d) => d.approver_id === profile.id).map((d) => d.id);
+  const assignDeptIds = [...new Set((myDepts ?? []).map((d) => d.department_id as string))]; // 지정자·승인자 모두 담당자 지정 가능
+  const approveDeptIds = (myDepts ?? []).filter((d) => d.role === "approver").map((d) => d.department_id as string);
   const assignedIds = (myAssigned ?? []).map((a) => a.finding_id);
 
   const q = () => supabase.from("finding_overview").select(FINDING_ROW_SELECT).order("created_at", { ascending: false });
