@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
 
 export type Person = { id: string; name: string; position: string | null; dept: string | null };
 
 const label = (p: Person) => `${p.name}${p.position ? ` ${p.position}` : ""}${p.dept ? `(${p.dept})` : ""}`;
 
-// 점검 참여자 : 등록된 사용자 중에서 검색·선택 + 미등록 인원 직접 입력 → inspectors 한 줄 문자열로 저장
-export function ParticipantPicker({ people, name }: { people: Person[]; name: string }) {
+// 점검 참여자 : 등록된 사용자 중에서 검색·선택 + 미등록 인원 직접 입력 → "이름 직위(부서), …" 한 줄로 onChange
+export function ParticipantPicker({ people, onChange }: { people: Person[]; onChange: (value: string) => void }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [extra, setExtra] = useState("");
@@ -22,15 +22,10 @@ export function ParticipantPicker({ people, name }: { people: Person[]; name: st
 
   const toggle = (id: string) => setPicked((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const value = [...picked.map((id) => label(byId.get(id)!)), ...extra.split(/[,\n]/).map((s) => s.trim()).filter(Boolean)].join(", ");
+  useEffect(() => onChange(value), [value, onChange]);
 
   return (
     <div className="space-y-2">
-      <span className="block text-sm font-medium text-gray-700">
-        점검 참여자
-        <span className="ml-2 text-xs font-normal text-gray-500">함께 점검한 사람 · 등록된 사용자에서 검색해 선택 (여러 명 가능)</span>
-      </span>
-      <input type="hidden" name={name} value={value} />
-
       {picked.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {picked.map((id) => (

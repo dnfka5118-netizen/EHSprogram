@@ -33,10 +33,10 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
         actions={
           mod.level === "write" && (
             <Link
-              href={`/insp/${slug}/${inspectionId}/add`}
+              href={`/insp/${slug}/new`}
               className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900"
             >
-              + 지적사항 추가
+              + 점검 등록
             </Link>
           )
         }

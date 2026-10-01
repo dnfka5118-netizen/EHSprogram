@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import type { ProcessedPhoto } from "@/lib/image";
 import { Field, Input, Select, Textarea } from "@/components/ui";
@@ -9,7 +10,7 @@ export const DIRECT = "__direct__";
 
 export type LocationWithSubs = Location & { sub_locations: SubLocation[] };
 
-// 지적사항 1건 입력값 (점검 등록 화면 · 지적사항 추가 화면 공용)
+// 지적사항 1건 입력값
 export type FindingDraft = {
   key: string; // 화면용 구분값 = 저장 시 지적사항 ID (사진 경로 {ID}/ 로 사용)
   locationId: string;
@@ -56,7 +57,9 @@ export const draftPayload = (d: FindingDraft, photos: string[]) => ({
 // onPatch 는 바뀐 항목만 넘긴다 (사진 변환 중 다른 칸을 입력해도 덮어쓰지 않도록 부모가 최신 값에 합침)
 export type FindingPayload = ReturnType<typeof draftPayload>;
 
-export function FindingFields({ value, onPatch, locations, types, departments }: {
+// 현장 순서 : 사진 촬영 → (고정 정보) → 장소 → 세부장소 → 유형 → 문제점 → 조치 요청 부서
+export function FindingFields({ value, onPatch, locations, types, departments, fixed }: {
+  fixed?: ReactNode; // 사진 바로 아래에 보여 줄 고정 정보 (사업장·점검일·점검자)
   value: FindingDraft;
   onPatch: (patch: Partial<FindingDraft>) => void;
   locations: LocationWithSubs[];
@@ -68,6 +71,12 @@ export function FindingFields({ value, onPatch, locations, types, departments }:
 
   return (
     <div className="space-y-4">
+      <Field label="개선 전 사진" required>
+        <PhotoPicker photos={value.photos} onChange={(photos) => set({ photos })} />
+      </Field>
+
+      {fixed}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="장소" required>
           <Select value={value.locationId} onChange={(e) => set({ locationId: e.target.value, subId: "" })}>
@@ -110,10 +119,6 @@ export function FindingFields({ value, onPatch, locations, types, departments }:
 
       <Field label="문제점" required>
         <Textarea rows={3} value={value.problem} onChange={(e) => set({ problem: e.target.value })} placeholder="발견된 문제점과 개선 필요사항" />
-      </Field>
-
-      <Field label="개선 전 사진" required>
-        <PhotoPicker photos={value.photos} onChange={(photos) => set({ photos })} />
       </Field>
 
       <Field label="조치 요청 부서" required>

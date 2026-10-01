@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -333,28 +333,47 @@ const mo = await insOf(await insId("insp_monthly"));
 ok(mo.inspector === "점검자 과장" && mo.inspectors === "참여자A", "월간점검 점검자 = 등록한 사람(이름 직위), 참여자는 따로");
 await as(null);
 
-console.log("\n[점검 + 지적사항 한 번에 등록]");
+console.log("\n[점검 등록 = 지적사항 1건, 회차 자동]");
+await db.exec("update inspections set inspection_date = date '2000-01-01'"); // 앞선 테스트의 회차가 오늘 날짜와 겹치지 않도록
 const loc1 = (await one(`select id from locations where site_id=$1 order by sort_order limit 1`, [site])).id;
 const typ1 = (await one(`select id from finding_types order by sort_order limit 1`)).id;
 const fd = (problem, d = PROD) => {
   const id = crypto.randomUUID();
-  return { id, location_id: loc1, sub_location_id: "", sub_location_text: "", type_id: typ1, problem, department_id: d, photos: [`${id}/a.jpg`] };
+  return JSON.stringify({ id, location_id: loc1, sub_location_id: "", sub_location_text: "", type_id: typ1, problem, department_id: d, photos: [`${id}/a.jpg`] });
+};
+const reg = async (m, who, problem, parts = "") => {
+  await as(who);
+  const r = (await one(`select register_finding($1,$2,$3) id`, [m, parts, fd(problem)])).id;
+  await as(null);
+  return r;
 };
 const inspCount = async () => (await one(`select count(*)::int c from inspections`)).c;
-await as(U.I);
+const r1 = await reg("insp_ceo", U.I, "난간 파손", "홍길동");
+const r2 = await reg("insp_ceo", U.Q, "소화기 위치", "김철수, 홍길동");
+const s1 = await one(`select inspection_date::text d, inspector, inspectors, title, site_id from inspections where id=$1`, [r1]);
+const today2 = (await one(`select kst_today()::text d`)).d;
+ok(r1 === r2, "CEO 점검 : 같은 날 다른 사람이 등록해도 같은 회차(점검자=대표이사)");
+ok(s1.d === today2 && s1.site_id === site && s1.inspector === "대표이사", "점검일 = 오늘, 사업장 = 등록자 사업장, 점검자 고정");
+ok(/^\d{4}년 \d{1,2}월 \d{1,2}일 CEO 안전점검$/.test(s1.title), `점검명 자동 : ${s1.title}`);
+ok(s1.inspectors.split(", ").sort().join() === ["김철수", "홍길동"].sort().join(), "참여자 합치기 (중복 제외)");
+const seqs = (await db.query(`select seq from findings where inspection_id=$1 order by seq`, [r1])).rows.map((x) => x.seq);
+ok(seqs.join() === "1,2", "회차 안에서 순번 1, 2");
+const m1 = await reg("insp_monthly", U.I, "월간1");
+const m2 = await reg("insp_monthly", U.Q, "월간2");
+const m3 = await reg("insp_monthly", U.I, "월간3");
+ok(m1 === m3 && m1 !== m2, "월간점검 : 점검자(로그인한 사람)별로 회차가 나뉨");
 const before = await inspCount();
-const combo = (await one(`select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','통합 등록','참여자B',null,$2) id`,
-  [site, JSON.stringify([fd("난간 파손"), fd("소화기 위치")])])).id;
-const cf = (await db.query(`select seq, problem, status from findings where inspection_id=$1 order by seq`, [combo])).rows;
-ok(cf.length === 2 && cf[0].seq === 1 && cf[1].seq === 2 && cf.every((f) => f.status === "assign_wait"), "점검 1건 + 지적사항 2건이 순번대로 등록");
-ok((await one(`select count(*)::int c from finding_photos f join findings x on x.id=f.finding_id where x.inspection_id=$1`, [combo])).c === 2, "지적사항별 개선 전 사진 저장");
-await expectError("2번째 지적사항 오류 시 전체 취소",
-  `select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','실패',null,null,$2)`,
-  [site, JSON.stringify([fd("정상"), fd("", PROD)])], "지적사항 2번");
-ok((await inspCount()) === before + 1, "실패한 등록은 점검도 남지 않음");
-await as(U.C);
-await expectError("권한 없는 사람 차단", `select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','t',null,null,'[]')`, [site], "권한");
+await as(U.I);
+await expectError("문제점 없으면 차단", `select register_finding('insp_plant','',$1)`, [fd("")], "문제점");
+ok((await inspCount()) === before, "실패하면 회차도 만들어지지 않음");
 await as(null);
+await db.query("update profiles set site_id=null where id=$1", [U.W2]);
+await as(U.W2);
+await expectError("사업장 없는 사용자 차단", `select register_finding('insp_plant','',$1)`, [fd("x")], "사업장");
+await as(U.C);
+await expectError("권한 없는 사람 차단", `select register_finding('insp_monthly','',$1)`, [fd("x")], "권한");
+await as(null);
+await db.query("update profiles set site_id=$1 where id=$2", [site, U.W2]);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
