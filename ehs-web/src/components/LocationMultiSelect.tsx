@@ -3,10 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 
 // 장소 여러 개 선택 (조회 조건) : 고른 장소마다 hidden input name="loc"
-export function LocationMultiSelect({ locations, selected }: { locations: { id: string; name: string }[]; selected: string[] }) {
-  const [picked, setPicked] = useState<string[]>(selected);
+//   used 가 있으면 지적사항이 나온 장소만 · 같은 조회 양식의 부서(name="dept")를 바꾸면 그 부서 것만 바로 보여 줌
+export function LocationMultiSelect({ locations: all, selected, used, dept: initialDept = "" }: {
+  locations: { id: string; name: string }[];
+  selected: string[];
+  used?: [dept: string, loc: string][];
+  dept?: string;
+}) {
+  const [pickedRaw, setPicked] = useState<string[]>(selected);
   const [open, setOpen] = useState(false);
+  const [dept, setDept] = useState(initialDept);
   const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const field = box.current?.closest("form")?.elements.namedItem("dept");
+    if (!(field instanceof HTMLSelectElement)) return;
+    const onChange = () => setDept(field.value);
+    field.addEventListener("change", onChange);
+    return () => field.removeEventListener("change", onChange);
+  }, []);
+
+  const locations = used ? all.filter((l) => used.some(([d, loc]) => loc === l.id && (!dept || d === dept))) : all;
+  const picked = pickedRaw.filter((id) => locations.some((l) => l.id === id)); // 목록에서 빠진 장소는 조건에서도 뺌
 
   useEffect(() => {
     if (!open) return;
@@ -42,6 +60,8 @@ export function LocationMultiSelect({ locations, selected }: { locations: { id: 
               선택 해제 (전체 장소)
             </button>
           </div>
+          {locations.length === 0 && <p className="px-3 py-2 text-xs text-gray-500">{dept ? "이 부서에서 지적사항이 나온 장소가 없습니다." : "지적사항이 나온 장소가 없습니다."}</p>}
+          {used && locations.length > 0 && <p className="px-3 pt-1.5 text-[11px] text-gray-400">{dept ? "이 부서에서" : "이 점검에서"} 지적사항이 나온 장소만 보입니다</p>}
           {locations.map((l) => (
             <label key={l.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-brand-50">
               <input type="checkbox" checked={picked.includes(l.id)} onChange={() => toggle(l.id)} className="h-4 w-4 accent-brand-800" />

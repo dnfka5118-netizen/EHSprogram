@@ -7,7 +7,7 @@ import { Card } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
-import { FindingFilters, applyFindingFilters, describeFilters, filterParams, readFilters } from "@/components/FindingFilters";
+import { FindingFilters, applyFindingFilters, describeFilters, filterParams, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import type { Department, FindingOverview, Site } from "@/lib/types";
 
@@ -22,7 +22,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
   const codes = modules.map((m) => m.code);
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT), filters).in("module_code", codes);
 
-  const [{ data: sites }, { data: depts }, rows, { data: allForDept }, { data: locRows }] = await Promise.all([
+  const [{ data: sites }, { data: depts }, rows, { data: allForDept }, { data: locRows }, { data: usedRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
@@ -35,6 +35,8 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
       ? supabase.from("finding_overview").select("module_code, status, is_overdue").eq("request_department_id", filters.dept).in("module_code", codes)
       : Promise.resolve({ data: [] as { module_code: string; status: string; is_overdue: boolean }[] }),
     supabase.from("locations").select("id, name, site_id").eq("is_active", true).order("sort_order"),
+    // 장소 조건에는 이 부서에서 지적사항이 나온 장소만
+    supabase.from("findings").select("request_department_id, location_id").in("module_code", codes).not("location_id", "is", null).range(0, 9999),
   ]);
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
@@ -109,7 +111,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
         title={`${dept?.name ?? ""} 지적사항 (${rows.length}건)`}
         actions={<ExcelButton rows={rows} title={title} showModule fileName={`${todayKst()}_${dept?.name ?? "부서"}_점검조치현황.xlsx`} />}
       >
-        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} lockDept />
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} used={usedPairs(usedRows)} lockDept />
         <FindingTable rows={rows} showModule />
       </Card>
     </div>

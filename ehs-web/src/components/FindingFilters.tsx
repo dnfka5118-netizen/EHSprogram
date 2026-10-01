@@ -68,6 +68,21 @@ export function applyFindingFilters<Q extends Record<string, any>>(query: Q, f: 
   return q;
 }
 
+// 지적사항이 나온 (부서, 장소) 조합 — 장소 조건 목록을 부서에 맞게 줄이는 용도
+export type UsedPair = [dept: string, loc: string];
+export function usedPairs(rows: { request_department_id: string; location_id: string | null }[] | null): UsedPair[] {
+  const seen = new Set<string>();
+  const out: UsedPair[] = [];
+  for (const r of rows ?? []) {
+    if (!r.location_id) continue;
+    const k = r.request_department_id + r.location_id;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push([r.request_department_id, r.location_id]);
+  }
+  return out;
+}
+
 const dot = (d: string) => d.slice(2).replaceAll("-", ".");
 
 export function describeFilters(f: Filters, sites: Site[], depts: Department[], modules: Module[] = [], locations: { id: string; name: string }[] = []): string {
@@ -87,12 +102,13 @@ export function describeFilters(f: Filters, sites: Site[], depts: Department[], 
 
 const SELECT = "rounded-md border border-gray-300 bg-white px-2 py-1.5";
 
-export function FindingFilters({ filters, sites, departments, modules, locations = [], lockDept }: {
+export function FindingFilters({ filters, sites, departments, modules, locations = [], used, lockDept }: {
   filters: Filters;
   sites: Site[];
   departments: Department[];
   modules?: Module[];
   locations?: { id: string; name: string; site_id?: string }[];
+  used?: UsedPair[]; // 있으면 지적사항이 나온 장소만 (부서를 고르면 그 부서 것만)
   lockDept?: boolean;
 }) {
   const siteName = (id: string) => sites.find((s) => s.id === id)?.name ?? "";
@@ -134,7 +150,7 @@ export function FindingFilters({ filters, sites, departments, modules, locations
       )}
       {lockDept && <input type="hidden" name="dept" value={filters.dept} />}
       <DateRange from={filters.from} to={filters.to} />
-      {locs.length > 0 && <LocationMultiSelect locations={locs} selected={filters.locs} />}
+      {locs.length > 0 && <LocationMultiSelect locations={locs} selected={filters.locs} used={used} dept={filters.dept} />}
       <button className="rounded-md bg-gray-800 px-4 py-1.5 text-sm text-white">조회</button>
     </form>
   );
