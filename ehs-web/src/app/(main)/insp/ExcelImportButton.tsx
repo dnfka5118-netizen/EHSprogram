@@ -38,6 +38,7 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [finished, setFinished] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const check = (r: ImportRow): Checked => {
     if (r.existingId) return { ...r, error: "이미 프로그램에 있는 건 (다운로드한 엑셀)" };
@@ -155,14 +156,39 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
             </div>
 
             <div className="space-y-3 overflow-y-auto p-4">
-              <label className="block">
-                <span className="mb-1 block text-sm font-medium text-gray-700">엑셀 파일</span>
+              {/* 파일 선택 또는 컴퓨터에서 끌어다 놓기 */}
+              <label
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!busy) setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragging(false);
+                  const f = [...e.dataTransfer.files].find((x) => /\.xlsx$/i.test(x.name));
+                  if (busy) return;
+                  if (!f) return setError("엑셀 파일(.xlsx)을 끌어다 놓아 주세요.");
+                  pick(f);
+                }}
+                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition ${
+                  dragging ? "border-brand-700 bg-brand-50" : "border-gray-300 bg-gray-50 hover:border-brand-500"
+                }`}
+              >
+                <span className="text-2xl" aria-hidden>
+                  📂
+                </span>
+                <span className="text-sm font-medium text-gray-800">엑셀 파일을 여기로 끌어다 놓거나 눌러서 선택하세요</span>
+                <span className="text-xs text-gray-500">{fileName || ".xlsx (프로그램 다운로드 양식)"}</span>
                 <input
                   type="file"
                   accept=".xlsx"
                   disabled={!!busy}
-                  onChange={(e) => e.target.files?.[0] && pick(e.target.files[0])}
-                  className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-brand-800 file:px-3 file:py-2 file:text-white"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) pick(e.target.files[0]);
+                    e.target.value = "";
+                  }}
+                  className="sr-only"
                 />
               </label>
               {error && <p className="rounded-md bg-red-50 p-2 text-sm text-red-700">{error}</p>}

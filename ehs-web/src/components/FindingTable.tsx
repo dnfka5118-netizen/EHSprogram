@@ -8,6 +8,7 @@ import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
 import { MemberPicker } from "@/components/MemberPicker";
+import { PhotoViewer } from "@/components/PhotoViewer";
 import { PlanForm } from "@/app/(main)/findings/[id]/PlanForm";
 import { ReportForm } from "@/app/(main)/findings/[id]/ReportForm";
 
@@ -45,6 +46,12 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
   const [popup, setPopup] = useState<FindingRow | null>(null);
   const [assign, setAssign] = useState<FindingRow | null>(null);
   const closeAssign = useCallback(() => setAssign(null), []);
+  const [viewer, setViewer] = useState<{ row: FindingRow; index: number } | null>(null);
+  const closeViewer = useCallback(() => setViewer(null), []);
+  const showPhotos = (e: MouseEvent, row: FindingRow, index = 0) => {
+    e.stopPropagation();
+    if (row.photos.length) setViewer({ row, index });
+  };
   const [plan, setPlan] = useState<FindingRow | null>(null);
   const closePlan = useCallback(() => setPlan(null), []);
   const [report, setReport] = useState<FindingRow | null>(null);
@@ -113,7 +120,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                 <Check id={r.id} />
               </div>
             )}
-            <Thumb url={r.thumb} className="h-20 w-20 shrink-0" />
+            <Thumb row={r} onOpen={showPhotos} className="h-24 w-24 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs text-gray-500">
@@ -152,7 +159,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
               <Th rowSpan={2}>장소</Th>
               <Th rowSpan={2}>세부장소</Th>
               <Th rowSpan={2}>유형</Th>
-              <Th rowSpan={2} className="min-w-52">문제점</Th>
+              <Th rowSpan={2} className="min-w-44">문제점</Th>
               <Th rowSpan={2}>개선 전 사진</Th>
               <Th colSpan={3}>개선 계획</Th>
               <Th rowSpan={2}>개선 목표일정</Th>
@@ -189,7 +196,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                   <span className="line-clamp-4 whitespace-pre-wrap">{r.problem}</span>
                 </Td>
                 <Td>
-                  <Thumb url={r.thumb} className="h-20 w-24" />
+                  <Thumb row={r} onOpen={showPhotos} className="h-32 w-40" />
                 </Td>
                 {r.canPlan ? (
                   // 조치계획을 작성할 차례 : 즉시조치·단기대책·장기대책 칸을 합쳐 작성 버튼
@@ -243,6 +250,16 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
       {plan && <PlanPopup row={plan} onClose={closePlan} />}
+      {viewer && (
+        <PhotoViewer
+          findingId={viewer.row.id}
+          photos={viewer.row.photos}
+          startIndex={viewer.index}
+          canEdit={viewer.row.canEditPhotos}
+          title={`${viewer.row.location_name ?? ""}${viewer.row.sub_location_name ? ` / ${viewer.row.sub_location_name}` : ""} · ${viewer.row.problem.slice(0, 40)}`}
+          onClose={closeViewer}
+        />
+      )}
       {report && <ReportPopup row={report} onClose={closeReport} />}
       {reject && <RejectPopup row={reject} onClose={closeReject} />}
     </>
@@ -261,10 +278,29 @@ function Td({ children, className = "", colSpan }: { children: React.ReactNode; 
   return <td colSpan={colSpan} className={`border border-gray-200 px-2 py-2 ${className}`}>{children}</td>;
 }
 
-function Thumb({ url, className }: { url: string | null; className: string }) {
+// 개선 전 사진 (누르면 확대 · 개선 후 사진이 있으면 표시)
+function Thumb({ row, className, onOpen }: { row: FindingRow; className: string; onOpen?: (e: MouseEvent, row: FindingRow, index?: number) => void }) {
+  const url = row.thumb;
   if (!url) return <div className={`${className} flex items-center justify-center rounded bg-gray-100 text-[10px] text-gray-400`}>사진 없음</div>;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="개선 전" loading="lazy" className={`${className} rounded object-cover`} />;
+  const afterAt = row.photos.findIndex((p) => p.kind === "after");
+  return (
+    <span className={`${className} relative block`}>
+      <button type="button" onClick={(e) => onOpen?.(e, row, 0)} className="block h-full w-full cursor-zoom-in" title="사진 크게 보기">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="개선 전" loading="lazy" className="h-full w-full rounded object-cover" />
+      </button>
+      {afterAt >= 0 && (
+        <button
+          type="button"
+          onClick={(e) => onOpen?.(e, row, afterAt)}
+          className="absolute right-1 bottom-1 rounded bg-emerald-600/90 px-1.5 py-0.5 text-[10px] font-medium text-white"
+          title="개선 후 사진 보기"
+        >
+          개선 후
+        </button>
+      )}
+    </span>
+  );
 }
 
 function Schedule({ row, className = "", inline }: { row: FindingRow; className?: string; inline?: boolean }) {
@@ -429,7 +465,7 @@ function ReportPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
           </button>
         </div>
         <div className="mb-3 flex gap-3 rounded-md bg-gray-50 p-3">
-          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          <Thumb row={row} className="h-16 w-16 shrink-0" />
           <p className="line-clamp-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
         </div>
         <ReportForm
@@ -558,7 +594,7 @@ function RejectPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
           </button>
         </div>
         <div className="mb-3 flex gap-2">
-          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          <Thumb row={row} className="h-16 w-16 shrink-0" />
           {row.afterUrls[0] && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={row.afterUrls[0]} alt="개선 후" className="h-16 w-16 shrink-0 rounded object-cover ring-2 ring-emerald-500" />
@@ -654,7 +690,7 @@ function PlanPopup({ row, onClose }: { row: FindingRow; onClose: () => void }) {
           </button>
         </div>
         <div className="mb-3 flex gap-3 rounded-md bg-gray-50 p-3">
-          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          <Thumb row={row} className="h-16 w-16 shrink-0" />
           <p className="line-clamp-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
         </div>
         <PlanForm

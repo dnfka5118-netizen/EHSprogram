@@ -6,6 +6,9 @@ import { processOutbox } from "@/lib/mail";
 import { createClient } from "@/lib/supabase/server";
 import { toMessage } from "@/lib/errors";
 import type { ActionState, MeasureKind } from "@/lib/types";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getProfile } from "@/lib/auth";
+import { thumbPathOf } from "@/lib/photo-path";
 
 async function run(fn: string, args: Record<string, unknown>, findingId: string, message: string): Promise<ActionState> {
   const supabase = await createClient();
@@ -94,4 +97,37 @@ export async function addComment(_prev: ActionState, formData: FormData): Promis
     "등록되었습니다.",
   );
   return res;
+}
+
+// 사진 회전 저장 : 브라우저에서 돌린 원본·썸네일로 같은 경로를 덮어씀
+//   권한 : 관리자 · 등록자 · 조치담당자 · 조치 요청 부서 지정자/승인자 (저장소 쓰기는 확인 후 서비스 키로)
+export async function rotatePhoto(fd: FormData): Promise<ActionState> {
+  const findingId = String(fd.get("finding_id") ?? "");
+  const path = String(fd.get("path") ?? "");
+  const main = fd.get("main");
+  const thumb = fd.get("thumb");
+  if (!(main instanceof Blob) || !(thumb instanceof Blob) || !path.startsWith(`${findingId}/`)) return { error: "잘못된 요청입니다." };
+  if (main.size > 3_500_000) return { error: "사진이 너무 큽니다." };
+
+  const me = await getProfile();
+  if (!me) return { error: "로그인이 필요합니다." };
+  const supabase = await createClient();
+  const [{ data: f }, { data: photo }, { data: assignees }] = await Promise.all([
+    supabase.from("findings").select("created_by, request_department_id").eq("id", findingId).maybeSingle(),
+    supabase.from("finding_photos").select("id").eq("finding_id", findingId).eq("path", path).maybeSingle(),
+    supabase.from("finding_assignees").select("user_id").eq("finding_id", findingId),
+  ]);
+  if (!f || !photo) return { error: "사진을 찾을 수 없습니다." };
+  const { data: roles } = await supabase.from("department_roles").select("user_id").eq("department_id", f.request_department_id).eq("user_id", me.id);
+  const allowed = me.is_admin || f.created_by === me.id || (assignees ?? []).some((a) => a.user_id === me.id) || (roles ?? []).length > 0;
+  if (!allowed) return { error: "사진을 회전할 권한이 없습니다." };
+
+  const admin = createAdminClient();
+  for (const [target, blob] of [[path, main], [thumbPathOf(path), thumb]] as const) {
+    const { error } = await admin.storage.from("findings").upload(target, blob, { contentType: "image/jpeg", upsert: true, cacheControl: "60" });
+    if (error) return { error: toMessage(error) };
+  }
+  revalidatePath(`/findings/${findingId}`);
+  revalidatePath("/", "layout");
+  return { ok: true, message: "회전해 저장했습니다." };
 }

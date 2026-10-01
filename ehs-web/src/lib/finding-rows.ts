@@ -27,6 +27,8 @@ export type FindingRow = FindingOverview & {
   thumb: string | null; // 개선 전 첫 사진 썸네일
   beforeUrls: string[]; // 엑셀용 (최대 2장)
   afterUrls: string[];
+  photos: { kind: "before" | "after"; path: string; url: string }[]; // 확대 보기·회전 (개선 전 → 개선 후, 각 최대 2장)
+  canEditPhotos: boolean; // 사진 회전 가능 (관리자 · 등록자 · 조치담당자 · 부서 지정자/승인자)
   canAssign: boolean; // 보는 사람이 조치담당자를 지정/변경할 수 있는지 (관리자 · 해당 부서 지정자/승인자)
   canPlan: boolean; // 보는 사람이 지금 조치계획을 작성할 차례인지 (계획 수립 대기 + 조치담당자 또는 관리자)
   assignees: { name: string; self: boolean }[]; // self = 자진 담당
@@ -113,6 +115,11 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
       thumb: ph?.thumb ? (signed.get(thumbPathOf(ph.thumb)) ?? signed.get(ph.thumb) ?? null) : null,
       beforeUrls: (ph?.before ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       afterUrls: (ph?.after ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
+      photos: [
+        ...(ph?.before ?? []).map((path) => ({ kind: "before" as const, path, url: signed.get(path) ?? "" })),
+        ...(ph?.after ?? []).map((path) => ({ kind: "after" as const, path, url: signed.get(path) ?? "" })),
+      ].filter((x) => x.url),
+      canEditPhotos: !!me && (me.is_admin || f.created_by === me.id || mine || (dept?.department_roles ?? []).some((x) => x.user_id === me.id)),
       canAssign,
       canPlan,
       canReport,
