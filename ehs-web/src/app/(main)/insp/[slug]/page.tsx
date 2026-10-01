@@ -7,7 +7,7 @@ import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
 import { ExcelImportButton } from "../ExcelImportButton";
 import { getProfile } from "@/lib/auth";
-import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
+import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
@@ -22,7 +22,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const profile = await getProfile();
   const canImport = mod.level === "write" && !!profile?.site_id;
   const none = Promise.resolve({ data: [] as unknown[] });
-  const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }] = await Promise.all([
+  const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }, { data: locRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
@@ -33,11 +33,13 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
     // 엑셀로 추가 : 등록자 사업장의 장소·유형
     canImport ? supabase.from("locations").select("*, sub_locations(*)").eq("site_id", profile!.site_id!).eq("is_active", true) : none,
     canImport ? supabase.from("finding_types").select("*").eq("is_active", true) : none,
+    supabase.from("locations").select("id, name, site_id").eq("is_active", true).order("sort_order"),
   ]);
+  const locList = (locRows ?? []) as { id: string; name: string; site_id: string }[];
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
 
-  const condition = describeFilters(filters, siteList, deptList);
+  const condition = describeFilters(filters, siteList, deptList, [], locList);
 
   return (
     <div className="space-y-4">
@@ -59,12 +61,12 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
               rows={rows}
               title={`${mod.name} 현황 (${condition})`}
               fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
-              currentMonth={filters.month || undefined}
+              currentMonth={filterMonth(filters)}
             />
           </div>
         }
       >
-        <FindingFilters filters={filters} sites={siteList} departments={deptList} />
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} locations={locList} />
         <FindingTable rows={rows} />
         {rows.length >= 500 && <p className="mt-2 text-xs text-gray-500">최근 500건까지만 표시합니다. 조건을 좁혀 조회하세요.</p>}
       </Card>

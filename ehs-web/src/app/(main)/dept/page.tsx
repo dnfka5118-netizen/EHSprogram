@@ -7,7 +7,7 @@ import { Card } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
-import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
+import { FindingFilters, applyFindingFilters, describeFilters, filterParams, readFilters } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import type { Department, FindingOverview, Site } from "@/lib/types";
 
@@ -22,7 +22,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
   const codes = modules.map((m) => m.code);
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT), filters).in("module_code", codes);
 
-  const [{ data: sites }, { data: depts }, rows, { data: allForDept }] = await Promise.all([
+  const [{ data: sites }, { data: depts }, rows, { data: allForDept }, { data: locRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
@@ -34,9 +34,11 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
     filters.dept
       ? supabase.from("finding_overview").select("module_code, status, is_overdue").eq("request_department_id", filters.dept).in("module_code", codes)
       : Promise.resolve({ data: [] as { module_code: string; status: string; is_overdue: boolean }[] }),
+    supabase.from("locations").select("id, name, site_id").eq("is_active", true).order("sort_order"),
   ]);
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
+  const locList = (locRows ?? []) as { id: string; name: string; site_id: string }[];
   const dept = deptList.find((d) => d.id === filters.dept);
   const summary = modules.map((m) => {
     const list = (allForDept ?? []).filter((f) => f.module_code === m.code);
@@ -49,7 +51,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
   });
 
   const siteName = (id: string) => siteList.find((s) => s.id === id)?.name ?? "";
-  const title = `${dept?.name ?? ""} 점검 조치 현황 (${describeFilters({ ...filters, dept: "" }, siteList, deptList, modules)})`;
+  const title = `${dept?.name ?? ""} 점검 조치 현황 (${describeFilters({ ...filters, dept: "" }, siteList, deptList, modules, locList)})`;
 
   return (
     <div className="space-y-4">
@@ -59,9 +61,9 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
         actions={
         <form className="flex gap-2">
           {/* 부서만 바꾸고 나머지 조건은 유지 */}
-          <input type="hidden" name="status" value={filters.status} />
-          {filters.module && <input type="hidden" name="module" value={filters.module} />}
-          {filters.month && <input type="hidden" name="month" value={filters.month} />}
+          {filterParams(filters, ["dept"]).map(([k, v], i) => (
+            <input key={`${k}-${i}`} type="hidden" name={k} value={v} />
+          ))}
           <select name="dept" defaultValue={filters.dept} className="rounded-md border border-gray-300 bg-white px-3 py-2 font-medium">
             <option value="">전체 부서</option>
             {deptList
@@ -107,7 +109,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
         title={`${dept?.name ?? ""} 지적사항 (${rows.length}건)`}
         actions={<ExcelButton rows={rows} title={title} showModule fileName={`${todayKst()}_${dept?.name ?? "부서"}_점검조치현황.xlsx`} />}
       >
-        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} lockDept />
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} lockDept />
         <FindingTable rows={rows} showModule />
       </Card>
     </div>
