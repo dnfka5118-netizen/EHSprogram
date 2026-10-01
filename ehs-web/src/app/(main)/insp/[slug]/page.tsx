@@ -5,9 +5,11 @@ import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
+import { ExcelImportButton } from "../ExcelImportButton";
+import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
-import type { Department, FindingOverview, Site } from "@/lib/types";
+import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
   const { slug } = await params;
@@ -17,7 +19,10 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   const supabase = await createClient();
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
-  const [{ data: sites }, { data: depts }, rows] = await Promise.all([
+  const profile = await getProfile();
+  const canImport = mod.level === "write" && !!profile?.site_id;
+  const none = Promise.resolve({ data: [] as unknown[] });
+  const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
@@ -25,6 +30,9 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
       .order("seq")
       .limit(500)
       .then(({ data }) => enrichFindings(supabase, (data ?? []) as unknown as FindingOverview[])),
+    // 엑셀로 추가 : 등록자 사업장의 장소·유형
+    canImport ? supabase.from("locations").select("*, sub_locations(*)").eq("site_id", profile!.site_id!).eq("is_active", true) : none,
+    canImport ? supabase.from("finding_types").select("*").eq("is_active", true) : none,
   ]);
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
@@ -36,12 +44,24 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
       <Card
         title={`지적사항 현황 (${rows.length}건)`}
         actions={
-          <ExcelButton
-            rows={rows}
-            title={`${mod.name} 현황 (${condition})`}
-            fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
-            currentMonth={filters.month || undefined}
-          />
+          <div className="flex gap-2">
+            {canImport && (
+              <ExcelImportButton
+                moduleCode={mod.code}
+                moduleName={mod.name}
+                locations={((impLocs ?? []) as (Location & { sub_locations: SubLocation[] })[]).map((l) => ({ ...l, sub_locations: l.sub_locations.filter((x) => x.is_active) }))}
+                types={(impTypes ?? []) as FindingType[]}
+                departments={deptList.filter((d) => d.is_active && !d.parent_id && d.site_id === profile!.site_id)}
+                today={todayKst()}
+              />
+            )}
+            <ExcelButton
+              rows={rows}
+              title={`${mod.name} 현황 (${condition})`}
+              fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
+              currentMonth={filters.month || undefined}
+            />
+          </div>
         }
       >
         <FindingFilters filters={filters} sites={siteList} departments={deptList} />

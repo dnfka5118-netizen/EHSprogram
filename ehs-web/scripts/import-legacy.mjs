@@ -3,6 +3,8 @@
 //   미리보기 : node scripts/import-legacy.mjs "../1. 2026_CEO 안전점검.xlsx" --admin 관리자이메일
 //   실제 반영: 위 명령 + --apply
 //   옵션     : --module insp_ceo|insp_monthly|insp_plant (기본 insp_ceo)  --site CA (기본)
+//              --open-only        완료되지 않은 건만
+//              --dept 부서명      담당부서 칸이 없는 양식(공장장·월간)의 조치 요청 부서
 //              --allow-unmatched  담당자 이름을 사용자와 못 맞춘 건도 이관 (담당자 지정 대기로 들어감)
 //
 // 미리보기 결과는 엑셀 파일 옆에 "이관_미리보기_<파일명>.csv" 로 저장됩니다.
@@ -27,6 +29,8 @@ const ALLOW_UNMATCHED = args.includes("--allow-unmatched");
 const MODULE = opt("module", "insp_ceo");
 const SITE_CODE = opt("site", "CA");
 const ADMIN_EMAIL = opt("admin", "")?.toLowerCase();
+const DEPT_DEFAULT = opt("dept", ""); // 담당부서 칸이 없는 양식(공장장·월간)일 때 조치 요청 부서
+const OPEN_ONLY = args.includes("--open-only"); // 미완료 건만
 if (!file) {
   console.error('사용법: node scripts/import-legacy.mjs "엑셀경로.xlsx" --admin 관리자이메일 [--apply]');
   process.exit(1);
@@ -42,7 +46,29 @@ const LOCATION_ALIAS = {
   "과수2공장": "과산화수소 2공장",
   "과수 2공장": "과산화수소 2공장",
   "10동창고": "10동 창고",
-  "야트트랙터": "야드트랙터",
+  "야트트랙터": "야드 트랙터",
+  "야드트랙터": "야드 트랙터",
+  "과수 2공장": "과산화수소 2공장",
+  "과산화수소 / 2공장": "과산화수소 2공장",
+  "과산화수소 / 1공장": "과산화수소 1공장",
+  "WLC-C1": "HBC-C1",
+  "7동": "7동 창고",
+  "폐기물처리장": "폐기물보관소",
+  "폐기물 보관소": "폐기물보관소",
+  "2사업장": "HBC-C3",
+  "천안2사업장": "HBC-C3",
+};
+// 장소 칸에 세부장소에 해당하는 곳을 적은 경우 → [장소, 세부장소]
+const PLACE_ALIAS = {
+  "분석2실": ["분석실", "2분석실"],
+  "분석1실": ["분석실", "1분석실"],
+  "주차장": ["사업장 전체", "TC 주차장"],
+  "TC 주차장": ["사업장 전체", "TC 주차장"],
+  "T/C 주차장": ["사업장 전체", "TC 주차장"],
+  "경비동": ["사업장 전체", "경비동"],
+  "경비실 앞": ["사업장 전체", "경비동"],
+  "정비물품저장소": ["사업장 전체", "정비물품저장소"],
+  "공장 / 전체": ["사업장 전체", ""],
 };
 const EMPTY = new Set(["", "-", "–", "—", "x", "X"]);
 
@@ -146,7 +172,39 @@ ws.eachRow((row, r) => {
   if (!headerRow && cellText(row.getCell(2).value).trim().toUpperCase() === "NO") headerRow = r;
 });
 if (!headerRow) throw new Error("헤더(NO) 행을 찾지 못했습니다.");
-const firstDataRow = headerRow + 2; // 개선 계획 하위 헤더(즉시/단기/장기) 다음 행
+
+// 열 위치는 헤더 이름으로 찾는다 : CEO·프로그램 다운로드 양식(개선 계획 즉시/단기/장기 3칸)과
+// 공장장·월간 양식(대책유형 + 개선방안 1칸, 담당부서 칸 없음)을 모두 읽음
+const H = {};
+const headCols = [];
+ws.getRow(headerRow).eachCell((cell, i) => {
+  const h = cellText(cell.value).replace(/\s+/g, "");
+  if (!h) return;
+  headCols.push(i);
+  const set = (k) => (H[k] ??= i);
+  if (h === "NO") set("no");
+  else if (/^(시행월|점검일자|일자)$/.test(h) || /^\d{2}\.\d{2}\.\d{2}$/.test(h)) set("month");
+  else if (h === "점검자") set("inspector");
+  else if (h === "장소") set("loc");
+  else if (h === "세부장소") set("sub");
+  else if (h === "유형") set("type");
+  else if (h.startsWith("문제점")) set("problem");
+  else if (h.startsWith("개선전")) set("before");
+  else if (h.startsWith("대책유형")) set("kind");
+  else if (h === "개선계획" || h.startsWith("개선방안") || h === "개선대책") set("plan");
+  else if (h.startsWith("개선일정")) set("schedule");
+  else if (h.startsWith("개선후")) set("after");
+  else if (h === "담당부서") set("dept");
+  else if (h === "담당자") set("assignee");
+  else if (h.startsWith("완료여부")) set("done");
+  else if (h.startsWith("미완료")) set("progress");
+});
+headCols.sort((a, b) => a - b);
+const spanEnd = (col) => (headCols.find((c) => c > col) ?? col + 1) - 1; // 합쳐진 헤더의 마지막 열
+for (const k of ["no", "month", "loc", "problem", "before"]) if (!H[k]) throw new Error(`헤더 '${k}' 열을 찾지 못했습니다.`);
+const threePlans = !H.kind; // CEO·다운로드 양식 : 개선 계획 아래 즉시/단기/장기 하위 헤더
+const firstDataRow = threePlans ? headerRow + 2 : headerRow + 1;
+const KIND_OF = (t) => (/즉시/.test(t) ? "immediate" : /장기/.test(t) ? "long" : "short");
 
 // 사진 → 행 매핑 (사진 윗변이 행 높이의 60% 아래에서 시작하면 다음 행으로 간주)
 const rowHeightPt = (r) => ws.getRow(r).height ?? 15;
@@ -157,15 +215,17 @@ for (const im of ws.getImages()) {
   let row = Math.floor(tl.nativeRow) + 1;
   const offPt = (tl.nativeRowOff ?? 0) / 12700;
   if (offPt > rowHeightPt(row) * 0.6) row += 1;
-  const col = tl.nativeCol; // 0 기준 : G=6, H=7, I=8, M=12, N=13
+  const col = Math.floor(tl.nativeCol); // 0 기준
+  const c1 = col + 1;
   const media = wb.model.media[Number(im.imageId)];
   const entry = photos.get(row) ?? { before: [], after: [] };
   if (!media || !["png", "jpeg", "jpg"].includes(media.extension)) {
     skippedImages.push(`${row}행 ${String.fromCharCode(65 + col)}열 (${media?.extension ?? "?"} 형식 미지원)`);
     continue;
   }
-  if (col >= 6 && col <= 8) entry.before.push(media);
-  else if (col >= 11 && col <= 13) entry.after.push(media);
+  // 사진이 칸 경계를 살짝 넘는 경우를 감안해 앞뒤 1열까지
+  if (c1 >= H.before - 1 && c1 <= spanEnd(H.before) + 1 && c1 !== H.after - 1) entry.before.push(media);
+  else if (H.after && c1 >= H.after - 1 && c1 <= spanEnd(H.after) + 1) entry.after.push(media);
   else {
     skippedImages.push(`${row}행 ${String.fromCharCode(65 + col)}열 (개선 전/후 칸 밖의 이미지)`);
     continue;
@@ -174,31 +234,42 @@ for (const im of ws.getImages()) {
 }
 
 const rows = [];
+const TYPE_ALIAS = { 계측기: "설비" };
+const DEPT_ALIAS = { 품질팀: "품질보증팀", 경영지원실: "총무팀", 생산그룹: "생산팀", EHS부서: "EHS팀", EHS: "EHS팀" };
+let lastMonth = null; // 시행 월이 비어 있으면 위 행의 월 (합쳐진 칸·생략)
+let lastInspector = "";
 for (let r = firstDataRow; r <= ws.rowCount; r++) {
   const row = ws.getRow(r);
-  const c = (col) => row.getCell(col).value;
-  const no = Number(cellText(c(2)));
+  const c = (col) => (col ? row.getCell(col).value : null);
+  const no = Number(cellText(c(H.no)));
   if (!no) continue;
-  const mText = clean(cellText(c(13)));
+  // 번호만 매겨 둔 빈 양식 행은 건너뜀
+  if (!clean(cellText(c(H.problem))) && !photos.get(r)?.before.length) continue;
+  const monthCell = c(H.month);
+  const planText = threePlans ? "" : val(cellText(c(H.plan)));
+  const measures = threePlans
+    ? { immediate: val(cellText(c(H.plan))), short: val(cellText(c(H.plan + 1))), long: val(cellText(c(H.plan + 2))) }
+    : { immediate: "", short: "", long: "", ...(planText ? { [KIND_OF(cellText(c(H.kind)))]: planText } : {}) };
   rows.push({
     excelRow: r,
     no,
-    monthRaw: clean(cellText(c(3))),
-    month: parseMonth(cellText(c(3))),
-    carried: cellText(c(3)).includes("이월"),
-    locationRaw: oneLine(cellText(c(4))),
-    subRaw: val(oneLine(cellText(c(5)))),
-    type: val(cellText(c(6))),
-    problem: clean(cellText(c(7))),
-    measures: { immediate: val(cellText(c(9))), short: val(cellText(c(10))), long: val(cellText(c(11))) },
-    scheduleRaw: clean(cellText(c(12))),
-    schedule: resolveSchedule(c(12)),
-    afterNote: mText,
-    department: val(cellText(c(14))),
-    assignees: parseAssignees(cellText(c(15))),
-    done: clean(cellText(c(16))) === "완료",
-    progress: val(cellText(c(17))),
-    directive: val(cellText(c(18))),
+    monthRaw: clean(cellText(monthCell)),
+    month: (lastMonth = (monthCell instanceof Date ? ymd(monthCell).slice(0, 7) : parseMonth(cellText(monthCell)) ?? parseDates(monthCell)[0]?.date.slice(0, 7)) ?? lastMonth),
+    carried: cellText(monthCell).includes("이월"),
+    inspector: (lastInspector = val(cellText(c(H.inspector))) || lastInspector),
+    locationRaw: oneLine(cellText(c(H.loc))),
+    subRaw: val(oneLine(cellText(c(H.sub)))),
+    type: val(cellText(c(H.type))),
+    problem: clean(cellText(c(H.problem))),
+    measures,
+    scheduleRaw: clean(cellText(c(H.schedule))),
+    schedule: H.schedule ? resolveSchedule(c(H.schedule)) : null,
+    afterNote: threePlans && H.after ? clean(cellText(c(H.after))) : "",
+    department: DEPT_ALIAS[val(cellText(c(H.dept)))] ?? (val(cellText(c(H.dept))) || DEPT_DEFAULT),
+    assignees: parseAssignees(cellText(c(H.assignee))),
+    done: clean(cellText(c(H.done))) === "완료",
+    progress: val(cellText(c(H.progress))),
+    directive: threePlans ? val(cellText(c(18))) : "",
     photos: photos.get(r) ?? { before: [], after: [] },
   });
 }
@@ -231,7 +302,7 @@ if (db) {
     mod,
     locations: must(await db.from("locations").select("id, name, sub_locations(id, name)").eq("site_id", site.id)),
     types: must(await db.from("finding_types").select("id, name")),
-    depts: must(await db.from("departments").select("id, name").eq("site_id", site.id)),
+    depts: must(await db.from("departments").select("id, name, parent_id").eq("site_id", site.id)),
     people: must(await db.from("profiles").select("id, name, department_id, email").eq("is_active", true)),
     admin: ADMIN_EMAIL ? must(await db.from("profiles").select("id, name").eq("email", ADMIN_EMAIL).maybeSingle()) : null,
     existing: new Set(must(await db.from("findings").select("legacy_ref").not("legacy_ref", "is", null)).map((x) => x.legacy_ref)),
@@ -240,23 +311,38 @@ if (db) {
 }
 
 const norm = (s) => s.replace(/\s+/g, "").toLowerCase();
-const refOf = (no) => `xlsx:${basename(xlsxPath)}:${no}`;
+// 같은 파일에 NO 가 두 번 나오면 두 번째부터 행 번호를 붙여 구분
+const refOf = (r) => `xlsx:${basename(xlsxPath)}:${r.no}${rows.findIndex((x) => x.no === r.no) !== rows.indexOf(r) ? `#${r.excelRow}` : ""}`;
 const today = ymd(new Date(Date.now() + 9 * 3600000));
 
 // 행별 매핑 결과
-const plans = rows.map((r) => {
-  const locName = LOCATION_ALIAS[r.locationRaw] ?? r.locationRaw;
+const team = (deptId) => ctx?.depts.find((d) => d.id === deptId)?.parent_id ?? deptId; // 파트 → 상위 부서
+const plans = rows.filter((r) => !OPEN_ONLY || !r.done).map((r) => {
+  // 장소 이름 맞추기 : 별칭 → "장소 / 세부" 로 적힌 칸은 앞부분을 장소로, 나머지는 세부장소 앞에 붙임
+  let locName = LOCATION_ALIAS[r.locationRaw] ?? (r.locationRaw || "사업장 전체"); // 장소를 비워 둔 행은 사업장 전체
+  if (PLACE_ALIAS[r.locationRaw]) {
+    const [l, s] = PLACE_ALIAS[r.locationRaw];
+    locName = l;
+    if (s) r.subRaw = r.subRaw ? `${s} ${r.subRaw}` : s;
+  } else if (!ctx?.locations.some((l) => norm(l.name) === norm(locName)) && locName.includes(" / ")) {
+    const [head, ...rest] = locName.split(" / ");
+    const headName = LOCATION_ALIAS[head] ?? head;
+    if (ctx?.locations.some((l) => norm(l.name) === norm(headName))) {
+      locName = headName;
+      r.subRaw = [rest.join(" "), r.subRaw].filter(Boolean).join(" ");
+    }
+  }
   const loc = ctx?.locations.find((l) => norm(l.name) === norm(locName));
   const sub = loc?.sub_locations.find((s) => norm(s.name) === norm(r.subRaw));
-  const type = ctx?.types.find((t) => t.name === r.type);
-  const dept = ctx?.depts.find((d) => d.name === r.department);
+  const type = ctx?.types.find((t) => t.name === (TYPE_ALIAS[r.type] ?? r.type));
+  const dept = ctx?.depts.find((d) => !d.parent_id && norm(d.name) === norm(r.department));
 
   const matched = [];
   const unmatched = [];
   for (const name of r.assignees.current) {
     const cands = (ctx?.people ?? []).filter((p) => p.name === name);
-    const p = cands.find((x) => x.department_id === dept?.id) ?? (cands.length === 1 ? cands[0] : null);
-    if (p && p.department_id === dept?.id) matched.push(p);
+    const p = cands.find((x) => team(x.department_id) === dept?.id) ?? (cands.length === 1 ? cands[0] : null);
+    if (p && team(p.department_id) === dept?.id) matched.push(p);
     else unmatched.push(name + (p ? "(타 부서)" : ""));
   }
 
@@ -315,7 +401,7 @@ function plansIssues(p) {
     if (!p.loc) out.push("장소 없음");
     if (!p.dept) out.push("부서 없음");
     if (p.r.type && !p.type) out.push("유형 없음");
-    if (ctx.existing.has(refOf(p.r.no))) out.push("이미 이관됨");
+    if (ctx.existing.has(refOf(p.r))) out.push("이미 이관됨");
   }
   return out;
 }
@@ -343,7 +429,7 @@ if (!APPLY) {
 }
 
 // ------------------------------------------------------------------ 반영
-const blocking = plans.filter((p) => !ctx.existing.has(refOf(p.r.no)) && (!p.loc || !p.dept || !p.r.month));
+const blocking = plans.filter((p) => !ctx.existing.has(refOf(p.r)) && (!p.loc || !p.dept || !p.r.month));
 if (blocking.length) {
   console.error(`\n장소/부서/시행 월을 확인할 수 없는 행이 있어 중단합니다: NO ${blocking.map((p) => p.r.no).join(", ")}`);
   process.exit(1);
@@ -359,12 +445,15 @@ const must = (r, what) => {
 };
 const adminId = ctx.admin.id;
 const inspectionIds = new Map();
-async function inspectionFor(month) {
-  if (inspectionIds.has(month)) return inspectionIds.get(month);
+// 점검자 : CEO = 대표이사, 공장장 = 공장장, 월간 = 엑셀의 점검자 칸 (월 + 점검자별로 회차)
+const inspectorOf = (r) => (MODULE === "insp_ceo" ? "대표이사" : MODULE === "insp_plant" ? "공장장" : r.inspector || null);
+async function inspectionFor(month, inspector) {
+  const key = `${month}|${inspector ?? ""}`;
+  if (inspectionIds.has(key)) return inspectionIds.get(key);
   const [y, m] = month.split("-");
-  const title = `${y}년 ${Number(m)}월 ${ctx.mod.name}`;
+  const title = `${y}년 ${Number(m)}월 ${ctx.mod.name}${MODULE === "insp_monthly" && inspector ? ` (${inspector})` : ""}`;
   const found = must(
-    await db.from("inspections").select("id").eq("module_code", MODULE).eq("site_id", ctx.site.id).eq("title", title).maybeSingle(),
+    await db.from("inspections").select("id").eq("module_code", MODULE).eq("site_id", ctx.site.id).eq("title", title).limit(1).maybeSingle(),
     "점검 조회",
   );
   const id =
@@ -372,12 +461,12 @@ async function inspectionFor(month) {
     must(
       await db
         .from("inspections")
-        .insert({ site_id: ctx.site.id, module_code: MODULE, inspection_date: `${month}-01`, title, note: `엑셀 이관 (${basename(xlsxPath)})`, created_by: adminId })
+        .insert({ site_id: ctx.site.id, module_code: MODULE, inspection_date: `${month}-01`, title, inspector, note: `엑셀 이관 (${basename(xlsxPath)})`, created_by: adminId })
         .select("id")
         .single(),
       "점검 등록",
     ).id;
-  inspectionIds.set(month, id);
+  inspectionIds.set(key, id);
   return id;
 }
 
@@ -395,12 +484,12 @@ async function uploadPhoto(fid, kind, media, i) {
 
 let imported = 0;
 for (const p of plans) {
-  const ref = refOf(p.r.no);
+  const ref = refOf(p.r);
   if (ctx.existing.has(ref)) continue;
   const fid = randomUUID();
   const uploaded = [];
   try {
-    const inspectionId = await inspectionFor(p.r.month);
+    const inspectionId = await inspectionFor(p.r.month, inspectorOf(p.r));
     const { data: last } = await db.from("findings").select("seq").eq("inspection_id", inspectionId).order("seq", { ascending: false }).limit(1);
     const seq = (last?.[0]?.seq ?? 0) + 1;
     const doneDate = p.schedule ? (p.schedule.current < today ? p.schedule.current : today) : today;

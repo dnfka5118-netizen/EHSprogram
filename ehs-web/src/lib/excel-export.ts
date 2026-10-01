@@ -16,6 +16,7 @@ const thin = { style: "thin" as const };
 const BOX: Partial<Borders> = { top: thin, left: thin, bottom: thin, right: thin };
 const ROW_HEIGHT = 150; // pt (= 200px)
 const RED = { argb: "FFFF0000" };
+export const ID_COL = 20; // T열 (숨김)
 
 const font = (extra: Partial<Font> = {}): Partial<Font> => ({ name: FONT, size: 11, family: 3, charset: 129, ...extra });
 const ymd = (d: string | null | undefined) => (d ? d.slice(2, 10).replaceAll("-", ".") : "");
@@ -101,6 +102,7 @@ export async function exportFindingsExcel(rows: FindingRow[], opts: ExcelOptions
     pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: "5:6" },
   });
   ws.columns = WIDTHS.map((width) => ({ width }));
+  ws.getColumn(ID_COL).hidden = true; // 프로그램 ID (엑셀로 추가할 때 이미 있는 건을 건너뛰는 용도)
 
   // ---- 제목 / 범례
   ws.mergeCells("E1:N3");
@@ -178,6 +180,7 @@ export async function exportFindingsExcel(rows: FindingRow[], opts: ExcelOptions
       cell.value = value as Cell["value"];
       styleCell(cell, { align, fill });
     }
+    ws.getCell(rowNo, ID_COL).value = r.id;
     if (closed) ws.getCell(rowNo, 16).fill = DONE_FILL;
     if (r.is_overdue) ws.getCell(rowNo, 16).font = font({ bold: true, color: RED });
 

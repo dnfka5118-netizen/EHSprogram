@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -429,6 +429,19 @@ await as(U.Q); await db.query("select approve_finding($1,'')", [mrF]); await as(
 ok((await one("select status from findings where id=$1", [mrF])).status === "closed", "두 번째 승인자가 종결 승인");
 await as(U.A); await db.query("select set_department_roles($1,$2,$3)", [PROD, [U.S], [U.H]]); await as(null);
 ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "목록을 바꾸면 부서장도 첫 번째 사람으로 맞춰짐");
+
+console.log("\n[엑셀로 추가 (지난 날짜 등록)]");
+await as(U.I);
+const past = (await one("select (kst_today() - 3)::text d")).d;
+const ex1 = (await one("select register_finding_on('insp_ceo',$1,'',$2,'xlsx-up:t1') id", [past, fd("오프라인 1")])).id;
+const exI = await one("select inspection_date::text d, inspector from inspections where id=$1", [ex1]);
+ok(exI.d === past && exI.inspector === "대표이사", "지난 날짜 회차로 등록 · 점검자 고정");
+await expectError("같은 키 두 번 등록 차단", "select register_finding_on('insp_ceo',$1,'',$2,'xlsx-up:t1')", [past, fd("오프라인 1")], "이미 등록된");
+await expectError("미래 날짜 차단", "select register_finding_on('insp_ceo',kst_today()+1,'',$1,null)", [fd("미래")], "오늘 이전");
+const ex2 = (await one("select register_finding_on('insp_ceo',$1,'',$2,'xlsx-up:t2') id", [past, fd("오프라인 2")])).id;
+ok(ex1 === ex2, "같은 날 엑셀 건은 같은 회차로");
+ok((await one("select register_finding('insp_ceo','',$1) id", [fd("화면 등록")])).id !== ex1, "화면 등록(register_finding)은 오늘 회차");
+await as(null);
 
 console.log("\n[비슷한 과거 지적 사례]");
 await db.query("insert into finding_examples (problem, emb) values ('소화기 압력 미달', 'AAAA')");
