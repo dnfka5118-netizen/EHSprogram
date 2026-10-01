@@ -95,13 +95,12 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           { label: "안전", href: "/ehs/safety" },
           { label: "점검" },
           { label: f.module_name, href: `/insp/${f.module_slug}` },
-          { label: f.inspection_title, href: `/insp/${f.module_slug}/${f.inspection_id}` },
         ]}
-        actions={canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}/${f.inspection_id}`} />}
+        actions={canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}`} />}
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link href={`/insp/${f.module_slug}/${f.inspection_id}`} className="text-sm text-gray-600 hover:underline">
-          ← {f.inspection_title}
+        <Link href={`/insp/${f.module_slug}`} className="text-sm text-gray-600 hover:underline">
+          ← {f.module_name} 현황
         </Link>
       </div>
 

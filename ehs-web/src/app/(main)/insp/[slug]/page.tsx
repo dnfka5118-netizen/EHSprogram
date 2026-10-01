@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
@@ -7,8 +6,8 @@ import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
 import { FindingFilters, applyFindingFilters, describeFilters, readFilters } from "@/components/FindingFilters";
-import { fmtDate, todayKst } from "@/lib/format";
-import type { Department, FindingOverview, Inspection, Site } from "@/lib/types";
+import { todayKst } from "@/lib/format";
+import type { Department, FindingOverview, Site } from "@/lib/types";
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
   const { slug } = await params;
@@ -18,8 +17,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   const supabase = await createClient();
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
-  const [{ data: sessions }, { data: sites }, { data: depts }, rows] = await Promise.all([
-    supabase.from("inspections").select("*").eq("module_code", mod.code).order("inspection_date", { ascending: false }).limit(12),
+  const [{ data: sites }, { data: depts }, rows] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
@@ -31,28 +29,10 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
 
-  const siteName = (id: string) => siteList.find((s) => s.id === id)?.name ?? "";
   const condition = describeFilters(filters, siteList, deptList);
 
   return (
     <div className="space-y-4">
-      <Card title="점검 회차">
-        {(sessions ?? []).length === 0 ? (
-          <p className="text-sm text-gray-500">등록된 점검이 없습니다.</p>
-        ) : (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {((sessions ?? []) as Inspection[]).map((s) => (
-              <Link key={s.id} href={`/insp/${slug}/${s.id}`} className="shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm hover:border-brand-700">
-                <p className="font-medium text-gray-900">{s.title}</p>
-                <p className="text-xs text-gray-500">
-                  {siteName(s.site_id)} · {fmtDate(s.inspection_date)}
-                </p>
-              </Link>
-            ))}
-          </div>
-        )}
-      </Card>
-
       <Card
         title={`지적사항 현황 (${rows.length}건)`}
         actions={

@@ -48,7 +48,7 @@ export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector
         return setState({ error: result.error });
       }
       if (next === "done") {
-        router.push(`/insp/${slug}/${result.id}`);
+        router.push(`/insp/${slug}`);
         return;
       }
       // 같은 곳에서 이어서 점검 : 장소·세부장소·부서는 그대로, 사진·유형·문제점만 비움 (참여자는 이미 회차에 저장됨)
