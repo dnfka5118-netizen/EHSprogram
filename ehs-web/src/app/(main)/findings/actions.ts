@@ -60,6 +60,22 @@ export async function approveFinding(findingId: string, comment: string) {
   return run("approve_finding", { p_finding: findingId, p_comment: comment }, findingId, "종결 승인되었습니다.");
 }
 
+// 일괄 승인 : 한 건씩 승인하고 실패한 건만 알려 줌 (권한·상태 검사는 각 건마다 DB 함수가 함)
+export async function approveFindings(findingIds: string[]): Promise<ActionState> {
+  const supabase = await createClient();
+  let done = 0;
+  const failed: string[] = [];
+  for (const id of findingIds) {
+    const { error } = await supabase.rpc("approve_finding", { p_finding: id, p_comment: "일괄 승인" });
+    if (error) failed.push(toMessage(error));
+    else done++;
+  }
+  if (done) after(() => processOutbox());
+  revalidatePath("/", "layout");
+  if (failed.length) return { error: `${done}건 승인, ${failed.length}건 실패 : ${[...new Set(failed)].join(" / ")}` };
+  return { ok: true, message: `${done}건을 승인(종결)했습니다.` };
+}
+
 export async function rejectFinding(findingId: string, reason: string) {
   return run("reject_finding", { p_finding: findingId, p_reason: reason }, findingId, "반려되었습니다.");
 }

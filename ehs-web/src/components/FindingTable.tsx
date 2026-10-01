@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition, type MouseEvent } from "react";
-import { approveFinding, assignFinding, getAssignOptions, rejectFinding, selfAssignFinding } from "@/app/(main)/findings/actions";
+import { approveFinding, approveFindings, assignFinding, getAssignOptions, rejectFinding, selfAssignFinding } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
@@ -14,8 +14,34 @@ import { ReportForm } from "@/app/(main)/findings/[id]/ReportForm";
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
 // 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" → 미완료 이유 팝업, 조치 담당자 칸 "담당자 지정" → 지정 팝업, 개선 계획 칸 "조치계획 작성" → 계획 팝업
-export function FindingTable({ rows, showModule, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; empty?: string }) {
+// bulkApprove : 승인할 수 있는 행에 체크 칸 + "선택 일괄 승인" (내 할 일의 종결 승인 필요)
+export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; bulkApprove?: boolean; empty?: string }) {
   const router = useRouter();
+  const approvable = bulkApprove ? rows.filter((r) => r.canApprove).map((r) => r.id) : [];
+  const [picked, setPicked] = useState<string[]>([]);
+  const [bulkMsg, setBulkMsg] = useState<{ ok?: boolean; text: string } | null>(null);
+  const [bulkPending, startBulk] = useTransition();
+  const sel = picked.filter((id) => approvable.includes(id)); // 승인되어 사라진 행은 자동으로 빠짐
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const allOn = approvable.length > 0 && sel.length === approvable.length;
+  const bulk = () =>
+    startBulk(async () => {
+      const res = await approveFindings(sel);
+      setBulkMsg(res?.error ? { text: res.error } : { ok: true, text: res?.message ?? "" });
+      setPicked([]);
+      router.refresh();
+    });
+  const Check = ({ id }: { id: string }) =>
+    approvable.includes(id) ? (
+      <input
+        type="checkbox"
+        checked={sel.includes(id)}
+        onChange={() => toggle(id)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-5 w-5 cursor-pointer accent-brand-800"
+        aria-label="선택"
+      />
+    ) : null;
   const [popup, setPopup] = useState<FindingRow | null>(null);
   const [assign, setAssign] = useState<FindingRow | null>(null);
   const closeAssign = useCallback(() => setAssign(null), []);
@@ -55,10 +81,38 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
 
   return (
     <>
+      {approvable.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md bg-violet-50 px-3 py-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-800">
+            <input
+              type="checkbox"
+              checked={allOn}
+              onChange={() => setPicked(allOn ? [] : approvable)}
+              className="h-5 w-5 cursor-pointer accent-brand-800"
+            />
+            전체 선택
+          </label>
+          <span className="text-sm text-gray-600">{sel.length}건 선택</span>
+          <button
+            type="button"
+            disabled={bulkPending || sel.length === 0}
+            onClick={bulk}
+            className="ml-auto rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+          >
+            {bulkPending ? "승인 중…" : `선택 ${sel.length}건 일괄 승인`}
+          </button>
+          {bulkMsg && <p className={`w-full text-sm ${bulkMsg.ok ? "text-emerald-700" : "text-red-700"}`}>{bulkMsg.text}</p>}
+        </div>
+      )}
       {/* ---------- 모바일 : 카드 ---------- */}
       <ul className="divide-y divide-gray-100 lg:hidden">
         {rows.map((r) => (
           <li key={r.id} onClick={(e) => open(e, r.id)} className="flex cursor-pointer gap-3 py-3 active:bg-gray-50">
+            {approvable.length > 0 && (
+              <div className="flex w-6 shrink-0 items-center justify-center">
+                <Check id={r.id} />
+              </div>
+            )}
             <Thumb url={r.thumb} className="h-20 w-20 shrink-0" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
@@ -92,6 +146,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
         <table className="w-full min-w-[1400px] border-collapse text-xs">
           <thead className="bg-brand-50 text-gray-700">
             <tr>
+              {approvable.length > 0 && <Th rowSpan={2}>선택</Th>}
               {showModule && <Th rowSpan={2}>점검</Th>}
               <Th rowSpan={2}>시행일자</Th>
               <Th rowSpan={2}>장소</Th>
@@ -120,6 +175,11 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 tabIndex={0}
                 className="cursor-pointer align-top hover:bg-brand-50/60 focus:bg-brand-50/60 focus:outline-none"
               >
+                {approvable.length > 0 && (
+                  <Td className="text-center align-middle">
+                    <Check id={r.id} />
+                  </Td>
+                )}
                 {showModule && <Td className="whitespace-nowrap">{r.module_name}</Td>}
                 <Td className="whitespace-nowrap">{fmtDate(r.inspection_date)}</Td>
                 <Td>{r.location_name ?? "-"}</Td>
@@ -439,7 +499,6 @@ function ApproveButtons({ row, onReject }: { row: FindingRow; onReject: (e: Mous
         disabled={pending}
         onClick={(e) => {
           e.stopPropagation();
-          if (!confirm("개선 후 사진을 확인하셨나요?\n승인하면 이 지적사항이 종결됩니다.")) return;
           start(async () => {
             const r = await approveFinding(row.id, "");
             if (r?.error) alert(r.error);

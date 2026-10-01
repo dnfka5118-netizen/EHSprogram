@@ -61,7 +61,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
       {sections.map((s) =>
         s.items.length ? (
           <Card key={s.title} title={<>{s.title} <span className="ml-1 text-sm font-normal text-gray-500">{s.desc}</span></>}>
-            <FindingTable rows={s.items} showModule />
+            <FindingTable rows={s.items} showModule bulkApprove={s.title === "종결 승인 필요"} />
           </Card>
         ) : null,
       )}
