@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { SimilarSuggestions } from "./SimilarSuggestions";
+import { VoiceButton } from "@/components/VoiceButton";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import type { ProcessedPhoto } from "@/lib/image";
 import { Field, Input, Select, Textarea } from "@/components/ui";
@@ -125,9 +126,13 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
         </div>
       </Field>
 
-      <Field label="문제점" required>
-        <Textarea rows={3} value={value.problem} onChange={(e) => set({ problem: e.target.value })} placeholder="발견된 문제점과 개선 필요사항" />
-      </Field>
+      <div className="relative">
+        {/* 말로 입력 : 받아쓴 글은 이미 적은 내용 뒤에 이어 붙음 */}
+        <VoiceButton className="absolute top-0 right-0 z-10" onText={(t) => set({ problem: value.problem ? `${value.problem.trimEnd()} ${t}` : t })} />
+        <Field label="문제점" required>
+          <Textarea rows={3} value={value.problem} onChange={(e) => set({ problem: e.target.value })} placeholder="발견된 문제점과 개선 필요사항 (🎤 말로 입력 가능)" />
+        </Field>
+      </div>
 
       <Field label="조치 요청 부서" required>
         <Select value={value.deptId} onChange={(e) => set({ deptId: e.target.value })}>
