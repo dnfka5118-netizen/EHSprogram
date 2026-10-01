@@ -33,8 +33,18 @@ export function UserFields({ sites, departments, user }: { sites: Site[]; depart
       <Field label="부서">
         <Select name="department_id" defaultValue={user?.department_id ?? ""} key={siteId}>
           <option value="">(없음)</option>
-          {depts.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
+          {/* 부문별로 묶고, 부서 바로 아래에 그 부서의 파트 */}
+          {[...new Set(depts.filter((d) => !d.parent_id).map((d) => d.division ?? ""))].map((div) => (
+            <optgroup key={div || "-"} label={div || "부문 미지정"}>
+              {depts
+                .filter((d) => !d.parent_id && (d.division ?? "") === div)
+                .flatMap((t) => [t, ...depts.filter((p) => p.parent_id === t.id)])
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.parent_id ? `${depts.find((t) => t.id === d.parent_id)?.name ?? ""} › ${d.name}` : d.name}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </Select>
       </Field>

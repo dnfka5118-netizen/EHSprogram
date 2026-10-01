@@ -30,7 +30,12 @@ export async function selfAssignFinding(findingId: string) {
 export async function getAssignOptions(findingId: string, departmentId: string) {
   const supabase = await createClient();
   const [{ data: members }, { data: current }] = await Promise.all([
-    supabase.from("profiles").select("id, name, position").eq("department_id", departmentId).eq("is_active", true).order("name"),
+    supabase
+      .from("profiles")
+      .select("id, name, position, departments!profiles_department_fk!inner(id, parent_id)") // 부서 + 그 아래 파트 소속
+      .or(`id.eq.${departmentId},parent_id.eq.${departmentId}`, { referencedTable: "departments" })
+      .eq("is_active", true)
+      .order("name"),
     supabase.from("finding_assignees").select("user_id").eq("finding_id", findingId),
   ]);
   return {

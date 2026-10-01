@@ -55,7 +55,12 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   // 부서·구성원·등록자·사진 주소를 동시에 (DB 왕복 1번)
   const [{ data: deptRow }, { data: memberRows }, { data: creator }, signed] = await Promise.all([
     supabase.from("departments").select("*").eq("id", f.request_department_id).single(),
-    supabase.from("profiles").select("id, name, position").eq("department_id", f.request_department_id).eq("is_active", true).order("name"),
+    supabase
+      .from("profiles")
+      .select("id, name, position, departments!profiles_department_fk!inner(id, parent_id)")
+      .or(`id.eq.${f.request_department_id},parent_id.eq.${f.request_department_id}`, { referencedTable: "departments" })
+      .eq("is_active", true)
+      .order("name"),
     f.created_by ? supabase.from("profiles").select("name").eq("id", f.created_by).maybeSingle() : Promise.resolve({ data: null }),
     photos.length
       ? supabase.storage
@@ -82,7 +87,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const canApprove = isAdmin || profile.id === dept.approver_id;
   const isAssignee = assigneeIds.includes(profile.id) || isAdmin;
   const canSelfAssign =
-    !assigneeIds.includes(profile.id) && profile.department_id === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
+    !assigneeIds.includes(profile.id) && (profile.team_id ?? profile.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
   const assigneeLabel =
     ((assigneeRows ?? []) as { user_id: string; assigned_by: string | null; profiles: { name: string } | null }[])
       .map((a) => (a.profiles?.name ?? "") + (a.assigned_by === a.user_id ? " (자진 담당)" : ""))

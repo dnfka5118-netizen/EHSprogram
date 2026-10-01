@@ -31,7 +31,7 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
     supabase.from("profiles").select("id, name, position, departments!profiles_department_fk(name)").eq("is_active", true).order("name"),
     supabase.from("locations").select("*, sub_locations(*)").eq("site_id", profile.site_id).eq("is_active", true).order("sort_order"),
     supabase.from("finding_types").select("*").eq("is_active", true).order("sort_order"),
-    supabase.from("departments").select("*").eq("site_id", profile.site_id).eq("is_active", true).order("sort_order"),
+    supabase.from("departments").select("*").eq("site_id", profile.site_id).eq("is_active", true).is("parent_id", null).order("sort_order"), // 조치 요청은 부서(팀)까지
   ]);
   const people: Person[] = ((users ?? []) as unknown as { id: string; name: string; position: string | null; departments: { name: string } | null }[]).map((u) => ({
     id: u.id,

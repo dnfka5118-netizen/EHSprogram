@@ -51,7 +51,7 @@ export async function resolveDefaultLine(
 }
 
 export async function getDeptHeads(supabase: SupabaseClient) {
-  const { data } = await supabase.from("departments").select("id, name, approver_id").eq("is_active", true).order("sort_order");
+  const { data } = await supabase.from("departments").select("id, name, approver_id").eq("is_active", true).is("parent_id", null).order("sort_order"); // 부서(팀)만
   return (data ?? []) as { id: string; name: string; approver_id: string | null }[];
 }
 

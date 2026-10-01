@@ -15,6 +15,7 @@ export type Profile = {
   must_change_password: boolean;
   is_active: boolean;
   favorites?: string[];
+  team_id?: string | null; // 소속 부서(팀) : 파트 소속이면 상위 부서 (getSession 이 채움)
 };
 
 export type Site = { id: string; code: string; name: string; sort_order: number; is_active: boolean };
@@ -27,6 +28,8 @@ export type Department = {
   is_active: boolean;
   assigner_id: string | null;
   approver_id: string | null;
+  division?: string | null; // 부문
+  parent_id?: string | null; // 파트의 상위 부서 (부서면 null)
 };
 
 export type Module = {

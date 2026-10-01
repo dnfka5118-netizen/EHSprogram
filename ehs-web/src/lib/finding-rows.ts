@@ -85,7 +85,7 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     const isAssignee = !!me && (me.is_admin || (assignees ?? []).some((a) => a.user_id === me.id));
     const canPlan = isAssignee && f.status === "plan_wait";
     const mine = (assignees ?? []).some((a) => a.user_id === me?.id);
-    const canSelfAssign = !!me && !mine && me.department_id === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
+    const canSelfAssign = !!me && !mine && (me.team_id ?? me.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
     const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || dept?.approver_id === me.id);
     const canReport = isAssignee && f.status === "in_progress" && (finding_measures ?? []).length > 0;
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));

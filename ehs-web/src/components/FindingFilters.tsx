@@ -59,7 +59,7 @@ export function FindingFilters({ filters, sites, departments, modules, lockDept 
   lockDept?: boolean;
 }) {
   const siteName = (id: string) => sites.find((s) => s.id === id)?.name ?? "";
-  const depts = departments.filter((d) => d.is_active && (!filters.site || d.site_id === filters.site));
+  const depts = departments.filter((d) => d.is_active && !d.parent_id && (!filters.site || d.site_id === filters.site));
   return (
     <form className="mb-4 grid grid-cols-2 gap-2 md:flex md:flex-wrap">
       <select name="status" defaultValue={filters.status} className={SELECT}>

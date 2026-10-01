@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -389,6 +389,27 @@ ok((await one(`select count(*)::int c from finding_events where finding_id=$1 an
 await as(U.W1); await expectError("이미 담당자면 중복 불가", `select self_assign_finding($1)`, [saF], "이미");
 await as(U.W2); await db.query(`select self_assign_finding($1)`, [saF]); await as(null);
 ok((await one(`select count(*)::int c from finding_assignees where finding_id=$1`, [saF])).c === 2, "다른 직원도 함께 자진 담당 가능");
+
+console.log("\n[조직 : 부문 › 부서 › 파트]");
+await db.query("update departments set division='천안공장' where id=$1", [PROD]);
+const PART = (await one(`insert into departments (site_id, name, parent_id, assigner_id) values ($1,'HBC-C2',$2,$3) returning id, division, assigner_id`, [site, PROD, U.S]));
+ok(PART.division === "천안공장" && PART.assigner_id === null, "파트는 상위 부서의 부문을 따르고 지정자·승인자는 비움");
+let nested = false;
+try { await db.query(`insert into departments (site_id, name, parent_id) values ($1,'하위파트',$2)`, [site, PART.id]); } catch { nested = true; }
+ok(nested, "파트 아래 파트는 만들 수 없음");
+await db.query("update profiles set department_id=$1 where id=$2", [PART.id, U.W2]);
+await as(U.I);
+await expectError("파트로 조치 요청 차단", `select register_finding('insp_plant','',$1)`, [JSON.stringify({ ...JSON.parse(fd("파트 요청")), department_id: PART.id })], "부서(팀) 단위");
+await as(null);
+const hp = await reg("insp_plant", U.I, "파트 소속 직원 지정");
+const hpF = (await one(`select id from findings where inspection_id=$1 order by seq desc limit 1`, [hp])).id;
+await as(U.S); await db.query(`select assign_finding($1,$2)`, [hpF, [U.W2]]); await as(null);
+ok((await one(`select count(*)::int c from finding_assignees where finding_id=$1 and user_id=$2`, [hpF, U.W2])).c === 1, "파트(HBC-C2) 직원을 생산팀 건의 담당자로 지정");
+const hp2 = await reg("insp_plant", U.I, "파트 직원 자진 담당");
+const hp2F = (await one(`select id from findings where inspection_id=$1 order by seq desc limit 1`, [hp2])).id;
+await as(U.W2); await db.query(`select self_assign_finding($1)`, [hp2F]); await as(null);
+ok((await one(`select count(*)::int c from finding_assignees where finding_id=$1 and user_id=$2`, [hp2F, U.W2])).c === 1, "파트 직원도 생산팀 건 자진 담당");
+await db.query("update profiles set department_id=$1 where id=$2", [PROD, U.W2]);
 
 console.log("\n[비슷한 과거 지적 사례]");
 await db.query("insert into finding_examples (problem, emb) values ('소화기 압력 미달', 'AAAA')");

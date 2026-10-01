@@ -208,18 +208,23 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
   const id = s(fd, "id");
   const name = s(fd, "name");
   if (!name) return { error: "부서명을 입력해 주세요." };
+  // 부문은 부서에만 적고 파트는 상위 부서를 따름 (DB 가 맞춤), 파트의 지정자·승인자는 비움
+  const parent = nullable(s(fd, "parent_id"));
+  const division = parent ? null : nullable(s(fd, "division"));
   const { error } = id
     ? await supabase
         .from("departments")
         .update({
           name,
+          division,
+          parent_id: parent,
           sort_order: n(fd, "sort_order"),
           is_active: fd.get("is_active") === "on",
-          assigner_id: nullable(s(fd, "assigner_id")),
-          approver_id: nullable(s(fd, "approver_id")),
+          assigner_id: parent ? null : nullable(s(fd, "assigner_id")),
+          approver_id: parent ? null : nullable(s(fd, "approver_id")),
         })
         .eq("id", id)
-    : await supabase.from("departments").insert({ site_id: s(fd, "site_id"), name, sort_order: n(fd, "sort_order") });
+    : await supabase.from("departments").insert({ site_id: s(fd, "site_id"), name, division, parent_id: parent, sort_order: n(fd, "sort_order") });
   return error ? { error: toMessage(error) } : done();
 }
 

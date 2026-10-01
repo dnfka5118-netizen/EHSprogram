@@ -12,7 +12,7 @@ export default async function ApprovalTemplatesPage({ searchParams }: PageProps<
   const supabase = await createClient();
   const [{ data: mods }, { data: depts }, { data: sites }, people] = await Promise.all([
     supabase.from("modules").select("*").in("form", APPROVAL_FORMS).order("sort_order"),
-    supabase.from("departments").select("*").eq("is_active", true).order("sort_order"),
+    supabase.from("departments").select("*").eq("is_active", true).is("parent_id", null).order("sort_order"),
     supabase.from("sites").select("*").order("sort_order"),
     getPeople(supabase),
   ]);

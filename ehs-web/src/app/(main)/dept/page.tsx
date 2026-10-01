@@ -18,7 +18,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
   const modules = (await getModuleAccess()).filter((m) => m.is_enabled && m.form === "finding" && m.level !== "none");
 
   // 기본 부서 = 내 부서 (없으면 부서 조건 없이 조회 후 첫 부서로 표시)
-  const filters = readFilters(await searchParams, { dept: profile.department_id ?? "" });
+  const filters = readFilters(await searchParams, { dept: profile.team_id ?? profile.department_id ?? "" }); // 파트 소속이면 상위 부서
   const codes = modules.map((m) => m.code);
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT), filters).in("module_code", codes);
 
@@ -65,7 +65,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
           <select name="dept" defaultValue={filters.dept} className="rounded-md border border-gray-300 bg-white px-3 py-2 font-medium">
             <option value="">전체 부서</option>
             {deptList
-              .filter((d) => d.is_active)
+              .filter((d) => d.is_active && !d.parent_id)
               .map((d) => (
                 <option key={d.id} value={d.id}>
                   {siteList.length > 1 ? `${siteName(d.site_id)} · ` : ""}
