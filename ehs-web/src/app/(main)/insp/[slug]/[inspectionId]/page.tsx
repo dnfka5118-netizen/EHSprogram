@@ -51,6 +51,10 @@ export default async function InspectionSessionPage({ params }: PageProps<"/insp
             <dd>{fmtDate(inspection.inspection_date)}</dd>
           </div>
           <div>
+            <dt className="text-xs text-gray-500">점검자</dt>
+            <dd>{inspection.inspector ?? "-"}</dd>
+          </div>
+          <div>
             <dt className="text-xs text-gray-500">점검 참여자</dt>
             <dd>{inspection.inspectors ?? "-"}</dd>
           </div>

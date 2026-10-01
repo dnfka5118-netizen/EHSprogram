@@ -49,7 +49,8 @@ export type Inspection = {
   module_code: string;
   inspection_date: string;
   title: string;
-  inspectors: string | null;
+  inspector: string | null; // 점검자 (고정 : CEO=대표이사, 공장장=공장장, 그 밖=등록자)
+  inspectors: string | null; // 점검 참여자
   note: string | null;
   created_by: string | null;
   created_at: string;

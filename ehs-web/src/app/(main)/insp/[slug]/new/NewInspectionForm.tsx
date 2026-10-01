@@ -6,7 +6,7 @@ import { Field, FormMessage, Input, Select, SubmitButton, Textarea } from "@/com
 import type { Site } from "@/lib/types";
 import { ParticipantPicker, type Person } from "./ParticipantPicker";
 
-export function NewInspectionForm({ slug, moduleCode, moduleName, sites, defaultSite, today, people }: {
+export function NewInspectionForm({ slug, moduleCode, moduleName, sites, defaultSite, today, people, inspector }: {
   slug: string;
   moduleCode: string;
   moduleName: string;
@@ -14,6 +14,7 @@ export function NewInspectionForm({ slug, moduleCode, moduleName, sites, default
   defaultSite: string;
   today: string;
   people: Person[];
+  inspector: string;
 }) {
   const [state, action] = useActionState(createInspection, undefined);
   const [date, setDate] = useState(today);
@@ -38,6 +39,9 @@ export function NewInspectionForm({ slug, moduleCode, moduleName, sites, default
       </div>
       <Field label="점검명" required>
         <Input name="title" key={autoTitle} defaultValue={autoTitle} required />
+      </Field>
+      <Field label="점검자" hint="점검 종류에 따라 자동으로 정해집니다">
+        <Input value={inspector} readOnly disabled className="bg-gray-100 text-gray-700" />
       </Field>
       <ParticipantPicker people={people} name="inspectors" />
       <Field label="비고">

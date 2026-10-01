@@ -7,6 +7,7 @@ import { assignFinding, getAssignOptions } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
+import { MemberPicker } from "@/components/MemberPicker";
 
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
@@ -351,24 +352,8 @@ function AssignPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
         <p className="mb-3 line-clamp-3 rounded-md bg-gray-50 p-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
         {members === null ? (
           <p className="py-4 text-center text-sm text-gray-500">부서 구성원을 불러오는 중…</p>
-        ) : members.length === 0 ? (
-          <p className="text-sm text-gray-500">이 부서에 등록된 사용자가 없습니다. 환경설정에서 사용자의 부서를 지정해 주세요.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {members.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => toggle(m.id)}
-                className={`rounded-full border px-3 py-1.5 text-sm ${
-                  picked.includes(m.id) ? "border-brand-800 bg-brand-800 text-white" : "border-gray-300 bg-white text-gray-700"
-                }`}
-              >
-                {m.name}
-                {m.position && <span className="ml-1 text-xs opacity-75">{m.position}</span>}
-              </button>
-            ))}
-          </div>
+          <MemberPicker members={members} picked={picked} onToggle={toggle} />
         )}
         <p className="mt-2 text-xs text-gray-500">여러 명을 지정할 수 있습니다.</p>
         {error && <p className="mt-2 rounded-md bg-red-50 p-2 text-sm text-red-700">{error}</p>}

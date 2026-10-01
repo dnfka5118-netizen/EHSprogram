@@ -4,6 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
 import { todayKst } from "@/lib/format";
+import { inspectorLabel } from "@/lib/rank";
 import { NewInspectionForm } from "./NewInspectionForm";
 import type { Site } from "@/lib/types";
 import type { Person } from "./ParticipantPicker";
@@ -36,6 +37,7 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
         defaultSite={profile.site_id ?? list[0]?.id ?? ""}
         today={todayKst()}
         people={people}
+        inspector={inspectorLabel(mod.code, profile)}
       />
     </Card>
   );

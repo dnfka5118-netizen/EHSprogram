@@ -27,7 +27,7 @@ export function ParticipantPicker({ people, name }: { people: Person[]; name: st
     <div className="space-y-2">
       <span className="block text-sm font-medium text-gray-700">
         점검 참여자
-        <span className="ml-2 text-xs font-normal text-gray-500">등록된 사용자에서 검색해 선택 (여러 명 가능)</span>
+        <span className="ml-2 text-xs font-normal text-gray-500">함께 점검한 사람 · 등록된 사용자에서 검색해 선택 (여러 명 가능)</span>
       </span>
       <input type="hidden" name={name} value={value} />
 

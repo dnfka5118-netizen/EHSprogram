@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -321,6 +321,17 @@ await as(null);
 const fav = (await one("select favorites from profiles where id=$1", [U.W1])).favorites;
 ok(fav.length === 2 && fav.includes("/permit") && fav.includes("/insp/ceo"), "중복·잘못된 주소 제거 후 저장");
 ok((await one("select favorites from profiles where id=$1", [U.I])).favorites.length === 0, "다른 사람 즐겨찾기는 그대로");
+
+console.log("\n[점검자 고정]");
+await as(null); await db.query("update profiles set position='과장' where id=$1", [U.I]);
+await as(U.I);
+const insId = async (m) => (await one(`select create_inspection($1,$2,'2026-10-01','t','참여자A',null) id`, [m, site])).id;
+const insOf = async (id) => one("select inspector, inspectors from inspections where id=$1", [id]);
+ok((await insOf(await insId("insp_ceo"))).inspector === "대표이사", "CEO 안전점검 점검자 = 대표이사");
+ok((await insOf(await insId("insp_plant"))).inspector === "공장장", "공장장 안전점검 점검자 = 공장장");
+const mo = await insOf(await insId("insp_monthly"));
+ok(mo.inspector === "점검자 과장" && mo.inspectors === "참여자A", "월간점검 점검자 = 등록한 사람(이름 직위), 참여자는 따로");
+await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
