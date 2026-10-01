@@ -76,13 +76,6 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
         <PhotoPicker photos={value.photos} onChange={(photos) => set({ photos })} />
       </Field>
 
-      <SimilarSuggestions
-        photo={value.photos[0]?.main ?? null}
-        location={locations.find((l) => l.id === value.locationId)?.name}
-        types={types}
-        onPick={(p) => set({ problem: p.problem, ...(p.typeId ? { typeId: p.typeId } : {}) })}
-      />
-
       {fixed}
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -107,6 +100,13 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
           )}
         </Field>
       </div>
+
+      <SimilarSuggestions
+        photo={value.photos[0]?.main ?? null}
+        location={locations.find((l) => l.id === value.locationId)?.name}
+        types={types}
+        onPick={(p) => set({ problem: p.problem, ...(p.typeId ? { typeId: p.typeId } : {}) })}
+      />
 
       <Field label="유형" required>
         <div className="flex flex-wrap gap-2">
