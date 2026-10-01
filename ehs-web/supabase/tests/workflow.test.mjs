@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -374,6 +374,21 @@ await as(U.C);
 await expectError("권한 없는 사람 차단", `select register_finding('insp_monthly','',$1)`, [fd("x")], "권한");
 await as(null);
 await db.query("update profiles set site_id=$1 where id=$2", [site, U.W2]);
+
+console.log("\n[자진 담당]");
+const sa = await reg("insp_plant", U.I, "자진 담당 테스트");
+const saF = (await one(`select id from findings where inspection_id=$1 order by seq desc limit 1`, [sa])).id;
+await as(U.Q);
+await expectError("다른 부서 직원은 자진 담당 불가", `select self_assign_finding($1)`, [saF], "조치 요청 부서");
+await as(U.W1);
+await db.query(`select self_assign_finding($1)`, [saF]);
+await as(null);
+const saR = await one(`select f.status, a.assigned_by = a.user_id self from findings f join finding_assignees a on a.finding_id=f.id where f.id=$1 and a.user_id=$2`, [saF, U.W1]);
+ok(saR.status === "plan_wait" && saR.self, "요청 부서 직원이 자진 담당 → 계획 수립 단계, 자진 표시");
+ok((await one(`select count(*)::int c from finding_events where finding_id=$1 and action='자진 담당'`, [saF])).c === 1, "처리 이력에 '자진 담당' 기록");
+await as(U.W1); await expectError("이미 담당자면 중복 불가", `select self_assign_finding($1)`, [saF], "이미");
+await as(U.W2); await db.query(`select self_assign_finding($1)`, [saF]); await as(null);
+ok((await one(`select count(*)::int c from finding_assignees where finding_id=$1`, [saF])).c === 2, "다른 직원도 함께 자진 담당 가능");
 
 console.log("\n[비슷한 과거 지적 사례]");
 await db.query("insert into finding_examples (problem, emb) values ('소화기 압력 미달', 'AAAA')");

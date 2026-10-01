@@ -29,17 +29,20 @@ export type FindingRow = FindingOverview & {
   afterUrls: string[];
   canAssign: boolean; // 보는 사람이 조치담당자를 지정/변경할 수 있는지 (관리자 · 해당 부서 지정자/승인자)
   canPlan: boolean; // 보는 사람이 지금 조치계획을 작성할 차례인지 (계획 수립 대기 + 조치담당자 또는 관리자)
+  assignees: { name: string; self: boolean }[]; // self = 자진 담당
+  canSelfAssign: boolean; // 보는 사람이 "내가 담당하기" 를 할 수 있는지 (조치 요청 부서 소속, 아직 담당자가 아님, 조치 진행 단계)
+  canApprove: boolean; // 보는 사람이 종결 승인/반려할 차례인지 (승인 대기 + 부서 승인자 또는 관리자)
   canReport: boolean; // 보는 사람이 지금 완료/미완료를 보고할 차례인지 (조치 중 + 조치담당자 또는 관리자)
   measureList: Measure[]; // 결과 보고 창에 넘길 조치 원본 (즉시 → 단기 → 장기)
 };
 
 // finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
 export const FINDING_ROW_SELECT =
-  "*, departments(assigner_id, approver_id), finding_assignees(user_id), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
+  "*, departments(assigner_id, approver_id), finding_assignees(user_id, assigned_by, profiles!finding_assignees_user_id_fkey(name)), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
 
 type Embedded = FindingOverview & {
   departments?: { assigner_id: string | null; approver_id: string | null } | null;
-  finding_assignees?: { user_id: string }[];
+  finding_assignees?: { user_id: string; assigned_by: string | null; profiles: { name: string } | null }[];
   finding_measures?: (Measure & { measure_date_history?: { new_date: string; changed_at: string }[] })[];
   finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
   finding_progress?: { reason: string; progress: string; created_at: string; profiles: { name: string } | null }[];
@@ -81,6 +84,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     void _p;
     const isAssignee = !!me && (me.is_admin || (assignees ?? []).some((a) => a.user_id === me.id));
     const canPlan = isAssignee && f.status === "plan_wait";
+    const mine = (assignees ?? []).some((a) => a.user_id === me?.id);
+    const canSelfAssign = !!me && !mine && me.department_id === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
+    const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || dept?.approver_id === me.id);
     const canReport = isAssignee && f.status === "in_progress" && (finding_measures ?? []).length > 0;
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));
     const ms: FindingRow["measures"] = {};
@@ -110,6 +116,12 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
       canAssign,
       canPlan,
       canReport,
+      canSelfAssign,
+      canApprove,
+      assignees: (assignees ?? [])
+        .map((a) => ({ name: a.profiles?.name ?? "", self: a.assigned_by === a.user_id }))
+        .filter((a) => a.name)
+        .sort((a, b) => a.name.localeCompare(b.name, "ko")),
       measureList: [...(finding_measures ?? [])]
         .sort((a, b) => MEASURE_KINDS.indexOf(a.kind) - MEASURE_KINDS.indexOf(b.kind))
         .map(({ measure_date_history: _h, ...m }) => (void _h, m)),

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useTransition, type MouseEvent } from "react";
-import { assignFinding, getAssignOptions } from "@/app/(main)/findings/actions";
+import { approveFinding, assignFinding, getAssignOptions, rejectFinding, selfAssignFinding } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
@@ -23,6 +23,12 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
   const closePlan = useCallback(() => setPlan(null), []);
   const [report, setReport] = useState<FindingRow | null>(null);
   const closeReport = useCallback(() => setReport(null), []);
+  const [reject, setReject] = useState<FindingRow | null>(null);
+  const closeReject = useCallback(() => setReject(null), []);
+  const showReject = (e: MouseEvent, r: FindingRow) => {
+    e.stopPropagation();
+    setReject(r);
+  };
   const showReport = (e: MouseEvent, r: FindingRow) => {
     e.stopPropagation();
     setReport(r);
@@ -67,9 +73,11 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
               <p className="mt-0.5 line-clamp-2 text-sm text-gray-900">{r.problem}</p>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 <span>
-                  {r.department_name} · {r.assignee_names ?? "담당자 미지정"}
+                  {r.department_name} · {r.assignees.length ? r.assignees.map((a) => a.name + (a.self ? "(자진 담당)" : "")).join(", ") : "담당자 미지정"}
                 </span>
                 <AssignButton row={r} onClick={showAssign} />
+                <SelfAssignButton row={r} />
+                <ApproveButtons row={r} onReject={showReject} />
                 {r.canPlan && <PlanButton row={r} onClick={showPlan} />}
                 {r.canReport && <ReportButton row={r} onClick={showReport} />}
               </div>
@@ -147,9 +155,10 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 </Td>
                 <Td className="whitespace-nowrap">{r.department_name}</Td>
                 <Td>
-                  {r.assignee_names ?? <span className="text-gray-400">미지정</span>}
-                  <div className="mt-1">
+                  <Assignees row={r} />
+                  <div className="mt-1 flex flex-col items-start gap-1">
                     <AssignButton row={r} onClick={showAssign} />
+                    <SelfAssignButton row={r} />
                   </div>
                 </Td>
                 <Td className="text-center">
@@ -157,6 +166,11 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                   {r.canReport && (
                     <div className="mt-1.5">
                       <ReportButton row={r} onClick={showReport} />
+                    </div>
+                  )}
+                  {r.canApprove && (
+                    <div className="mt-1.5">
+                      <ApproveButtons row={r} onReject={showReject} />
                     </div>
                   )}
                 </Td>
@@ -170,6 +184,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
       {plan && <PlanPopup row={plan} onClose={closePlan} />}
       {report && <ReportPopup row={report} onClose={closeReport} />}
+      {reject && <RejectPopup row={reject} onClose={closeReject} />}
     </>
   );
 }
@@ -367,6 +382,151 @@ function ReportPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
             onClose();
           }}
         />
+      </div>
+    </div>
+  );
+}
+
+// 조치 담당자 칸 : 이름 (자진 담당 표시)
+function Assignees({ row }: { row: FindingRow }) {
+  if (row.assignees.length === 0) return <span className="text-gray-400">미지정</span>;
+  return (
+    <span className="space-y-0.5">
+      {row.assignees.map((a) => (
+        <span key={a.name} className="block whitespace-nowrap">
+          {a.name}
+          {a.self && <span className="ml-1 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-800">자진 담당</span>}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// 조치 요청 부서 직원이 스스로 담당자가 되기
+function SelfAssignButton({ row }: { row: FindingRow }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  if (!row.canSelfAssign) return null;
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!confirm("이 지적사항의 조치담당자로 직접 나서시겠습니까?\n(담당자 이름 옆에 '자진 담당'으로 표시됩니다)")) return;
+        start(async () => {
+          const r = await selfAssignFinding(row.id);
+          if (r?.error) alert(r.error);
+          router.refresh();
+        });
+      }}
+      className="rounded-md border border-sky-600 bg-white px-2.5 py-1 text-xs font-medium whitespace-nowrap text-sky-700 hover:bg-sky-50 disabled:opacity-50"
+    >
+      {pending ? "처리 중…" : "내가 담당하기"}
+    </button>
+  );
+}
+
+// 완료여부 칸 : 승인 대기일 때 부서 승인자에게 [승인] [반려]
+function ApproveButtons({ row, onReject }: { row: FindingRow; onReject: (e: MouseEvent, r: FindingRow) => void }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  if (!row.canApprove) return null;
+  return (
+    <span className="inline-flex gap-1">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!confirm("개선 후 사진을 확인하셨나요?\n승인하면 이 지적사항이 종결됩니다.")) return;
+          start(async () => {
+            const r = await approveFinding(row.id, "");
+            if (r?.error) alert(r.error);
+            router.refresh();
+          });
+        }}
+        className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-emerald-700 disabled:opacity-50"
+      >
+        {pending ? "…" : "승인"}
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={(e) => onReject(e, row)}
+        className="rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-white hover:bg-red-700 disabled:opacity-50"
+      >
+        반려
+      </button>
+    </span>
+  );
+}
+
+// 반려 사유 입력 창
+function RejectPopup({ row, onClose }: { row: FindingRow; onClose: () => void }) {
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [pending, start] = useTransition();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const submit = () => {
+    if (!reason.trim()) return setError("반려 사유를 입력해 주세요.");
+    start(async () => {
+      const r = await rejectFinding(row.id, reason);
+      if (r?.error) return setError(r.error);
+      router.refresh();
+      onClose();
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="w-full rounded-t-xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-xl">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">반려</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {row.module_name} · {fmtDate(row.inspection_date)} · {row.location_name ?? "-"} · 담당 {row.assignee_names ?? "-"}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <div className="mb-3 flex gap-2">
+          <Thumb url={row.thumb} className="h-16 w-16 shrink-0" />
+          {row.afterUrls[0] && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={row.afterUrls[0]} alt="개선 후" className="h-16 w-16 shrink-0 rounded object-cover ring-2 ring-emerald-500" />
+          )}
+          <p className="line-clamp-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
+        </div>
+        <label className="block text-sm font-medium text-gray-700">
+          반려 사유 <span className="text-red-600">*</span>
+          <textarea
+            autoFocus
+            rows={4}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="조치담당자에게 전달됩니다. 무엇을 다시 해야 하는지 적어 주세요."
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-700 focus:outline-none"
+          />
+        </label>
+        {error && <p className="mt-2 rounded-md bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+        <p className="mt-2 text-xs text-gray-500">반려하면 조치 중 단계로 되돌아가고 조치담당자에게 메일이 갑니다.</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            취소
+          </button>
+          <button onClick={submit} disabled={pending} className="rounded-md bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50">
+            {pending ? "처리 중…" : "반려"}
+          </button>
+        </div>
       </div>
     </div>
   );

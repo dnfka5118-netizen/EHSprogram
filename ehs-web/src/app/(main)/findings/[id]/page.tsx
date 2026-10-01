@@ -13,6 +13,7 @@ import { ReportForm } from "./ReportForm";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { CommentForm } from "./CommentForm";
 import { DeleteButton } from "./DeleteButton";
+import { SelfAssignButton } from "./SelfAssignButton";
 import { thumbPathOf } from "@/lib/photo-path";
 import type { Department, FindingOverview, Measure, Photo } from "@/lib/types";
 
@@ -27,7 +28,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const { data: row } = await supabase
     .from("finding_overview")
     .select(
-      "*, finding_measures(*, measure_date_history(*)), finding_photos(*), finding_progress(*, profiles(name)), finding_comments(*, profiles(name)), finding_events(*, profiles(name)), finding_assignees(user_id)",
+      "*, finding_measures(*, measure_date_history(*)), finding_photos(*), finding_progress(*, profiles(name)), finding_comments(*, profiles(name)), finding_events(*, profiles(name)), finding_assignees(user_id, assigned_by, profiles!finding_assignees_user_id_fkey(name))",
     )
     .eq("id", id)
     .order("created_at", { referencedTable: "finding_photos" })
@@ -80,6 +81,13 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const canAssign = isAdmin || profile.id === dept.assigner_id || profile.id === dept.approver_id;
   const canApprove = isAdmin || profile.id === dept.approver_id;
   const isAssignee = assigneeIds.includes(profile.id) || isAdmin;
+  const canSelfAssign =
+    !assigneeIds.includes(profile.id) && profile.department_id === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
+  const assigneeLabel =
+    ((assigneeRows ?? []) as { user_id: string; assigned_by: string | null; profiles: { name: string } | null }[])
+      .map((a) => (a.profiles?.name ?? "") + (a.assigned_by === a.user_id ? " (자진 담당)" : ""))
+      .filter(Boolean)
+      .join(", ") || "미지정";
   const canDelete = isAdmin || (f.created_by === profile.id && f.status === "assign_wait");
   const today = todayKst();
   const measureKey = measures.map((m) => `${m.id}:${m.target_date}:${m.is_done}`).join("|");
@@ -120,7 +128,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           <Info label="유형" value={f.type_name ?? "-"} />
           <Info label="점검일" value={fmtDate(f.inspection_date)} />
           <Info label="조치 요청 부서" value={f.department_name} />
-          <Info label="조치담당자" value={f.assignee_names ?? "미지정"} />
+          <Info label="조치담당자" value={assigneeLabel} />
           <Info label="등록자" value={(creator as { name: string } | null)?.name ?? "-"} />
           <Info label="등록일" value={fmtDateTime(f.created_at)} />
         </dl>
@@ -138,6 +146,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
       )}
 
       {/* ---- 단계별 처리 영역 ---- */}
+      {canSelfAssign && <SelfAssignButton findingId={f.id} />}
       {canAssign && f.status !== "closed" && (
         <AssignPanel
           findingId={f.id}

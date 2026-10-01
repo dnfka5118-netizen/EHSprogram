@@ -21,6 +21,11 @@ export async function assignFinding(findingId: string, userIds: string[]) {
   return run("assign_finding", { p_finding: findingId, p_users: userIds }, findingId, "조치담당자가 지정되었습니다.");
 }
 
+// 자진 담당 : 조치 요청 부서 직원이 스스로 조치담당자가 됨
+export async function selfAssignFinding(findingId: string) {
+  return run("self_assign_finding", { p_finding: findingId }, findingId, "조치담당자로 등록되었습니다 (자진 담당).");
+}
+
 // 현황표에서 바로 지정할 때 : 조치 요청 부서 구성원 + 현재 담당자
 export async function getAssignOptions(findingId: string, departmentId: string) {
   const supabase = await createClient();
