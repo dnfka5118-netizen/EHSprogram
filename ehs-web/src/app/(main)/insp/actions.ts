@@ -8,20 +8,34 @@ import { createClient } from "@/lib/supabase/server";
 import { toMessage } from "@/lib/errors";
 import { thumbPathOf } from "@/lib/photo-path";
 import type { ActionState } from "@/lib/types";
+import type { FindingPayload } from "./FindingFields";
 
-export async function createInspection(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const slug = String(formData.get("slug"));
+export type NewInspection = {
+  module: string;
+  site: string;
+  date: string;
+  title: string;
+  inspectors: string;
+  note: string;
+  findings: FindingPayload[];
+};
+
+// 점검 + 지적사항 여러 건을 한 번에 (DB 에서 하나의 트랜잭션 — 한 건이라도 실패하면 모두 취소)
+export async function createInspectionWithFindings(input: NewInspection): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("create_inspection", {
-    p_module: String(formData.get("module")),
-    p_site: String(formData.get("site")),
-    p_date: String(formData.get("date")),
-    p_title: String(formData.get("title") ?? "").trim(),
-    p_inspectors: String(formData.get("inspectors") ?? ""),
-    p_note: String(formData.get("note") ?? ""),
+  const { data, error } = await supabase.rpc("create_inspection_with_findings", {
+    p_module: input.module,
+    p_site: input.site,
+    p_date: input.date,
+    p_title: input.title.trim(),
+    p_inspectors: input.inspectors,
+    p_note: input.note,
+    p_findings: input.findings,
   });
   if (error) return { error: toMessage(error) };
-  redirect(`/insp/${slug}/${data}`);
+  if (input.findings.length) after(() => processOutbox());
+  revalidatePath("/", "layout");
+  return { id: data as string };
 }
 
 export type NewFinding = {

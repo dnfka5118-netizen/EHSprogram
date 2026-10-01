@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -331,6 +331,29 @@ ok((await insOf(await insId("insp_ceo"))).inspector === "대표이사", "CEO 안
 ok((await insOf(await insId("insp_plant"))).inspector === "공장장", "공장장 안전점검 점검자 = 공장장");
 const mo = await insOf(await insId("insp_monthly"));
 ok(mo.inspector === "점검자 과장" && mo.inspectors === "참여자A", "월간점검 점검자 = 등록한 사람(이름 직위), 참여자는 따로");
+await as(null);
+
+console.log("\n[점검 + 지적사항 한 번에 등록]");
+const loc1 = (await one(`select id from locations where site_id=$1 order by sort_order limit 1`, [site])).id;
+const typ1 = (await one(`select id from finding_types order by sort_order limit 1`)).id;
+const fd = (problem, d = PROD) => {
+  const id = crypto.randomUUID();
+  return { id, location_id: loc1, sub_location_id: "", sub_location_text: "", type_id: typ1, problem, department_id: d, photos: [`${id}/a.jpg`] };
+};
+const inspCount = async () => (await one(`select count(*)::int c from inspections`)).c;
+await as(U.I);
+const before = await inspCount();
+const combo = (await one(`select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','통합 등록','참여자B',null,$2) id`,
+  [site, JSON.stringify([fd("난간 파손"), fd("소화기 위치")])])).id;
+const cf = (await db.query(`select seq, problem, status from findings where inspection_id=$1 order by seq`, [combo])).rows;
+ok(cf.length === 2 && cf[0].seq === 1 && cf[1].seq === 2 && cf.every((f) => f.status === "assign_wait"), "점검 1건 + 지적사항 2건이 순번대로 등록");
+ok((await one(`select count(*)::int c from finding_photos f join findings x on x.id=f.finding_id where x.inspection_id=$1`, [combo])).c === 2, "지적사항별 개선 전 사진 저장");
+await expectError("2번째 지적사항 오류 시 전체 취소",
+  `select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','실패',null,null,$2)`,
+  [site, JSON.stringify([fd("정상"), fd("", PROD)])], "지적사항 2번");
+ok((await inspCount()) === before + 1, "실패한 등록은 점검도 남지 않음");
+await as(U.C);
+await expectError("권한 없는 사람 차단", `select create_inspection_with_findings('insp_monthly',$1,'2026-10-02','t',null,null,'[]')`, [site], "권한");
 await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
