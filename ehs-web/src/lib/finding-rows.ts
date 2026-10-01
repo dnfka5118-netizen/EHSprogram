@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { MEASURE_KINDS } from "./labels";
 import { thumbPathOf } from "./photo-path";
 import { todayKst } from "./format";
+import { getProfile } from "./auth";
 import type { FindingOverview, MeasureKind } from "./types";
 
 // 현황 표·엑셀 공용 행 데이터
@@ -26,13 +27,15 @@ export type FindingRow = FindingOverview & {
   thumb: string | null; // 개선 전 첫 사진 썸네일
   beforeUrls: string[]; // 엑셀용 (최대 2장)
   afterUrls: string[];
+  canAssign: boolean; // 보는 사람이 조치담당자를 지정/변경할 수 있는지 (관리자 · 해당 부서 지정자/승인자)
 };
 
 // finding_overview 조회 시 조치계획·사진·진행현황·지시사항을 함께 가져오는 select (DB 왕복 1번)
 export const FINDING_ROW_SELECT =
-  "*, finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
+  "*, departments(assigner_id, approver_id), finding_measures(*, measure_date_history(new_date, changed_at)), finding_photos(kind, path, created_at), finding_progress(reason, progress, created_at, profiles(name)), finding_comments(body, is_directive, created_at)";
 
 type Embedded = FindingOverview & {
+  departments?: { assigner_id: string | null; approver_id: string | null } | null;
   finding_measures?: { kind: MeasureKind; content: string; target_date: string; original_target_date: string; is_done: boolean; done_at: string | null; measure_date_history?: { new_date: string; changed_at: string }[] }[];
   finding_photos?: { kind: "before" | "after"; path: string; created_at: string }[];
   finding_progress?: { reason: string; progress: string; created_at: string; profiles: { name: string } | null }[];
@@ -47,6 +50,7 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   if (findings.length === 0) return [];
   const rows = findings as Embedded[];
   const today = todayKst();
+  const me = await getProfile();
 
   const picked = new Map<string, { thumb?: string; before: string[]; after: string[] }>();
   const wanted = new Set<string>();
@@ -69,8 +73,9 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   }
 
   return rows.map((f) => {
-    const { finding_measures, finding_photos: _p, finding_progress, finding_comments, ...base } = f;
+    const { finding_measures, finding_photos: _p, finding_progress, finding_comments, departments: dept, ...base } = f;
     void _p;
+    const canAssign = !!me && f.status !== "closed" && (me.is_admin || (!!dept && (dept.assigner_id === me.id || dept.approver_id === me.id)));
     const ms: FindingRow["measures"] = {};
     for (const m of finding_measures ?? []) {
       ms[m.kind] = {
@@ -95,6 +100,7 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
       thumb: ph?.thumb ? (signed.get(thumbPathOf(ph.thumb)) ?? signed.get(ph.thumb) ?? null) : null,
       beforeUrls: (ph?.before ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
       afterUrls: (ph?.after ?? []).map((x) => signed.get(x)).filter((x): x is string => !!x),
+      canAssign,
     } as FindingRow;
   });
 }

@@ -21,7 +21,20 @@ export async function assignFinding(findingId: string, userIds: string[]) {
   return run("assign_finding", { p_finding: findingId, p_users: userIds }, findingId, "조치담당자가 지정되었습니다.");
 }
 
-export type PlanInput = { kind: MeasureKind; content: string; target_date: string }[];
+// 현황표에서 바로 지정할 때 : 조치 요청 부서 구성원 + 현재 담당자
+export async function getAssignOptions(findingId: string, departmentId: string) {
+  const supabase = await createClient();
+  const [{ data: members }, { data: current }] = await Promise.all([
+    supabase.from("profiles").select("id, name, position").eq("department_id", departmentId).eq("is_active", true).order("name"),
+    supabase.from("finding_assignees").select("user_id").eq("finding_id", findingId),
+  ]);
+  return {
+    members: (members ?? []) as { id: string; name: string; position: string | null }[],
+    selected: (current ?? []).map((a) => a.user_id as string),
+  };
+}
+
+export type PlanInput ={ kind: MeasureKind; content: string; target_date: string }[];
 
 export async function savePlan(findingId: string, measures: PlanInput) {
   return run("save_plan", { p_finding: findingId, p_measures: measures }, findingId, "조치계획이 저장되었습니다.");

@@ -2,17 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState, useTransition, type MouseEvent } from "react";
+import { assignFinding, getAssignOptions } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
 
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
-// 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" 를 누르면 미완료 이유 팝업
+// 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" 를 누르면 미완료 이유 팝업, "지정" 을 누르면 조치담당자 지정 팝업
 export function FindingTable({ rows, showModule, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; empty?: string }) {
   const router = useRouter();
   const [popup, setPopup] = useState<FindingRow | null>(null);
+  const [assign, setAssign] = useState<FindingRow | null>(null);
+  const closeAssign = useCallback(() => setAssign(null), []);
+  const showAssign = (e: MouseEvent, r: FindingRow) => {
+    e.stopPropagation();
+    setAssign(r);
+  };
 
   const open = (e: MouseEvent, id: string) => {
     if (e.ctrlKey || e.metaKey) window.open(`/findings/${id}`, "_blank");
@@ -43,9 +50,12 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 <DoneChip row={r} onReason={showReason} />
               </div>
               <p className="mt-0.5 line-clamp-2 text-sm text-gray-900">{r.problem}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                {r.department_name} · {r.assignee_names ?? "담당자 미지정"}
-              </p>
+              <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                <span>
+                  {r.department_name} · {r.assignee_names ?? "담당자 미지정"}
+                </span>
+                <AssignButton row={r} onClick={showAssign} />
+              </div>
               <Schedule row={r} className="mt-1 text-xs" inline />
             </div>
           </li>
@@ -69,6 +79,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
               <Th rowSpan={2}>조치 담당부서</Th>
               <Th rowSpan={2}>조치 담당자</Th>
               <Th rowSpan={2}>완료여부</Th>
+              <Th rowSpan={2}>조치담당자 지정</Th>
             </tr>
             <tr>
               <Th className="min-w-40">즉시조치</Th>
@@ -116,6 +127,9 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
                 <Td className="text-center">
                   <DoneChip row={r} onReason={showReason} stacked />
                 </Td>
+                <Td className="text-center">
+                  <AssignButton row={r} onClick={showAssign} />
+                </Td>
               </tr>
             ))}
           </tbody>
@@ -123,6 +137,7 @@ export function FindingTable({ rows, showModule, empty = "해당 항목이 없�
       </div>
 
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
+      {assign && <AssignPopup row={assign} onClose={closeAssign} />}
     </>
   );
 }
@@ -257,6 +272,117 @@ function ReasonPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
           <Link href={`/findings/${row.id}`} className="rounded-md bg-brand-800 px-3 py-2 text-sm text-white">
             상세 보기
           </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssignButton({ row, onClick }: { row: FindingRow; onClick: (e: MouseEvent, r: FindingRow) => void }) {
+  if (!row.canAssign) return <span className="text-gray-300">-</span>;
+  const first = row.status === "assign_wait";
+  return (
+    <button
+      type="button"
+      onClick={(e) => onClick(e, row)}
+      className={`rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap ${
+        first ? "bg-brand-800 text-white hover:bg-brand-900" : "border border-gray-300 bg-white text-gray-700 hover:border-brand-700"
+      }`}
+    >
+      {first ? "지정" : "변경"}
+    </button>
+  );
+}
+
+// 현황표에서 바로 조치담당자 지정/변경 (상세 화면의 지정 패널과 같은 DB 함수 사용)
+function AssignPopup({ row, onClose }: { row: FindingRow; onClose: () => void }) {
+  const router = useRouter();
+  const [members, setMembers] = useState<{ id: string; name: string; position: string | null }[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [initial, setInitial] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    let alive = true;
+    getAssignOptions(row.id, row.request_department_id).then((o) => {
+      if (!alive) return;
+      setMembers(o.members);
+      setPicked(o.selected);
+      setInitial(o.selected);
+    });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      alive = false;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [row.id, row.request_department_id, onClose]);
+
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const save = () =>
+    start(async () => {
+      const r = await assignFinding(row.id, picked);
+      if (r?.error) return setError(r.error);
+      router.refresh();
+      onClose();
+    });
+  const changed = picked.length > 0 && (picked.length !== initial.length || picked.some((x) => !initial.includes(x)));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:max-w-lg sm:rounded-xl"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-gray-900">{row.status === "assign_wait" ? "조치담당자 지정" : "조치담당자 변경"}</h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {row.module_name} · {fmtDate(row.inspection_date)} · {row.department_name}
+            </p>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="닫기">
+            ✕
+          </button>
+        </div>
+        <p className="mb-3 line-clamp-3 rounded-md bg-gray-50 p-3 text-sm whitespace-pre-wrap text-gray-800">{row.problem}</p>
+        {members === null ? (
+          <p className="py-4 text-center text-sm text-gray-500">부서 구성원을 불러오는 중…</p>
+        ) : members.length === 0 ? (
+          <p className="text-sm text-gray-500">이 부서에 등록된 사용자가 없습니다. 환경설정에서 사용자의 부서를 지정해 주세요.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {members.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => toggle(m.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm ${
+                  picked.includes(m.id) ? "border-brand-800 bg-brand-800 text-white" : "border-gray-300 bg-white text-gray-700"
+                }`}
+              >
+                {m.name}
+                {m.position && <span className="ml-1 text-xs opacity-75">{m.position}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="mt-2 text-xs text-gray-500">여러 명을 지정할 수 있습니다.</p>
+        {error && <p className="mt-2 rounded-md bg-red-50 p-2 text-sm text-red-700">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onClose} className="rounded-md border border-gray-300 px-3 py-2 text-sm">
+            닫기
+          </button>
+          <button
+            onClick={save}
+            disabled={pending || !changed}
+            className="rounded-md bg-brand-800 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {pending ? "저장 중…" : row.status === "assign_wait" ? "담당자 지정" : "담당자 변경"}
+          </button>
         </div>
       </div>
     </div>

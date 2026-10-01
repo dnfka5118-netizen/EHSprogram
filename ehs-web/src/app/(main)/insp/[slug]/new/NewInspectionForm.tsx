@@ -4,14 +4,16 @@ import { useActionState, useState } from "react";
 import { createInspection } from "../../actions";
 import { Field, FormMessage, Input, Select, SubmitButton, Textarea } from "@/components/ui";
 import type { Site } from "@/lib/types";
+import { ParticipantPicker, type Person } from "./ParticipantPicker";
 
-export function NewInspectionForm({ slug, moduleCode, moduleName, sites, defaultSite, today }: {
+export function NewInspectionForm({ slug, moduleCode, moduleName, sites, defaultSite, today, people }: {
   slug: string;
   moduleCode: string;
   moduleName: string;
   sites: Site[];
   defaultSite: string;
   today: string;
+  people: Person[];
 }) {
   const [state, action] = useActionState(createInspection, undefined);
   const [date, setDate] = useState(today);
@@ -37,9 +39,7 @@ export function NewInspectionForm({ slug, moduleCode, moduleName, sites, default
       <Field label="점검명" required>
         <Input name="title" key={autoTitle} defaultValue={autoTitle} required />
       </Field>
-      <Field label="점검 참여자" hint="예: 대표이사, 공장장, EHS부서장">
-        <Input name="inspectors" />
-      </Field>
+      <ParticipantPicker people={people} name="inspectors" />
       <Field label="비고">
         <Textarea name="note" rows={2} />
       </Field>
