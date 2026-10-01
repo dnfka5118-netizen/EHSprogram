@@ -2,6 +2,7 @@
 //
 //   미리보기 : node scripts/build-examples.mjs "../점검 DB"            → 건수·이름 제거 결과만 확인
 //   DB 반영  : node scripts/build-examples.mjs "../점검 DB" --apply    → finding_examples 를 새로 채움 (기존 사례는 지움)
+//   암호 엑셀 : 암호를 푼 사본 폴더를 함께 준다 → node scripts/build-examples.mjs "../점검 DB" ".cache/decrypted" --apply
 //
 // - 사진은 DB 에 올리지 않는다. 사진에서 뽑은 512개 숫자(특징값)만 저장한다.
 // - 문제점 문구에서 사람 이름(사용자 목록 + 엑셀 담당자·점검자 칸 + "OOO 대리" 형태)을 지운다.
@@ -16,7 +17,10 @@ import * as ort from "onnxruntime-web";
 import { createClient } from "@supabase/supabase-js";
 
 const args = process.argv.slice(2);
-const ROOT = args.find((a) => !a.startsWith("--")) ?? "../점검 DB";
+// 폴더를 여러 개 줄 수 있음 (예: 원본 폴더 + 암호를 푼 사본 폴더 .cache/decrypted)
+const ROOTS = args.filter((a) => !a.startsWith("--"));
+if (ROOTS.length === 0) ROOTS.push("../점검 DB");
+const ROOT = ROOTS[0];
 const APPLY = args.includes("--apply");
 const AUDIT = args.includes("--audit"); // 지운 낱말만 확인하고 끝냄 (.cache/scrub-audit.json)
 const EXTRA = ["../1. 2026_CEO 안전점검.xlsx"]; // 암호 없는 사본 (점검 DB 안의 원본은 암호가 걸려 있음)
@@ -56,9 +60,13 @@ const walk = (d) => {
     else if (/\.xlsx$/i.test(n) && !n.startsWith("~$")) files.push(p);
   }
 };
-walk(ROOT);
+for (const r of ROOTS) walk(r);
+const rel = (f) => relative(ROOTS.find((r) => !relative(r, f).startsWith("..")) ?? ROOT, f);
 for (const f of EXTRA) if (existsSync(f)) files.push(f);
 
+// 담당자·점검자 칸의 낱말은 "흔한 성씨 + 두 글자" 일 때만 이름으로 본다 (칸에 "필요", "요청" 같은 글도 섞여 있음)
+const SURNAME = "김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예봉경사부가복태목형피두감음빈동온호좌";
+const looksName = (w) => w.length === 3 && SURNAME.includes(w[0]);
 const locked = [];
 const records = [];
 const nameWords = new Set();
@@ -68,7 +76,7 @@ for (const file of files) {
   try {
     await wb.xlsx.readFile(file);
   } catch {
-    locked.push(relative(ROOT, file));
+    locked.push(rel(file));
     continue;
   }
   for (const ws of wb.worksheets) {
@@ -112,12 +120,12 @@ for (const file of files) {
     const rows = [];
     for (let r = hr + 1; r <= ws.rowCount; r++) {
       const row = ws.getRow(r);
-      for (const i of col.people ?? []) for (const w of text(row.getCell(i).value).split(/[\s,/·()]+/)) if (/^[가-힣]{2,4}$/.test(w)) nameWords.add(w);
+      for (const i of col.people ?? []) for (const w of text(row.getCell(i).value).split(/[\s,/·()]+/)) if (/^[가-힣]{3}$/.test(w) && looksName(w)) nameWords.add(w);
       const problem = text(row.getCell(col.problem).value).trim();
       if (problem.length < 3) continue;
       rows.push({
         r,
-        source: `${relative(ROOT, file)} #${ws.name}`,
+        source: `${rel(file)} #${ws.name}`,
         location: col.loc ? text(row.getCell(col.loc).value).trim() : "",
         sub: col.sub ? text(row.getCell(col.sub).value).trim() : "",
         type: col.type ? text(row.getCell(col.type).value).trim() : "",
