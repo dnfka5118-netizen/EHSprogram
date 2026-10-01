@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { mailConfigured } from "@/lib/mail";
@@ -53,7 +54,7 @@ export default async function MailPage() {
       </Card>
 
       <Card title="최근 알림 (100건)">
-        <div className="overflow-x-auto">
+        <ScrollX>
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200 text-left text-xs text-gray-500">
               <tr>
@@ -91,7 +92,7 @@ export default async function MailPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       </Card>
     </div>
   );

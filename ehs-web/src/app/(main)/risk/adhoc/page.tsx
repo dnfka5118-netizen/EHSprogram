@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -55,7 +56,7 @@ export default async function JsaListPage({ searchParams }: PageProps<"/risk/adh
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-500">등록된 평가서가 없습니다.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <ScrollX>
           <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead className="bg-brand-50 text-xs text-gray-700">
               <tr>
@@ -96,7 +97,7 @@ export default async function JsaListPage({ searchParams }: PageProps<"/risk/adh
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       )}
     </Card>
   );

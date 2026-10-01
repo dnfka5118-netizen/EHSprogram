@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import { CONTROL_OPTS, aggregate, riskColor, riskOf, riskTextColor, type JsaForm } from "@/lib/jsa";
 import { fmtDate } from "@/lib/format";
 import { AggTable, Panel } from "./JsaEditor";
@@ -37,7 +38,7 @@ export function JsaView({ form, departmentName, evalNo }: { form: JsaForm; depar
         <AggTable count={agg.count} max={agg.max} />
       </Panel>
       <Panel num="03" title="작업단계별 위험성평가" sub={`${form.steps.length}개 단계`}>
-        <div className="overflow-x-auto">
+        <ScrollX>
           <table className="w-full min-w-[1100px] border-collapse text-xs">
             <thead className="bg-brand-50 text-gray-700">
               <tr>
@@ -90,7 +91,7 @@ export function JsaView({ form, departmentName, evalNo }: { form: JsaForm; depar
               )}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       </Panel>
     </div>
   );

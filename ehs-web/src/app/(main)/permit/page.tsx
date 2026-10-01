@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui";
@@ -67,7 +68,7 @@ export default async function PermitListPage({ searchParams }: PageProps<"/permi
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-500">{today ? "오늘 작업 예정인 허가서가 없습니다." : "등록된 허가서가 없습니다."}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <ScrollX>
           <table className="w-full min-w-[1500px] border-collapse text-xs">
             <thead className="bg-brand-50 text-gray-700">
               <tr>
@@ -129,7 +130,7 @@ export default async function PermitListPage({ searchParams }: PageProps<"/permi
               })}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       )}
     </Card>
   );

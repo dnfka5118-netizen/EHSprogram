@@ -1,5 +1,6 @@
 "use client";
 
+import { ScrollX } from "@/components/ScrollX";
 import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { saveJsa, submitJsa } from "./actions";
@@ -409,7 +410,7 @@ export function RiskBadge({ v }: { v: number | null }) {
 
 export function AggTable({ count, max }: { count: Record<string, number>; max: Record<string, number> }) {
   return (
-    <div className="overflow-x-auto">
+    <ScrollX>
       <table className="w-full min-w-[920px] border-collapse text-center text-xs">
         <thead>
           <tr className="bg-gray-100 text-gray-700">
@@ -442,7 +443,7 @@ export function AggTable({ count, max }: { count: Record<string, number>; max: R
           </tr>
         </tbody>
       </table>
-    </div>
+    </ScrollX>
   );
 }
 

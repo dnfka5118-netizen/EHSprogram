@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { Card, Field, Input, Select, SubmitButton, Textarea } from "@/components/ui";
@@ -80,7 +81,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/settings/u
           </select>
           <button className="rounded-md bg-gray-800 px-3 py-1.5 text-sm text-white">검색</button>
         </form>
-        <div className="overflow-x-auto">
+        <ScrollX>
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200 text-left text-xs text-gray-500">
               <tr>
@@ -119,7 +120,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/settings/u
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollX>
       </Card>
     </div>
   );

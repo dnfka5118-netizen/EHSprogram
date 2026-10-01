@@ -41,4 +41,5 @@ export const KEYS = {
   collapsed: "ehs.sidebar.collapsed",
   domain: "ehs.sidebar.domain",
   recent: "ehs.menu.recent",
+  pageSize: "ehs.table.pageSize",
 };

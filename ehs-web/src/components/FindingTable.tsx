@@ -9,6 +9,8 @@ import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import type { FindingRow } from "@/lib/finding-rows";
 import { MemberPicker } from "@/components/MemberPicker";
 import { PhotoViewer } from "@/components/PhotoViewer";
+import { ScrollX } from "@/components/ScrollX";
+import { KEYS, useStored, write } from "@/components/shell/store";
 import { PlanForm } from "@/app/(main)/findings/[id]/PlanForm";
 import { ReportForm } from "@/app/(main)/findings/[id]/ReportForm";
 
@@ -18,6 +20,13 @@ const short = (d: string) => d.slice(2).replaceAll("-", ".");
 // bulkApprove : 승인할 수 있는 행에 체크 칸 + "선택 일괄 승인" (내 할 일의 종결 승인 필요)
 export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; bulkApprove?: boolean; empty?: string }) {
   const router = useRouter();
+  // 페이지 나누기 : 10/20/50/100개씩 (고른 개수는 브라우저에 기억)
+  const stored = Number(useStored(KEYS.pageSize));
+  const size = PAGE_SIZES.includes(stored) ? stored : 20;
+  const [pageRaw, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil(rows.length / size));
+  const page = Math.min(pageRaw, pages);
+  const view = rows.slice((page - 1) * size, page * size);
   const approvable = bulkApprove ? rows.filter((r) => r.canApprove).map((r) => r.id) : [];
   const [picked, setPicked] = useState<string[]>([]);
   const [bulkMsg, setBulkMsg] = useState<{ ok?: boolean; text: string } | null>(null);
@@ -97,7 +106,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
               onChange={() => setPicked(allOn ? [] : approvable)}
               className="h-5 w-5 cursor-pointer accent-brand-800"
             />
-            전체 선택
+            전체 선택 ({approvable.length}건)
           </label>
           <span className="text-sm text-gray-600">{sel.length}건 선택</span>
           <button
@@ -113,7 +122,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
       )}
       {/* ---------- 모바일 : 카드 ---------- */}
       <ul className="divide-y divide-gray-100 lg:hidden">
-        {rows.map((r) => (
+        {view.map((r) => (
           <li key={r.id} onClick={(e) => open(e, r.id)} className="flex cursor-pointer gap-3 py-3 active:bg-gray-50">
             {approvable.length > 0 && (
               <div className="flex w-6 shrink-0 items-center justify-center">
@@ -149,7 +158,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
       </ul>
 
       {/* ---------- PC : 표 ---------- */}
-      <div className="hidden overflow-x-auto lg:block">
+      <ScrollX className="hidden lg:block">
         <table className="w-full min-w-[1400px] border-collapse text-xs">
           <thead className="bg-brand-50 text-gray-700">
             <tr>
@@ -174,7 +183,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {view.map((r) => (
               <tr
                 key={r.id}
                 onClick={(e) => open(e, r.id)}
@@ -245,7 +254,9 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollX>
+
+      <Pager total={rows.length} page={page} pages={pages} size={size} onPage={setPage} onSize={(n) => (write(KEYS.pageSize, String(n)), setPage(1))} />
 
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
@@ -782,6 +793,55 @@ function AssignPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const PAGE_SIZES = [10, 20, 50, 100];
+
+function Pager({ total, page, pages, size, onPage, onSize }: { total: number; page: number; pages: number; size: number; onPage: (p: number) => void; onSize: (n: number) => void }) {
+  const from = total ? (page - 1) * size + 1 : 0;
+  const to = Math.min(total, page * size);
+  // 현재 쪽 주변 5개만 번호로
+  const start = Math.max(1, Math.min(page - 2, pages - 4));
+  const nums = Array.from({ length: Math.min(5, pages) }, (_, i) => start + i);
+  const btn = "min-w-8 rounded-md border px-2 py-1 text-sm disabled:opacity-40";
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+      <span>
+        총 <b className="text-gray-900">{total}</b>건 · {from}–{to}
+      </span>
+      <div className="flex items-center gap-1">
+        <button type="button" className={`${btn} border-gray-300 bg-white`} disabled={page === 1} onClick={() => onPage(1)} aria-label="처음">
+          «
+        </button>
+        <button type="button" className={`${btn} border-gray-300 bg-white`} disabled={page === 1} onClick={() => onPage(page - 1)} aria-label="이전">
+          ‹
+        </button>
+        {nums.map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onPage(n)}
+            className={`${btn} ${n === page ? "border-brand-800 bg-brand-800 font-medium text-white" : "border-gray-300 bg-white hover:border-brand-700"}`}
+          >
+            {n}
+          </button>
+        ))}
+        <button type="button" className={`${btn} border-gray-300 bg-white`} disabled={page === pages} onClick={() => onPage(page + 1)} aria-label="다음">
+          ›
+        </button>
+        <button type="button" className={`${btn} border-gray-300 bg-white`} disabled={page === pages} onClick={() => onPage(pages)} aria-label="마지막">
+          »
+        </button>
+      </div>
+      <label className="flex items-center gap-1">
+        <select value={size} onChange={(e) => onSize(Number(e.target.value))} className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm">
+          {PAGE_SIZES.map((n) => (
+            <option key={n} value={n}>{n}개씩 보기</option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

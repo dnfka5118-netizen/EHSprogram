@@ -1,3 +1,4 @@
+import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -78,7 +79,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps<"/approv
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-gray-500">{tab === "todo" ? "결재할 문서가 없습니다." : "문서가 없습니다."}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <ScrollX>
             <table className="w-full min-w-[720px] border-collapse text-sm">
               <thead className="bg-brand-50 text-xs text-gray-700">
                 <tr>
@@ -110,7 +111,7 @@ export default async function ApprovalsPage({ searchParams }: PageProps<"/approv
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollX>
         )}
       </Card>
     </div>
