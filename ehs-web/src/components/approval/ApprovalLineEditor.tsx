@@ -31,16 +31,20 @@ export function ApprovalLineEditor({ value, onChange, people, meId }: { value: L
     const cols = Math.max(4, items.length);
     return (
       <tr key={kind}>
-        <th className="w-12 border border-gray-400 bg-gray-50 px-1 text-xs font-medium text-gray-700">{kind}</th>
+        <th className="w-12 border border-gray-400 bg-gray-50 px-1 text-center align-middle text-xs font-medium text-gray-700">{kind}</th>
         {Array.from({ length: cols }, (_, i) => {
           const s = items[i];
           const p = s ? who(s.approver_id) : undefined;
           return (
-            <td key={i} className="w-20 border border-gray-400 p-0 align-top text-center text-xs">
-              <div className="h-8 border-b border-gray-300 px-0.5 leading-8 font-medium text-gray-700">{s ? (p?.position ?? s.label) : ""}</div>
-              <div className="h-14 px-1">
-                {s && <span className="mt-1 inline-block min-w-5 border border-gray-400 px-1 text-[10px] text-gray-600">{order(s)}</span>}
-                <p className={`mt-1 truncate ${s && !p ? "text-red-600" : "text-gray-900"}`}>{s ? (p?.name ?? "미지정") : ""}</p>
+            <td key={i} className="w-24 border border-gray-400 p-0 align-top text-center text-xs">
+              {/* 위 칸 : 직위(없으면 단계 이름) — 길면 두 줄까지, 칸 높이 고정 */}
+              <div className="flex h-10 items-center justify-center border-b border-gray-300 px-1 leading-tight font-medium break-keep text-gray-700">
+                <span className="line-clamp-2">{s ? (p?.position ?? s.label) : ""}</span>
+              </div>
+              {/* 아래 칸 : 순번 → 이름 (위아래로 떨어뜨려 겹치지 않게) */}
+              <div className="flex h-14 flex-col items-center justify-center gap-1 px-1">
+                {s && <span className="inline-block min-w-5 border border-gray-400 px-1 text-[10px] leading-4 text-gray-600">{order(s)}</span>}
+                <p className={`w-full truncate leading-4 ${s && !p ? "text-red-600" : "text-gray-900"}`}>{s ? (p?.name ?? "미지정") : ""}</p>
               </div>
             </td>
           );
