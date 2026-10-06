@@ -7,6 +7,7 @@ import { Card } from "@/components/ui";
 import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
+import { findingRowsPage } from "../insp/excel-actions";
 import { FindingFilters, applyFindingFilters, describeFilters, filterParams, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import type { Department, FindingOverview, Site } from "@/lib/types";
@@ -109,7 +110,7 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
 
       <Card
         title={`${dept?.name ?? ""} 지적사항 (${rows.length}건)`}
-        actions={<ExcelButton rows={rows} title={title} showModule fileName={`${todayKst()}_${dept?.name ?? "부서"}_점검조치현황.xlsx`} />}
+        actions={<ExcelButton rows={rows} loadPage={findingRowsPage.bind(null, {}, filters)} title={title} showModule fileName={`${todayKst()}_${dept?.name ?? "부서"}_점검조치현황.xlsx`} />}
       >
         <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} used={usedPairs(usedRows)} lockDept />
         <FindingTable rows={rows} showModule />

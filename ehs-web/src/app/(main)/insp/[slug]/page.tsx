@@ -6,6 +6,7 @@ import { Card } from "@/components/ui";
 import { FindingTable } from "@/components/FindingTable";
 import { ExcelButton } from "@/components/ExcelButton";
 import { ExcelImportButton } from "../ExcelImportButton";
+import { findingRowsPage } from "../excel-actions";
 import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
@@ -61,6 +62,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
             )}
             <ExcelButton
               rows={rows}
+              loadPage={findingRowsPage.bind(null, { module: mod.code }, filters)}
               title={`${mod.name} 현황 (${condition})`}
               fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
               currentMonth={filterMonth(filters)}
