@@ -29,6 +29,22 @@ export function ApprovalStatus({ approval, meId }: { approval: Approval; meId: s
 
   return (
     <div className="space-y-3">
+      {(approval.cc_names?.length || approval.exec_names?.length) ? (
+        <dl className="grid gap-1 text-xs text-gray-600 sm:grid-cols-2">
+          {!!approval.cc_names?.length && (
+            <div>
+              <dt className="inline font-medium text-gray-700">수신및참조 </dt>
+              <dd className="inline">{approval.cc_names.join(", ")}</dd>
+            </div>
+          )}
+          {!!approval.exec_names?.length && (
+            <div>
+              <dt className="inline font-medium text-gray-700">시행자 </dt>
+              <dd className="inline">{approval.exec_names.join(", ")}</dd>
+            </div>
+          )}
+        </dl>
+      ) : null}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {approval.steps.map((s) => (
           <div key={s.id} className={`rounded-md border p-2 text-center ${STEP_STYLE[s.status]}`}>

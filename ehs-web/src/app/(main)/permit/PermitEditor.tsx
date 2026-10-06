@@ -62,7 +62,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
 
   function submit() {
     setState(undefined);
-    const fin = finalizeLine(line);
+    const fin = finalizeLine(line, meId);
     if (fin.error) return setState({ error: fin.error });
     start(async () => {
       const res = await submitPermit(id, payload(), fin.steps!);
@@ -305,6 +305,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
       {submitOpen && (
         <Panel num="✓" title="결재 상신" sub="기본 결재선이 채워져 있습니다 · 협조(관련부서)가 필요하면 결재자를 지정하세요">
           <ApprovalLineEditor
+            meId={meId}
             value={line}
             onChange={(v) => {
               setLine(v);

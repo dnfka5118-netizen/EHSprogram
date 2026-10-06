@@ -29,11 +29,15 @@ export type Approval = {
   round: number;
   submitted_at: string;
   completed_at: string | null;
+  cc_ids?: string[]; // 수신참조
+  exec_ids?: string[]; // 시행자
+  cc_names?: string[];
+  exec_names?: string[];
   steps: ApprovalStep[]; // 현재 차수
   history: ApprovalStep[]; // 이전 차수
 };
 
-export type Person = { id: string; name: string; position: string | null; department: string | null };
+export type Person = { id: string; name: string; position: string | null; department: string | null; department_id: string | null };
 
 export async function getTemplate(supabase: SupabaseClient, moduleCode: string): Promise<TemplateStep[]> {
   const { data } = await supabase.from("approval_template_steps").select("*").eq("module_code", moduleCode).order("step_order");
@@ -58,7 +62,7 @@ export async function getDeptHeads(supabase: SupabaseClient) {
 export async function getPeople(supabase: SupabaseClient): Promise<Person[]> {
   const { data } = await supabase
     .from("profiles")
-    .select("id, name, position, departments(name)")
+    .select("id, name, position, department_id, departments!profiles_department_fk(name)") // 부서 관계가 여러 개라 이름을 지정
     .eq("is_active", true)
     .eq("user_type", "employee")
     .order("name");
@@ -67,6 +71,7 @@ export async function getPeople(supabase: SupabaseClient): Promise<Person[]> {
     name: p.name,
     position: p.position,
     department: (p.departments as unknown as { name: string } | null)?.name ?? null,
+    department_id: p.department_id,
   }));
 }
 
@@ -83,7 +88,20 @@ export async function getApproval(supabase: SupabaseClient, moduleCode: string, 
     const p = s.profiles as unknown as { name: string; position: string | null } | null;
     return { ...s, approver_name: p?.name ?? null, approver_position: p?.position ?? null } as ApprovalStep;
   });
-  return { ...(ap as Omit<Approval, "steps" | "history">), steps: all.filter((s) => s.round === ap.round), history: all.filter((s) => s.round < ap.round) };
+  // 수신참조 · 시행자 이름
+  const ids = [...(ap.cc_ids ?? []), ...(ap.exec_ids ?? [])];
+  const { data: ppl } = ids.length ? await supabase.from("profiles").select("id, name, position").in("id", ids) : { data: [] };
+  const nameOf = (id: string) => {
+    const p = (ppl ?? []).find((x) => x.id === id);
+    return p ? `${p.name}${p.position ? ` ${p.position}` : ""}` : "";
+  };
+  return {
+    ...(ap as Omit<Approval, "steps" | "history">),
+    cc_names: (ap.cc_ids ?? []).map(nameOf).filter(Boolean),
+    exec_names: (ap.exec_ids ?? []).map(nameOf).filter(Boolean),
+    steps: all.filter((s) => s.round === ap.round),
+    history: all.filter((s) => s.round < ap.round),
+  };
 }
 
 export const APPROVAL_STATUS_LABEL: Record<Approval["status"], string> = {

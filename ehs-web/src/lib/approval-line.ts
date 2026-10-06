@@ -1,5 +1,5 @@
 // 양식 기본 결재선 → 실제 결재자 (서버·브라우저 공용, 부서를 바꾸면 화면에서 바로 다시 계산)
-export type StepKind = "담당" | "검토" | "협조" | "승인" | "확인";
+export type StepKind = "담당" | "검토" | "협조" | "승인" | "확인" | "참조" | "시행"; // 참조·시행 = 수신참조·시행자 (결재 단계 아님)
 export type Resolver = "drafter" | "dept_head" | "doc_dept_head" | "user" | "pick";
 
 export type TemplateStep = {

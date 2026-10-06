@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -288,12 +288,21 @@ await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ name: "�
 await expectError("1년 경과 위험성평가 차단", `select submit_permit($1,$2)`, [pId, pLine], "1년 이상");
 await as(null); await db.query(`update jsa_evals set eval_date='2026-09-20' where id=$1`, [jsaId]); await as(U.I);
 await expectError("현장 기록은 발급 전 불가", `select save_permit_field($1,'{}')`, [pId], "발급된");
-const pAp = (await one(`select submit_permit($1,$2) id`, [pId, pLine])).id;
+// 수신참조(품질직원) · 시행자(작업자1) 를 함께 넘김
+const pLineCc = JSON.stringify([...JSON.parse(pLine), { step_kind: "참조", label: "수신참조", approver_id: U.Q }, { step_kind: "시행", label: "시행", approver_id: U.W1 }]);
+const pAp = (await one(`select submit_permit($1,$2) id`, [pId, pLineCc])).id;
+const cc = await one(`select cc_ids, exec_ids, (select count(*)::int from approval_steps where approval_id=$1) n from approvals where id=$1`, [pAp]);
+ok(cc.cc_ids.length === 1 && cc.exec_ids.length === 1 && cc.n === 3, "수신참조·시행자는 결재 단계가 아니라 목록으로 저장");
 await expectError("결재 중 신청 내용 수정 차단", `select save_permit($1,$2)`, [pId, pData()], "수정할 수 없습니다");
 await as(U.A); await db.query(`select approve_step($1,null)`, [pAp]);
 await as(U.H); await db.query(`select approve_step($1,null)`, [pAp]);
 const pv = await one(`select status, phase, risk_eval_no from permit_overview where id=$1`, [pId]);
 ok(pv.status === "issued" && pv.risk_eval_no?.startsWith("RA-"), "최종 승인 → 발급, 위험성평가 번호 표시");
+await as(null);
+ok((await one(`select count(*)::int c from notifications where kind='approval_cc' and user_id = any($1::uuid[])`, [[U.Q, U.W1]])).c === 2, "결재 완료 → 수신참조·시행자에게 알림");
+await db.exec("set role authenticated"); await as(U.Q);
+ok((await one(`select count(*)::int c from approvals where id=$1`, [pAp])).c === 1, "수신참조자는 결재 문서 조회 가능");
+await db.exec("reset role");
 await as(U.W1);
 const fieldData = (sigs, done = "") => JSON.stringify({ checks_ok: { docs_0_ok: true }, sigs, fields: { complete_time: done }, acks: [{ id: "a1", name: "작업자1", sig: "data:x" }] });
 await db.query(`select save_permit_field($1,$2)`, [pId, fieldData({ prework_mgr: "data:x" })]);

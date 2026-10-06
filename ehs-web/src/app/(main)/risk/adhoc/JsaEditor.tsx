@@ -73,7 +73,7 @@ export function JsaEditor({ id, evalNo, initial, departments, template, people, 
     setState(undefined);
     if (!form.work_name.trim()) return setState({ error: "작업명을 입력해 주세요." });
     if (!form.department_id) return setState({ error: "부서명을 선택해 주세요." });
-    const fin = finalizeLine(line);
+    const fin = finalizeLine(line, meId);
     if (fin.error) return setState({ error: fin.error });
     start(async () => {
       const res = await submitJsa(id, form, fin.steps!);
@@ -225,6 +225,7 @@ export function JsaEditor({ id, evalNo, initial, departments, template, people, 
       {submitOpen && (
         <Panel num="✓" title="결재 상신" sub="기본 결재선이 채워져 있습니다 · 필요하면 바꾸세요">
           <ApprovalLineEditor
+            meId={meId}
             value={line}
             onChange={(v) => {
               setLine(v);
