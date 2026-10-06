@@ -128,7 +128,7 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
 
       <div className="relative">
         {/* 말로 입력 : 받아쓴 글은 이미 적은 내용 뒤에 이어 붙음 */}
-        <VoiceButton className="absolute top-0 right-0 z-10" onText={(t) => set({ problem: value.problem ? `${value.problem.trimEnd()} ${t}` : t })} />
+        <VoiceButton className="absolute top-0 right-0 z-10" value={value.problem} onChange={(problem) => set({ problem })} />
         <Field label="문제점" required>
           <Textarea rows={3} value={value.problem} onChange={(e) => set({ problem: e.target.value })} placeholder="발견된 문제점과 개선 필요사항 (🎤 말로 입력 가능)" />
         </Field>
