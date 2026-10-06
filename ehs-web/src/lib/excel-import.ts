@@ -8,7 +8,9 @@ import { ID_COL } from "./excel-export";
 
 export type ImportRow = {
   excelRow: number;
-  date: string | null; // YYYY-MM-DD
+  date: string | null; // YYYY-MM-DD (올바른 날짜일 때만)
+  dateText: string; // 엑셀에 적힌 그대로 (안내용)
+  dateError: string | null; // 날짜를 읽을 수 없거나 없는 날짜
   location: string;
   sub: string;
   type: string;
@@ -34,21 +36,36 @@ const clean = (s: string) => s.replace(/​/g, "").replace(/\r/g, "").trim();
 const one = (s: string) => clean(s).split(/\s*\n\s*/).filter(Boolean).join(" ");
 const pad = (n: number) => String(n).padStart(2, "0");
 
-// 날짜 : 엑셀 날짜 · 26.10.05 · 2026-10-05 · 2026.10.05 · "26년 10월"(→ 1일)
-export function parseDate(v: unknown): string | null {
-  if (v instanceof Date) return `${v.getUTCFullYear()}-${pad(v.getUTCMonth() + 1)}-${pad(v.getUTCDate())}`;
+// 날짜 : 엑셀 날짜 · 26.10.05 · 2026-10-05 · 2026.10.05 · "26년 10월"(→ 1일) · "26년 10월 5일"
+//   2월 30일 · 13월 처럼 없는 날짜는 오류
+export function parseDateStrict(v: unknown): { date: string | null; text: string; error: string | null } {
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return { date: null, text: "", error: "날짜를 읽을 수 없습니다" };
+    return { date: `${v.getUTCFullYear()}-${pad(v.getUTCMonth() + 1)}-${pad(v.getUTCDate())}`, text: "", error: null };
+  }
+  if (typeof v === "number" && v > 30000 && v < 80000) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000); // 엑셀 날짜 숫자
+    return { date: d.toISOString().slice(0, 10), text: String(v), error: null };
+  }
   const t = clean(text(v));
-  let m = t.match(/(\d{2,4})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})/);
-  if (m) {
-    const y = +m[1] < 100 ? 2000 + +m[1] : +m[1];
-    return `${y}-${pad(+m[2])}-${pad(+m[3])}`;
-  }
-  m = t.match(/(\d{2,4})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?/);
-  if (m) {
-    const y = +m[1] < 100 ? 2000 + +m[1] : +m[1];
-    return `${y}-${pad(+m[2])}-${pad(+(m[3] ?? 1))}`;
-  }
-  return null;
+  if (!t) return { date: null, text: "", error: "시행일이 비어 있습니다" };
+  const build = (yy: number, mm: number, dd: number) => {
+    const y = yy < 100 ? 2000 + yy : yy;
+    if (y < 2000 || y > 2100) return { date: null, text: t, error: `'${t}' 의 연도가 올바르지 않습니다` };
+    if (mm < 1 || mm > 12) return { date: null, text: t, error: `'${t}' 은(는) 없는 달입니다 (${mm}월)` };
+    const last = new Date(Date.UTC(y, mm, 0)).getUTCDate();
+    if (dd < 1 || dd > last) return { date: null, text: t, error: `'${t}' 은(는) 없는 날짜입니다 (${mm}월은 ${last}일까지)` };
+    return { date: `${y}-${pad(mm)}-${pad(dd)}`, text: t, error: null };
+  };
+  let m = t.match(/^(\d{2,4})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{1,2})\.?$/);
+  if (m) return build(+m[1], +m[2], +m[3]);
+  m = t.match(/^(\d{2,4})\s*년\s*(\d{1,2})\s*월(?:\s*(\d{1,2})\s*일)?$/);
+  if (m) return build(+m[1], +m[2], +(m[3] ?? 1));
+  return { date: null, text: t, error: `'${t}' 은(는) 날짜 형식이 아닙니다 (예: 26.10.05)` };
+}
+
+export function parseDate(v: unknown): string | null {
+  return parseDateStrict(v).date;
 }
 
 export async function readImportFile(file: File): Promise<ImportRow[]> {
@@ -98,7 +115,7 @@ export async function readImportFile(file: File): Promise<ImportRow[]> {
     const id = clean(text(v(ID_COL)));
     out.push({
       excelRow: r,
-      date: parseDate(v(3)),
+      ...(({ date, text: dateText, error: dateError }) => ({ date, dateText, dateError }))(parseDateStrict(v(3))),
       location: one(text(v(4))),
       sub: one(text(v(5))).replace(/^-$/, ""),
       type: clean(text(v(6))).replace(/^-$/, ""),

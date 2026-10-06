@@ -17,7 +17,8 @@ type Checked = ImportRow & {
   subId?: string;
   typeId?: string;
   deptId?: string;
-  error?: string; // 등록할 수 없는 이유
+  error?: string; // 등록할 수 없는 이유 (여러 개면 " · " 로 이어 붙임)
+  skip?: boolean; // 이미 프로그램에 있는 건 (다운로드한 엑셀의 기존 행) → 건너뜀
   result?: "done" | "dup" | "fail";
   message?: string;
 };
@@ -40,32 +41,47 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
   const [finished, setFinished] = useState(false);
   const [dragging, setDragging] = useState(false);
 
+  // 정합성 검사 : 행마다 모든 문제를 모아서 보여 줌 (한 행이라도 있으면 등록하지 않음)
   const check = (r: ImportRow): Checked => {
-    if (r.existingId) return { ...r, error: "이미 프로그램에 있는 건 (다운로드한 엑셀)" };
+    if (r.existingId) return { ...r, skip: true };
     const loc = locations.find((l) => key(l.name) === key(r.location));
     const sub = loc?.sub_locations.find((s) => key(s.name) === key(r.sub));
     const type = types.find((t) => key(t.name) === key(r.type));
     const dept = departments.find((d) => key(d.name) === key(r.department));
     const minDate = new Date(Date.parse(today) - 366 * 86400000).toISOString().slice(0, 10);
-    const error = !r.date
-      ? "시행일을 읽을 수 없음 (예: 26.10.05)"
-      : r.date > today
-        ? "시행일이 오늘 이후"
-        : r.date < minDate
-          ? "1년이 지난 점검"
-          : !r.problem
-            ? "문제점 없음"
-            : !loc
-              ? `장소 '${r.location || "(빈칸)"}' 가 목록에 없음`
-              : !dept
-                ? `담당부서 '${r.department || "(빈칸)"}' 가 목록에 없음`
-                : r.type && !type
-                  ? `유형 '${r.type}' 이 목록에 없음`
-                  : undefined;
-    return { ...r, locationId: loc?.id, subId: sub?.id, typeId: type?.id, deptId: dept?.id, error };
+    const errs: string[] = [];
+    if (r.dateError) errs.push(`시행일 : ${r.dateError}`);
+    else if (r.date && r.date > today) errs.push(`시행일 ${r.date} 이 오늘 이후입니다`);
+    else if (r.date && r.date < minDate) errs.push(`시행일 ${r.date} 은 1년이 지난 날짜입니다`);
+    if (!r.location) errs.push("장소가 비어 있습니다");
+    else if (!loc) errs.push(`장소 '${r.location}' 이(가) 환경설정 장소 목록에 없습니다`);
+    if (!r.type) errs.push("유형이 비어 있습니다");
+    else if (!type) errs.push(`유형 '${r.type}' 이(가) 환경설정 유형 목록에 없습니다`);
+    if (!r.problem) errs.push("문제점이 비어 있습니다");
+    else if (r.problem.length > 2000) errs.push(`문제점이 너무 깁니다 (${r.problem.length}자, 2000자까지)`);
+    if (!r.department) errs.push("담당부서가 비어 있습니다");
+    else if (!dept) errs.push(`담당부서 '${r.department}' 이(가) 부서 목록에 없습니다`);
+    if (r.photos.length === 0) errs.push("개선 전 사진이 없습니다 (H열에 사진을 넣어 주세요)");
+    return { ...r, locationId: loc?.id, subId: sub?.id, typeId: type?.id, deptId: dept?.id, error: errs.length ? errs.join(" · ") : undefined };
   };
 
-  const ok = useMemo(() => (rows ?? []).filter((r) => !r.error && !r.result), [rows]);
+  // 같은 파일 안에 같은 지적사항(시행일·장소·세부장소·문제점)이 두 번 있으면 오류
+  const checkAll = (list: ImportRow[]): Checked[] => {
+    const out = list.map(check);
+    const seen = new Map<string, number>();
+    for (const c of out) {
+      if (c.skip) continue;
+      const k = [c.date ?? c.dateText, key(c.location), key(c.sub), key(c.problem)].join("|");
+      const first = seen.get(k);
+      if (first !== undefined) c.error = [c.error, `${first}행과 같은 내용이 중복됩니다`].filter(Boolean).join(" · ");
+      else seen.set(k, c.excelRow);
+    }
+    return out;
+  };
+
+  const problems = useMemo(() => (rows ?? []).filter((r) => r.error && !r.result), [rows]);
+  const blocked = problems.length > 0;
+  const ok = useMemo(() => (rows ?? []).filter((r) => !r.error && !r.skip && !r.result), [rows]);
 
   const pick = async (file: File) => {
     setError("");
@@ -74,7 +90,7 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
     setFileName(file.name);
     setBusy("엑셀 읽는 중…");
     try {
-      setRows((await readImportFile(file)).map(check));
+      setRows(checkAll(await readImportFile(file)));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -83,17 +99,19 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
   };
 
   const run = async () => {
-    if (!rows) return;
+    if (!rows || blocked) return;
     const list = [...rows];
     let n = 0;
     for (const [i, r] of list.entries()) {
-      if (r.error || r.result) continue;
+      if (r.error || r.skip || r.result) continue;
       n++;
       setBusy(`등록 중… ${n}/${ok.length}`);
       const id = crypto.randomUUID();
       let paths: string[] = [];
       try {
-        const processed = await Promise.all(r.photos.slice(0, 6).map((b, j) => processPhoto(new File([b], `excel-${j}.jpg`, { type: b.type }))));
+        // 사진 개수 제한 없음 (용량을 줄이며 한 장씩)
+        const processed = [];
+        for (const [j, b] of r.photos.entries()) processed.push(await processPhoto(new File([b], `excel-${j}.jpg`, { type: b.type })));
         paths = processed.length ? await uploadPhotos(id, "before", processed) : [];
         const ref = `xlsx-up:${moduleCode}:${r.date}:${key(r.location)}:${key(r.sub)}:${key(r.problem)}`.slice(0, 300);
         const res = await importFinding(
@@ -197,8 +215,9 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
               {rows && (
                 <>
                   <p className="text-sm text-gray-700">
-                    <b>{fileName}</b> · 읽은 행 {rows.length}건 → 등록 가능 <b className="text-brand-800">{count((r) => !r.error)}</b>건 · 제외{" "}
-                    {count((r) => !!r.error)}건
+                    <b>{fileName}</b> · 읽은 행 {rows.length}건 → 등록할 건 <b className="text-brand-800">{ok.length}</b>건
+                    {count((r) => !!r.skip) > 0 && ` · 이미 프로그램에 있어 건너뜀 ${count((r) => !!r.skip)}건`}
+                    {blocked && <b className="text-red-700"> · 문제 있는 행 {problems.length}건</b>}
                     {finished && (
                       <span className="ml-2">
                         → 등록 <b className="text-emerald-700">{count((r) => r.result === "done")}</b> · 이미 있음 {count((r) => r.result === "dup")} · 실패{" "}
@@ -206,6 +225,18 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
                       </span>
                     )}
                   </p>
+                  {blocked && (
+                    <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+                      <p className="font-semibold">엑셀 내용에 문제가 있어 등록할 수 없습니다. 아래 행을 고친 뒤 파일을 다시 올려 주세요.</p>
+                      <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs">
+                        {problems.map((p) => (
+                          <li key={p.excelRow}>
+                            <b>{p.excelRow}행</b> : {p.error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div className="overflow-x-auto rounded-md border border-gray-200">
                     <table className="w-full min-w-[720px] text-xs">
                       <thead className="bg-gray-50 text-gray-600">
@@ -217,9 +248,9 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {rows.map((r) => (
-                          <tr key={r.excelRow} className={r.error ? "bg-gray-50 text-gray-400" : ""}>
+                          <tr key={r.excelRow} className={r.error && !r.result ? "bg-red-50" : r.skip ? "bg-gray-50 text-gray-400" : ""}>
                             <td className="px-2 py-1.5">{r.excelRow}</td>
-                            <td className="px-2 py-1.5 whitespace-nowrap">{r.date ?? "-"}</td>
+                            <td className={`px-2 py-1.5 whitespace-nowrap ${r.dateError ? "font-medium text-red-700" : ""}`}>{r.date ?? (r.dateText || "-")}</td>
                             <td className="px-2 py-1.5">
                               {r.location || "-"}
                               {r.sub && ` / ${r.sub}`}
@@ -237,7 +268,9 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
                               ) : r.result === "fail" ? (
                                 <span className="text-red-600">실패 : {r.message}</span>
                               ) : r.error ? (
-                                <span className="text-amber-700">{r.error}</span>
+                                <span className="text-red-700">{r.error}</span>
+                              ) : r.skip ? (
+                                <span className="text-gray-500">이미 있음 (건너뜀)</span>
                               ) : (
                                 <span className="text-brand-800">등록 예정</span>
                               )}
@@ -248,7 +281,7 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
                     </table>
                   </div>
                   <p className="text-xs text-gray-500">
-                    제외된 행은 엑셀을 고쳐 다시 올리시면 됩니다. 같은 파일을 다시 올려도 이미 등록된 건은 두 번 등록되지 않습니다. 장소·부서·유형은 환경설정의 이름과 같아야 합니다.
+                    검사 항목 : 시행일(없는 날짜·오늘 이후·1년 경과), 장소·유형·담당부서(환경설정 목록과 같은 이름), 문제점, 개선 전 사진, 같은 파일 안 중복. 세부장소는 목록에 없으면 직접입력으로 들어갑니다. 같은 파일을 다시 올려도 이미 등록된 건은 두 번 등록되지 않습니다.
                   </p>
                 </>
               )}
@@ -259,8 +292,8 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
                 {finished ? "닫기" : "취소"}
               </button>
               {!finished && (
-                <button onClick={run} disabled={!!busy || ok.length === 0} className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
-                  {ok.length}건 등록
+                <button onClick={run} disabled={!!busy || blocked || ok.length === 0} className="rounded-md bg-brand-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-40">
+                  {blocked ? "문제를 고친 뒤 다시 올려 주세요" : `${ok.length}건 등록`}
                 </button>
               )}
             </div>
