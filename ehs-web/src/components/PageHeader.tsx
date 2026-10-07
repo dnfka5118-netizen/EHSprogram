@@ -6,7 +6,7 @@ export type Crumb = { label: string; href?: string };
 // 화면 상단 흰 제목 띠 : 경로 · 제목 · 우측 버튼 · 아래 탭
 export function PageHeader({ title, crumbs = [], actions, children }: { title: string; crumbs?: Crumb[]; actions?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="-mx-4 -mt-4 mb-4 border-b border-gray-200 bg-white px-4 pt-3 lg:-mx-6 lg:-mt-6 lg:mb-6 lg:px-6">
+    <div className="-mx-3 -mt-3 mb-3 border-b border-gray-200 bg-white px-3 pt-3 sm:-mx-4 sm:-mt-4 sm:mb-4 sm:px-4 lg:-mx-6 lg:-mt-6 lg:mb-6 lg:px-6">
       {crumbs.length > 0 && (
         <p className="mb-1 text-xs text-gray-500">
           {crumbs.map((c, i) => (

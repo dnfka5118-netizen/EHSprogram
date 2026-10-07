@@ -137,7 +137,7 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
         <Link href="/" onClick={afterNav} className={`flex items-center gap-2 text-sm ${pathname === "/" ? "font-bold" : ""}`}>
           <Icon name="home" /> 내 할 일
         </Link>
-        <button type="button" onClick={fold} className="flex items-center gap-1 rounded px-2 py-1 text-xs text-white/80 hover:bg-white/10 hover:text-white" title="메뉴 접기">
+        <button type="button" onClick={fold} className="hidden items-center gap-1 rounded px-2 py-1 text-xs text-white/80 lg:flex hover:bg-white/10 hover:text-white" title="메뉴 접기">
           <Icon name="fold" size={16} /> 접기
         </button>
       </div>
@@ -246,13 +246,24 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
   );
 
   return (
-    <div className={`min-h-screen [--sidebar-w:4rem] ${collapsed ? "lg:[--sidebar-w:4rem]" : "lg:[--sidebar-w:15rem]"}`}>
+    <div className={`min-h-screen [--sidebar-w:0px] ${collapsed ? "lg:[--sidebar-w:4rem]" : "lg:[--sidebar-w:15rem]"}`}>
       {/* 상단 헤더 : 항상 맨 위 전체 폭 고정 */}
       <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center border-b border-gray-200 bg-white">
-        <Link href="/" className="flex h-full shrink-0 items-center gap-2 px-4 text-brand-900 lg:w-60">
+        {/* 휴대폰·태블릿 : 왼쪽 메뉴 막대를 숨기고 이 버튼으로 메뉴를 엶 (화면 폭 확보) */}
+        <button
+          type="button"
+          onClick={() => setMobileOpen((o) => !o)}
+          className="flex h-full shrink-0 items-center gap-1 pr-1 pl-3 text-brand-900 lg:hidden"
+          aria-label="메뉴 열기"
+          aria-expanded={mobileOpen}
+        >
+          <Icon name="common" size={22} />
+          <span className="text-xs font-medium">메뉴</span>
+        </button>
+        <Link href="/" className="flex h-full min-w-0 shrink items-center gap-2 px-2 text-brand-900 lg:w-60 lg:shrink-0 lg:px-4">
           <span className="rounded-md bg-brand-800 px-1.5 py-1 text-xs font-bold text-white">EHS</span>
           <span className="leading-tight">
-            <b className="block text-[15px]">환경안전 통합관리</b>
+            <b className="hidden text-[15px] min-[400px]:block">환경안전 통합관리</b>
             <span className="hidden text-[11px] text-gray-500 sm:block">EHS 시스템</span>
           </span>
         </Link>
@@ -272,7 +283,7 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
             );
           })}
         </nav>
-        <div className="ml-auto flex items-center gap-2 px-3 text-sm lg:px-6">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 px-2 text-sm sm:gap-2 sm:px-3 lg:px-6">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
@@ -299,7 +310,6 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
 
       <aside className="fixed top-16 bottom-0 left-0 z-30">
         <div className="hidden h-full lg:block">{collapsed ? rail : full}</div>
-        <div className="h-full lg:hidden">{rail}</div>
       </aside>
       {mobileOpen && (
         <div className="fixed inset-x-0 top-16 bottom-0 z-30 lg:hidden">
@@ -311,7 +321,7 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
       <MenuSearch domains={domains} open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <div className="pt-16 pl-[var(--sidebar-w)] transition-[padding] duration-200">
-        <main className="p-4 lg:p-6">{children}</main>
+        <main className="p-3 sm:p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

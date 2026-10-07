@@ -3,7 +3,7 @@ export function PageSkeleton({ header = true, rows = 6 }: { header?: boolean; ro
   return (
     <div className="animate-pulse space-y-4" aria-busy="true" aria-label="불러오는 중">
       {header && (
-        <div className="-mx-4 -mt-4 mb-4 border-b border-gray-200 bg-white px-4 pt-3 pb-4 lg:-mx-6 lg:-mt-6 lg:mb-6 lg:px-6">
+        <div className="-mx-3 -mt-3 mb-3 border-b border-gray-200 bg-white px-3 pt-3 pb-4 sm:-mx-4 sm:-mt-4 sm:mb-4 sm:px-4 lg:-mx-6 lg:-mt-6 lg:mb-6 lg:px-6">
           <div className="h-3 w-40 rounded bg-gray-200" />
           <div className="mt-3 h-6 w-56 rounded bg-gray-200" />
         </div>

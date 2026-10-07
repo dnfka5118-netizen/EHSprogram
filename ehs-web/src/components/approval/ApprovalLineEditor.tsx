@@ -31,12 +31,12 @@ export function ApprovalLineEditor({ value, onChange, people, meId }: { value: L
     const cols = Math.max(4, items.length);
     return (
       <tr key={kind}>
-        <th className="w-12 border border-gray-400 bg-gray-50 px-1 text-center align-middle text-xs font-medium text-gray-700">{kind}</th>
+        <th className="w-9 border border-gray-400 bg-gray-50 px-0.5 text-center align-middle text-[11px] font-medium text-gray-700 sm:w-12 sm:text-xs">{kind}</th>
         {Array.from({ length: cols }, (_, i) => {
           const s = items[i];
           const p = s ? who(s.approver_id) : undefined;
           return (
-            <td key={i} className="w-24 border border-gray-400 p-0 align-top text-center text-xs">
+            <td key={i} className="w-14 border border-gray-400 p-0 align-top text-center text-[11px] sm:w-24 sm:text-xs">
               {/* 위 칸 : 직위(없으면 단계 이름) — 길면 두 줄까지, 칸 높이 고정 */}
               <div className="flex h-10 items-center justify-center border-b border-gray-300 px-1 leading-tight font-medium break-keep text-gray-700">
                 <span className="line-clamp-2">{s ? (p?.position ?? s.label) : ""}</span>
@@ -208,9 +208,9 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto p-4 md:grid-cols-[280px_1fr]">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 md:grid md:grid-cols-[280px_1fr]">
           {/* 왼쪽 : 검색 + 조직도 */}
-          <div className="flex min-h-0 flex-col gap-2">
+          <div className="flex shrink-0 flex-col gap-2 md:min-h-0">
             <input
               type="search"
               value={q}
@@ -218,7 +218,7 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
               placeholder="이름 · 부서 · 직위 검색"
               className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-700 focus:outline-none"
             />
-            <div className="max-h-72 overflow-y-auto rounded-md border border-gray-200 p-2 text-sm md:max-h-none md:flex-1">
+            <div className="h-52 overflow-y-auto rounded-md border border-gray-200 p-2 text-sm md:h-auto md:max-h-none md:flex-1">
               {!org && <p className="p-2 text-xs text-gray-500">조직도를 불러오는 중…</p>}
               {tree.map(({ site, divisions }) => (
                 <details key={site.id} open className="mb-1">
@@ -244,10 +244,10 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
           </div>
 
           {/* 오른쪽 */}
-          <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-w-0 shrink-0 flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-gray-600">
-                {q ? `검색 결과 ${list.length}명` : deptSel ? `${deptOf(deptSel)?.name ?? ""} ${list.length}명` : "왼쪽 조직도에서 부서를 고르거나 검색하세요"}
+                {q ? `검색 결과 ${list.length}명` : deptSel ? `${deptOf(deptSel)?.name ?? ""} ${list.length}명` : "조직도에서 부서를 고르거나 이름을 검색하세요"}
               </p>
               <div className="flex gap-1">
                 {(["결재", "합의", "참조", "시행"] as Kind[]).map((k) => (
@@ -269,7 +269,7 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
                         aria-label="모두 선택"
                       />
                     </th>
-                    <th className="px-2 py-1.5 text-left">사업장</th>
+                    <th className="hidden px-2 py-1.5 text-left sm:table-cell">사업장</th>
                     <th className="px-2 py-1.5 text-left">부서</th>
                     <th className="px-2 py-1.5 text-left">직위</th>
                     <th className="px-2 py-1.5 text-left">사용자</th>
@@ -285,7 +285,7 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
                       <td className="px-2 py-1.5 text-center">
                         <input type="checkbox" readOnly checked={checked.includes(p.id)} />
                       </td>
-                      <td className="px-2 py-1.5 text-xs text-gray-600">{siteName(p)}</td>
+                      <td className="hidden px-2 py-1.5 text-xs text-gray-600 sm:table-cell">{siteName(p)}</td>
                       <td className="px-2 py-1.5 text-xs text-gray-600">{deptLabel(p)}</td>
                       <td className="px-2 py-1.5 text-xs text-gray-600">{p.position ?? ""}</td>
                       <td className="px-2 py-1.5 font-medium text-gray-900">{p.name}</td>
@@ -321,15 +321,15 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
               </button>
             </div>
             <div className="overflow-x-auto rounded-md border border-gray-200">
-              <table className="w-full min-w-[520px] text-sm">
+              <table className="w-full text-sm sm:min-w-[520px]">
                 <thead className="bg-gray-50 text-xs text-gray-600">
                   <tr>
                     <th className="w-8 px-2 py-1.5" />
-                    <th className="w-16 px-2 py-1.5">이동</th>
+                    <th className="w-14 px-1 py-1.5">이동</th>
                     <th className="w-10 px-2 py-1.5">NO</th>
                     {tab === "결재" && <th className="w-16 px-2 py-1.5">종류</th>}
-                    <th className="px-2 py-1.5 text-left">사업장</th>
-                    <th className="px-2 py-1.5 text-left">부서</th>
+                    <th className="hidden px-2 py-1.5 text-left sm:table-cell">사업장</th>
+                    <th className="hidden px-2 py-1.5 text-left sm:table-cell">부서</th>
                     <th className="px-2 py-1.5 text-left">사용자</th>
                   </tr>
                 </thead>
@@ -355,8 +355,8 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
                         <td className="px-2 py-1.5 text-center">
                           <input type="checkbox" checked={marked.includes(i)} onChange={() => setMarked((m) => (m.includes(i) ? m.filter((x) => x !== i) : [...m, i]))} aria-label="삭제할 줄 선택" />
                         </td>
-                        <td className="px-2 py-1.5 text-center whitespace-nowrap">
-                          <span className="cursor-grab px-1 text-gray-400" title="끌어서 순서 바꾸기">
+                        <td className="px-1 py-1.5 text-center whitespace-nowrap">
+                          <span className="hidden cursor-grab px-1 text-gray-400 sm:inline" title="끌어서 순서 바꾸기">
                             ☰
                           </span>
                           <button type="button" onClick={() => move(i, tabItems[n - 1]?.i ?? i)} disabled={n === 0} className="px-1 text-gray-500 disabled:opacity-20" aria-label="위로">
@@ -380,15 +380,16 @@ function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[
                             </select>
                           </td>
                         )}
-                        <td className="px-2 py-1.5 text-xs text-gray-600">{p ? siteName(p) : ""}</td>
-                        <td className="px-2 py-1.5 text-xs text-gray-600">{p ? deptLabel(p) : ""}</td>
+                        <td className="hidden px-2 py-1.5 text-xs text-gray-600 sm:table-cell">{p ? siteName(p) : ""}</td>
+                        <td className="hidden px-2 py-1.5 text-xs text-gray-600 sm:table-cell">{p ? deptLabel(p) : ""}</td>
                         <td className="px-2 py-1.5">
                           {p ? (
                             <>
                               <b className="font-medium text-gray-900">{p.name}</b> <span className="text-xs text-gray-500">{p.position ?? ""}</span>
+                              <span className="block text-[11px] text-gray-500 sm:hidden">{deptLabel(p)}</span>
                             </>
                           ) : (
-                            <span className="text-xs text-red-600">{s.label} — 결재자 미지정 (사람을 넣거나 삭제)</span>
+                            <span className="text-xs text-red-600">{s.label} — 미지정</span>
                           )}
                         </td>
                       </tr>

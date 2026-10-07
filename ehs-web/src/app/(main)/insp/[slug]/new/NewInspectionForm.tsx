@@ -90,7 +90,7 @@ export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector
         </div>
       </details>
 
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:flex-row lg:-mx-6 lg:px-6">
+      <div className="sticky bottom-0 -mx-3 sm:-mx-4 flex flex-col gap-2 border-t border-gray-200 bg-white/95 px-3 py-3 sm:px-4 backdrop-blur sm:flex-row lg:-mx-6 lg:px-6">
         <Button type="button" disabled={pending} onClick={() => submit("continue")} className="flex-1 py-3 text-base">
           {pending ? "저장 중…" : "등록하고 다음 지적사항"}
         </Button>

@@ -99,12 +99,12 @@ export function Card({ title, actions, children, className }: { title?: ReactNod
   return (
     <section className={cx("rounded-lg border border-gray-200 bg-white", className)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-3 sm:px-4">
           <h2 className="font-semibold text-gray-900">{title}</h2>
           {actions}
         </header>
       )}
-      <div className="p-4">{children}</div>
+      <div className="p-3 sm:p-4">{children}</div>
     </section>
   );
 }

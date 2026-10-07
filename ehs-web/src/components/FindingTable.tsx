@@ -129,10 +129,11 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                 <Check id={r.id} />
               </div>
             )}
-            <Thumb row={r} onOpen={showPhotos} className="h-24 w-24 shrink-0" />
+            <Thumb row={r} onOpen={showPhotos} className="h-20 w-20 shrink-0 sm:h-24 sm:w-24" />
             <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-xs text-gray-500">
+              {/* 좁은 화면 : 날짜·장소가 길면 완료 표시는 아래 줄로 */}
+              <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                <p className="min-w-0 flex-1 basis-32 text-xs break-keep text-gray-500">
                   {showModule && <b className="font-medium text-gray-700">{r.module_name} · </b>}
                   {fmtDate(r.inspection_date)} · {r.location_name ?? "-"}
                   {r.sub_location_name && ` / ${r.sub_location_name}`}
@@ -337,7 +338,7 @@ function DoneChip({ row, onReason, stacked }: { row: FindingRow; onReason: (e: M
   if (row.status === "closed")
     return <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium whitespace-nowrap text-emerald-800">완료</span>;
   return (
-    <span className={`inline-flex items-center gap-1 ${stacked ? "flex-col" : ""}`}>
+    <span className={`inline-flex items-center gap-1 ${stacked ? "flex-col" : "flex-wrap"}`}>
       <button
         type="button"
         onClick={(e) => onReason(e, row)}

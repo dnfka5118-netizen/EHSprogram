@@ -23,12 +23,13 @@ export function DateRange({ from, to }: { from: string; to: string }) {
     setB(ymd(last));
   };
   return (
-    <div className="col-span-2 flex flex-wrap items-center gap-1 md:col-span-1">
-      <span className="text-xs text-gray-500">시행 일자</span>
-      <input type="date" name="from" value={a} max={b || undefined} onChange={(e) => setA(e.target.value)} className={SELECT} aria-label="시행 일자 시작" />
+    // 휴대폰 : [시행 일자] / [시작 ~ 끝] / [빠른 선택] 3줄, 넓은 화면 : 한 줄
+    <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 md:col-span-1 md:flex md:flex-wrap">
+      <span className="col-span-3 text-xs text-gray-500">시행 일자</span>
+      <input type="date" name="from" value={a} max={b || undefined} onChange={(e) => setA(e.target.value)} className={`${SELECT} w-full min-w-0 md:w-auto`} aria-label="시행 일자 시작" />
       <span className="text-gray-400">~</span>
-      <input type="date" name="to" value={b} min={a || undefined} onChange={(e) => setB(e.target.value)} className={SELECT} aria-label="시행 일자 끝" />
-      <span className="flex gap-1 text-xs">
+      <input type="date" name="to" value={b} min={a || undefined} onChange={(e) => setB(e.target.value)} className={`${SELECT} w-full min-w-0 md:w-auto`} aria-label="시행 일자 끝" />
+      <span className="col-span-3 flex flex-wrap gap-1 text-xs">
         {(
           [
             ["this", "이번 달"],

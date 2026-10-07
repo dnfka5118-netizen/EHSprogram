@@ -35,6 +35,9 @@
 - 사진은 브라우저에서 압축(긴 변 1600px JPEG) 후 Storage `findings` 버킷 `{지적사항ID}/` 경로에 업로드.
 - 엑셀 보고서(사진 포함)는 Vercel 응답 크기 제한 때문에 브라우저에서 생성.
 
+## 화면 기준
+- **휴대폰 320px 폭이 기준**이다. 새 화면·수정은 `모바일화면기준.md` 를 따르고, 끝나면 `node scripts/mobile-check.mjs` 로 넘침이 없는지 확인한다.
+
 ## 검증
 - `cd ehs-web && npm run test:db` : PGlite 로 DB 처리 흐름·권한·알림 테스트 (Supabase 불필요). DB 를 바꾸면 테스트도 함께 추가.
 - `npx tsc --noEmit`, `npx eslint src scripts`, `npx next build`
