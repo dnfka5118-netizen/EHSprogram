@@ -8,6 +8,7 @@ import { resolveLine } from "@/lib/approval-line";
 import { getDailyLog, logStamps } from "@/lib/daily-log";
 import { ymLabel } from "@/lib/daily";
 import { Card } from "@/components/ui";
+import { ScrollX } from "@/components/ScrollX";
 import { ApprovalStatus } from "@/components/approval/ApprovalStatus";
 import { DailyLogSheet } from "@/components/DailyLogSheet";
 import { SubmitLog } from "./SubmitLog";
@@ -44,7 +45,12 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
       </div>
 
       <Card>
-        <DailyLogSheet d={d} stamps={logStamps(approval)} />
+        <p className="mb-2 text-xs text-gray-500 lg:hidden">원본 양식 크기 그대로입니다. 옆으로 밀어서 보세요.</p>
+        <ScrollX>
+          <div className="min-w-[1000px]">
+            <DailyLogSheet d={d} stamps={logStamps(approval)} />
+          </div>
+        </ScrollX>
       </Card>
 
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { Card } from "@/components/ui";
-import { ScrollX } from "@/components/ScrollX";
 import { fmtDateTime, todayKst } from "@/lib/format";
 
 // 관리감독자 일일점검 : 오늘 구역별 점검 여부 · 이번 달 점검 일수 (내 구역 먼저)
@@ -43,48 +42,32 @@ export async function DailyStatus() {
       }
     >
       <p className="mb-2 text-xs break-keep text-gray-500">점검은 현장에 붙은 QR 을 휴대폰 카메라로 찍어서 합니다. ★ = 내 담당 구역</p>
-      <ScrollX>
-        <table className="w-full min-w-[520px] text-sm">
-          <thead className="border-b border-gray-200 text-left text-xs text-gray-500">
-            <tr>
-              <th className="px-2 py-1.5 font-medium">구역</th>
-              <th className="px-2 py-1.5 font-medium">담당 관리감독자</th>
-              <th className="px-2 py-1.5 font-medium">오늘</th>
-              <th className="px-2 py-1.5 text-right font-medium">이번 달</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {list.map((a) => {
-              const t = ck.find((c) => c.area_id === a.id && c.check_date === today);
-              const days = new Set(ck.filter((c) => c.area_id === a.id).map((c) => c.check_date)).size;
-              return (
-                <tr key={a.id} className={mine.has(a.id) ? "bg-brand-50/40" : ""}>
-                  <td className="px-2 py-1.5">
-                    {mine.has(a.id) && <span className="mr-1 text-amber-500">★</span>}
-                    <b className="font-medium">{a.name}</b> <span className="text-xs text-gray-500">{a.form_code}형{a.departments ? ` · ${a.departments.name}` : ""}</span>
-                  </td>
-                  <td className="px-2 py-1.5 text-xs break-keep text-gray-600">
-                    {mem
-                      .filter((m) => m.area_id === a.id)
-                      .map((m) => m.profiles?.name)
-                      .join(", ") || "-"}
-                  </td>
-                  <td className="px-2 py-1.5 text-xs whitespace-nowrap">
-                    {t ? (
-                      <span className="text-emerald-700">
-                        ✓ {t.profiles?.name} {fmtDateTime(t.submitted_at).slice(-5)}
-                      </span>
-                    ) : (
-                      <span className="text-red-600">미실시</span>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-right text-xs tabular-nums">{days}일</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </ScrollX>
+      <ul className="divide-y divide-gray-100">
+        {list.map((a) => {
+          const t = ck.find((c) => c.area_id === a.id && c.check_date === today);
+          const days = new Set(ck.filter((c) => c.area_id === a.id).map((c) => c.check_date)).size;
+          const names = mem.filter((m) => m.area_id === a.id).map((m) => m.profiles?.name).join(", ");
+          return (
+            <li key={a.id} className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 px-1 py-2 text-sm ${mine.has(a.id) ? "bg-brand-50/40" : ""}`}>
+              <span className="min-w-0 flex-1 basis-48">
+                {mine.has(a.id) && <span className="mr-1 text-amber-500">★</span>}
+                <b className="font-medium">{a.name}</b> <span className="text-xs text-gray-500">{a.form_code}형{a.departments ? ` · ${a.departments.name}` : ""}</span>
+                <span className="block text-xs break-keep text-gray-500">{names || "담당자 없음"}</span>
+              </span>
+              <span className="text-xs whitespace-nowrap">
+                {t ? (
+                  <span className="text-emerald-700">
+                    ✓ {t.profiles?.name} {fmtDateTime(t.submitted_at).slice(-5)}
+                  </span>
+                ) : (
+                  <span className="font-medium text-red-600">오늘 미실시</span>
+                )}
+              </span>
+              <span className="text-xs whitespace-nowrap text-gray-500 tabular-nums">이번 달 {days}일</span>
+            </li>
+          );
+        })}
+      </ul>
     </Card>
   );
 }
