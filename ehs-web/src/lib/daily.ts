@@ -7,7 +7,7 @@ export const RESULT_LABEL: Record<DailyResult, string> = { O: "적합", X: "부�
 export const RESULT_HINT = "O : 적합 / 정상 · X : 부적합 / 개선 필요 · △ : 이벤트 발생 · - : 해당 없음";
 export const CYCLE_LABEL: Record<DailyCycle, string> = { D: "매일", W: "주 1회", M: "월 1회" };
 
-export type DailyForm = { code: string; name: string; form_no: string | null; writer_note: string | null; sort_order: number; is_active: boolean };
+export type DailyForm = { code: string; name: string; form_no: string | null; writer_note: string | null; sort_order: number; is_active: boolean; use_qr: boolean };
 export type DailyFormItem = {
   id: string;
   form_code: string;
@@ -25,6 +25,18 @@ export type DailyArea = {
   name: string;
   form_code: string;
   department_id: string | null;
+  location_id: string | null;
+  sub_location_id: string | null;
+  qr_token: string; // QR 없는 양식(C·D형)의 [점검하기] 링크
+  is_active: boolean;
+  sort_order: number;
+  area_text: string | null; // 담당 Area 설명 (비우면 묶인 QR 지점 이름)
+};
+// 현장 QR 지점 (장소 · 세부장소) — 여러 담당 Area 가 같이 쓸 수 있음
+export type DailyPoint = {
+  id: string;
+  site_id: string;
+  name: string;
   location_id: string | null;
   sub_location_id: string | null;
   qr_token: string;
@@ -49,9 +61,11 @@ export type DailyOpenItem = {
 export type DailyOpen = {
   today: string;
   biz_day: boolean;
+  point?: string | null; // 찍은 QR 지점
   area: {
     id: string;
     name: string;
+    label: string; // 담당 Area
     form_code: string;
     department_id: string | null;
     department: string | null;
@@ -70,6 +84,9 @@ export type DailyOpen = {
   substitute_for: string | null;
   items: DailyOpenItem[];
 };
+
+// 담당 아닌 사람이 QR 을 찍었을 때 : 이 장소 담당자 중 누구 대신 점검할지
+export type DailyChoose = { choose: true; point: string; areas: { id: string; name: string; form_code: string; members: string | null }[] };
 
 export const SUB_REASONS = ["휴가", "외근", "교육", "출장", "기타"];
 

@@ -394,7 +394,7 @@ export async function saveDailyArea(_prev: ActionState, fd: FormData): Promise<A
     name,
     form_code,
     department_id: nullable(s(fd, "department_id")),
-    location_id: nullable(s(fd, "location_id")),
+    area_text: nullable(s(fd, "area_text")),
     sort_order: n(fd, "sort_order"),
     is_active: id ? fd.get("is_active") === "on" : true,
   };
@@ -409,14 +409,43 @@ export async function saveDailyArea(_prev: ActionState, fd: FormData): Promise<A
     areaId = data.id;
   }
   const members = fd.getAll("member").map(String).filter(Boolean);
-  const { error } = await supabase.rpc("set_daily_area_members", { p_area: areaId, p_users: members });
+  const points = fd.getAll("point").map(String).filter(Boolean);
+  const [{ error }, { error: pErr }] = await Promise.all([
+    supabase.rpc("set_daily_area_members", { p_area: areaId, p_users: members }),
+    supabase.rpc("set_daily_area_points", { p_area: areaId, p_points: points }),
+  ]);
+  return error || pErr ? { error: toMessage(error ?? pErr) } : done();
+}
+
+// 현장 QR 지점 (장소 · 세부장소)
+export async function saveDailyPoint(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const me = await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("daily_checks").select("id", { count: "exact", head: true }).eq("point_id", id);
+    if (count) return { error: `이 QR 로 점검한 기록이 ${count}건 있어 삭제할 수 없습니다. '사용' 을 끄면 QR 이 막힙니다.` };
+    const { error } = await supabase.from("daily_points").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const name = s(fd, "name");
+  if (!name) return { error: "QR 지점 이름을 입력해 주세요. (예 : HBC-C1 제조소)" };
+  const row = {
+    name,
+    location_id: nullable(s(fd, "location_id")),
+    sub_location_id: nullable(s(fd, "sub_location_id")),
+    sort_order: n(fd, "sort_order"),
+    is_active: id ? fd.get("is_active") === "on" : true,
+  };
+  if (!me.site_id && !id) return { error: "관리자 계정에 사업장이 지정되어 있지 않습니다." };
+  const { error } = id ? await supabase.from("daily_points").update(row).eq("id", id) : await supabase.from("daily_points").insert({ ...row, site_id: me.site_id });
   return error ? { error: toMessage(error) } : done();
 }
 
-export async function reissueDailyQr(areaId: string): Promise<ActionState> {
+export async function reissueDailyQr(pointId: string): Promise<ActionState> {
   await requireAdmin();
   const supabase = await createClient();
-  const { error } = await supabase.rpc("reissue_daily_qr", { p_area: areaId });
+  const { error } = await supabase.rpc("reissue_daily_point_qr", { p_point: pointId });
   return error ? { error: toMessage(error) } : done("QR 을 새로 발급했습니다. 이전 QR 은 더 이상 열리지 않으니 새로 인쇄해 붙여 주세요.");
 }
 

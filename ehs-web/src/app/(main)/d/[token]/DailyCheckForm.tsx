@@ -13,7 +13,7 @@ import { fmtDate } from "@/lib/format";
 import { submitDailyBackfill, submitDailyCheck } from "../../insp/daily-actions";
 
 // qr = 현장 (담당자 또는 대체 점검) · backfill = 월간 일지에서 빠진 날 소급 입력 (컴퓨터, 사진 선택)
-export type CheckMode = { kind: "qr"; token: string; scannedAt: string } | { kind: "backfill"; areaId: string; day: string; logId: string };
+export type CheckMode = { kind: "qr"; token: string; scannedAt: string; areaId: string | null } | { kind: "backfill"; areaId: string; day: string; logId: string };
 
 type Entry = {
   result: DailyResult | null;
@@ -113,7 +113,7 @@ export function DailyCheckForm({ mode, data, departments }: { mode: CheckMode; d
         }
         const res =
           mode.kind === "qr"
-            ? await submitDailyCheck(mode.token, results, mode.scannedAt, substitute ? subFor : null, substitute ? [subKind, subText.trim()].filter(Boolean).join(" · ") : "")
+            ? await submitDailyCheck(mode.token, results, mode.scannedAt, substitute ? subFor : null, substitute ? [subKind, subText.trim()].filter(Boolean).join(" · ") : "", mode.areaId)
             : await submitDailyBackfill(mode.areaId, mode.day, results, reason);
         if ("error" in res) {
           await removePhotos(uploaded);

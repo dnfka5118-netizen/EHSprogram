@@ -4,19 +4,29 @@ import QRCode from "qrcode";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PrintBar } from "../PrintButton";
-import { qrPath, type DailyArea } from "@/lib/daily";
+import { qrPath, type DailyPoint } from "@/lib/daily";
 import "../paper.css";
 
 // 현장 부착용 QR (A4 한 장에 2개) — 관리자만
 export default async function DailyQrPrintPage({ searchParams }: PageProps<"/print/daily-qr">) {
   const me = await getProfile();
   if (!me?.is_admin) redirect("/");
-  const { area } = await searchParams;
+  const { point } = await searchParams;
   const supabase = await createClient();
-  let q = supabase.from("daily_areas").select("*, departments(name)").eq("is_active", true).order("sort_order").order("name");
-  if (typeof area === "string") q = q.eq("id", area);
+  let q = supabase
+    .from("daily_points")
+    .select("*, daily_area_points(daily_areas(name, form_code, is_active))")
+    .eq("is_active", true)
+    .order("sort_order")
+    .order("name");
+  if (typeof point === "string") q = q.eq("id", point);
   const { data } = await q;
-  const areas = (data ?? []) as (DailyArea & { departments: { name: string } | null })[];
+  type Row = DailyPoint & { daily_area_points: { daily_areas: { name: string; form_code: string; is_active: boolean } | null }[] };
+  const areas = ((data ?? []) as Row[]).map((p) => ({
+    ...p,
+    who: p.daily_area_points.map((x) => x.daily_areas).filter((a) => a?.is_active).map((a) => a!.name.replace(/\s*\([A-D]형\)$/, "")),
+    forms: [...new Set(p.daily_area_points.map((x) => x.daily_areas?.form_code).filter(Boolean))],
+  }));
 
   const h = await headers();
   const origin = process.env.APP_URL?.replace(/\/$/, "") || `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
@@ -34,10 +44,11 @@ export default async function DailyQrPrintPage({ searchParams }: PageProps<"/pri
             <p className="text-[13pt] font-bold text-brand-800">안전보건 관리감독자 일일점검</p>
             <p className="mt-1 text-[22pt] leading-tight font-extrabold break-keep text-gray-900">{c.name}</p>
             <p className="mt-1 text-[11pt] text-gray-600">
-              {c.form_code}형{c.departments?.name ? ` · ${c.departments.name}` : ""}
+              {c.forms.map((f) => `${f}형`).join(" · ")}
+              {c.who.length ? ` · 관리감독자 ${c.who.join(", ")}` : ""}
             </p>
             <div className="mt-3 h-[70mm] w-[70mm] [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: c.svg }} />
-            <p className="mt-3 text-[11pt] break-keep text-gray-700">휴대폰 카메라로 찍으면 이 구역의 점검표가 열립니다.</p>
+            <p className="mt-3 text-[11pt] break-keep text-gray-700">담당 관리감독자가 휴대폰 카메라로 찍으면 본인 점검표가 열립니다.</p>
             <p className="mt-1 font-mono text-[7pt] break-all text-gray-400">{c.url}</p>
           </div>
         ))}

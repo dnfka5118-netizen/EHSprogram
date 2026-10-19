@@ -22,7 +22,7 @@ export type DailyLogData = {
   id: string;
   ym: string; // YYYY-MM-01
   days: number;
-  area: DailyArea & { department: string | null; site: string | null };
+  area: DailyArea & { department: string | null; site: string | null; label: string };
   form: DailyForm;
   items: DailyFormItem[];
   cells: Record<string, Record<number, DailyResult>>; // item_id → 일 → 판정
@@ -47,7 +47,7 @@ export async function getDailyLog(supabase: SupabaseClient, id: string): Promise
   const days = new Date(y, m, 0).getDate();
   const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
-  const [{ data: form }, { data: items }, { data: checks }, { data: yearChecks }, { data: hol }] = await Promise.all([
+  const [{ data: form }, { data: items }, { data: checks }, { data: yearChecks }, { data: hol }, { data: label }] = await Promise.all([
     supabase.from("daily_forms").select("*").eq("code", a.form_code).single(),
     supabase.from("daily_form_items").select("*").eq("form_code", a.form_code).order("sort_order"),
     supabase
@@ -59,6 +59,7 @@ export async function getDailyLog(supabase: SupabaseClient, id: string): Promise
       .order("check_date"),
     supabase.from("daily_checks").select("check_date, daily_results(finding_id)").eq("area_id", a.id).gte("check_date", `${y}-01-01`).lt("check_date", next),
     supabase.from("holidays").select("day").gte("day", ym).lt("day", next),
+    supabase.rpc("daily_area_label", { p_area: a.id }),
   ]);
 
   type Res = { item_id: string; result: DailyResult; note: string | null; action: "immediate" | "request" | null; finding_id: string | null };
@@ -166,7 +167,7 @@ export async function getDailyLog(supabase: SupabaseClient, id: string): Promise
     dayNotes,
     ym,
     days,
-    area: { ...a, department: a.departments?.name ?? null, site: a.sites?.name ?? null },
+    area: { ...a, department: a.departments?.name ?? null, site: a.sites?.name ?? null, label: (label as string | null) ?? a.name },
     form: form as DailyForm,
     items: shown,
     cells,

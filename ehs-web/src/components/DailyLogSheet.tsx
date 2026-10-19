@@ -26,7 +26,7 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
               </tr>
               <tr>
                 <th className={`${B} bg-gray-100 px-2 py-1`}>담당 Area</th>
-                <td className={`${B} px-2 py-1 break-keep`}>{d.area.name}</td>
+                <td className={`${B} px-2 py-1 break-keep`}>{d.area.label}</td>
                 <th className={`${B} bg-gray-100 px-2 py-1`}>점검자</th>
                 <td className={`${B} px-2 py-1 break-keep`}>{d.inspectors.join(", ") || "-"}</td>
               </tr>

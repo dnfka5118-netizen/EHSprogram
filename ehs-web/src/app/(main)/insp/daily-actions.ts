@@ -8,9 +8,9 @@ import { toMessage } from "@/lib/errors";
 
 // 관리감독자 일일점검 저장 (QR 화면) — 검사·지적사항 생성은 DB submit_daily_check
 //   대체 점검이면 subFor(대신한 담당자) · subReason(휴가·외근 등)
-export async function submitDailyCheck(token: string, results: unknown[], scannedAt: string, subFor: string | null, subReason: string): Promise<{ findings: number } | { error: string }> {
+export async function submitDailyCheck(token: string, results: unknown[], scannedAt: string, subFor: string | null, subReason: string, areaId: string | null): Promise<{ findings: number } | { error: string }> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("submit_daily_check", { p_token: token, p_results: results, p_scanned_at: scannedAt, p_sub_for: subFor, p_sub_reason: subReason });
+  const { data, error } = await supabase.rpc("submit_daily_check", { p_token: token, p_results: results, p_scanned_at: scannedAt, p_sub_for: subFor, p_sub_reason: subReason, p_area: areaId });
   if (error) return { error: toMessage(error) };
   after(() => processOutbox());
   revalidatePath("/", "layout");

@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -521,21 +521,23 @@ ok((await one("select count(*)::int c from daily_form_items where form_code='A' 
 ok((await one("select form from modules where code='insp_daily'")).form === "finding", "일일점검 = 지적사항형 모듈 (현황·알림·지표 공통)");
 await as(U.A);
 const area = (await one(`insert into daily_areas (site_id, name, form_code, department_id, location_id) values ($1,'HBC-C2 제조실','A',$2,$3) returning id, qr_token`, [site, PROD, loc]));
+const pt = await one("insert into daily_points (site_id, name, location_id) values ($1,'HBC-C2 제조실',$2) returning id, qr_token", [site, loc]);
+await db.query("insert into daily_area_points values ($1,$2)", [area.id, pt.id]);
 await db.query("select set_daily_area_members($1, array[$2]::uuid[])", [area.id, U.W1]);
 await as(U.W2);
-await expectError("담당 아닌 사람은 대체 점검으로만 저장", "select submit_daily_check($1,'[]')", [area.qr_token], "누구 대신");
+await expectError("담당 아닌 사람은 대체 점검으로만 저장", "select submit_daily_check($1,'[]')", [pt.qr_token], "누구 대신");
 await expectError("없는 QR 차단", "select daily_open('nope')", [], "QR");
 await as(U.W1);
-let opened = (await one("select daily_open($1) d", [area.qr_token])).d;
+let opened = (await one("select daily_open($1) d", [pt.qr_token])).d;
 ok(opened.is_member && opened.area.name === "HBC-C2 제조실" && opened.items.length === 36, `QR 열기 → A형 오늘 할 항목 ${opened.items.length}개`);
 const dItems = opened.items;
 const allO = (over = {}) => JSON.stringify(dItems.map((i) => ({ item_id: i.id, result: "O", ...(over[i.code] ?? {}) })));
-await expectError("판정 누락 차단", "select submit_daily_check($1,$2)", [area.qr_token, JSON.stringify(dItems.slice(1).map((i) => ({ item_id: i.id, result: "O" })))], "판정하지 않은");
-await expectError("부적합 내용 필수", "select submit_daily_check($1,$2)", [area.qr_token, allO({ "1-2": { result: "X" } })], "내용");
-await expectError("부적합 처리 방법 필수", "select submit_daily_check($1,$2)", [area.qr_token, allO({ "1-2": { result: "X", note: "누액" } })], "처리 방법");
+await expectError("판정 누락 차단", "select submit_daily_check($1,$2)", [pt.qr_token, JSON.stringify(dItems.slice(1).map((i) => ({ item_id: i.id, result: "O" })))], "판정하지 않은");
+await expectError("부적합 내용 필수", "select submit_daily_check($1,$2)", [pt.qr_token, allO({ "1-2": { result: "X" } })], "내용");
+await expectError("부적합 처리 방법 필수", "select submit_daily_check($1,$2)", [pt.qr_token, allO({ "1-2": { result: "X", note: "누액" } })], "처리 방법");
 const fx1 = "22222222-0000-0000-0000-000000000001", fx2 = "22222222-0000-0000-0000-000000000002";
-await expectError("즉시 조치는 개선 후 사진 필수", "select submit_daily_check($1,$2)", [area.qr_token, allO({ "1-2": { result: "X", note: "누액", action: "immediate", finding: { id: fx1, photos: [`${fx1}/b.jpg`], fix: "조임" } } })], "개선 후 사진");
-const res = (await one("select submit_daily_check($1,$2,now()) r", [area.qr_token, allO({
+await expectError("즉시 조치는 개선 후 사진 필수", "select submit_daily_check($1,$2)", [pt.qr_token, allO({ "1-2": { result: "X", note: "누액", action: "immediate", finding: { id: fx1, photos: [`${fx1}/b.jpg`], fix: "조임" } } })], "개선 후 사진");
+const res = (await one("select submit_daily_check($1,$2,now()) r", [pt.qr_token, allO({
   "1-2": { result: "X", note: "플랜지 누액", action: "immediate", finding: { id: fx1, photos: [`${fx1}/b.jpg`], after_photos: [`${fx1}/a.jpg`], fix: "볼트 재체결" } },
   "1-3": { result: "X", note: "본체 부식", action: "request", finding: { id: fx2, photos: [`${fx2}/b.jpg`] } },
   "3-1": { result: "△", note: "아차사고 1건 보고" },
@@ -551,14 +553,14 @@ ok((await one("select count(*)::int c from notifications where finding_id=$1 and
 ok((await one("select count(*)::int c from notifications where finding_id=$1 and kind='request'", [fx2])).c >= 1, "개선 요청 건은 부서 지정자에게 조치 요청");
 ok((await one("select count(*)::int c from inspection_checks where module_code='insp_daily' and user_id=$1 and done_on=kst_today()", [U.W1])).c === 1, "점검 실시 → 점검 지표 미진행에서 빠짐");
 // 같은 날 다시 저장 : 지적사항 중복 없음, X → O 변경 차단
-await db.query("select submit_daily_check($1,$2)", [area.qr_token, allO({ "1-2": { result: "X", note: "플랜지 누액" }, "1-3": { result: "X", note: "본체 부식" } })]);
+await db.query("select submit_daily_check($1,$2)", [pt.qr_token, allO({ "1-2": { result: "X", note: "플랜지 누액" }, "1-3": { result: "X", note: "본체 부식" } })]);
 ok((await one("select count(*)::int c from findings where module_code='insp_daily'")).c === 2, "같은 날 다시 저장해도 지적사항 중복 없음");
-await expectError("지적사항이 된 항목은 X 에서 변경 불가", "select submit_daily_check($1,$2)", [area.qr_token, allO()], "바꿀 수 없습니다");
+await expectError("지적사항이 된 항목은 X 에서 변경 불가", "select submit_daily_check($1,$2)", [pt.qr_token, allO()], "바꿀 수 없습니다");
 // 주간·월간 : 이번 기간에 이미 한 항목은 오늘 할 항목에서 빠짐
 await as(null);
 await db.query("update daily_checks set check_date = kst_today() - 1 where area_id=$1", [area.id]);
 await as(U.W1);
-opened = (await one("select daily_open($1) d", [area.qr_token])).d;
+opened = (await one("select daily_open($1) d", [pt.qr_token])).d;
 const m11 = opened.items.find((i) => i.code === "1-1");
 const sameMonth = (await one("select date_trunc('month', kst_today() - 1) = date_trunc('month', kst_today()) s")).s;
 ok(!sameMonth || !!m11.done_on, "월간 항목은 이번 달에 했으면 '이미 함' 표시");
@@ -570,8 +572,8 @@ await db.query("select submit_daily_log($1,$2)", [logId, JSON.stringify([{ step_
 const ap = await one("select status, title from approvals where module_code='insp_daily' and doc_id=$1", [logId]);
 ok(ap.status === "in_review" && ap.title.includes("일일업무일지(A형)"), "월간 일지 상신 → 결재 진행");
 ok((await one("select approval_doc_path('insp_daily',$1) p", [logId])).p === `/insp/daily/logs/${logId}`, "전자결재함 → 일지 화면 연결");
-await as(U.A); ok((await one("select length(reissue_daily_qr($1)) n", [area.id])).n === 32, "QR 재발급");
-await as(U.W1); await expectError("재발급 후 이전 QR 무효", "select daily_open($1)", [area.qr_token], "QR");
+await as(U.A); ok((await one("select length(reissue_daily_point_qr($1)) n", [pt.id])).n === 32, "QR 재발급");
+await as(U.W1); await expectError("재발급 후 이전 QR 무효", "select daily_open($1)", [pt.qr_token], "QR");
 await as(null);
 
 
@@ -638,6 +640,40 @@ ok((await one("select problem from findings where id=$1", [ef])).problem.include
 await as(U.A); await db.query("select update_finding($1,$2)", [ef, edit({ department_id: PROD })]);
 const rs = await one("select status, request_department_id d, (select count(*)::int from finding_assignees where finding_id=$1) n from findings where id=$1", [ef]);
 ok(rs.status === "assign_wait" && rs.d === PROD && rs.n === 0, "관리자 부서 변경 → 담당자 초기화 · 담당자 지정 대기");
+await as(null);
+
+
+console.log("\n[일일점검 : 사람별 Area · 장소별 QR · QR 없는 양식]");
+await as(null);
+const site2 = site;
+const ptA = await one("insert into daily_points (site_id, name) values ($1,'1분석실') returning id, qr_token", [site2]);
+const arA = await one("insert into daily_areas (site_id, name, form_code, department_id) values ($1,'품질직원 (B형)','B',$2) returning id, qr_token", [site2, QA]);
+const arB = await one("insert into daily_areas (site_id, name, form_code, department_id) values ($1,'생산팀장 (B형)','B',$2) returning id, qr_token", [site2, QA]);
+await db.query("insert into daily_area_members values ($1,$2), ($3,$4)", [arA.id, U.Q, arB.id, U.H]);
+await db.query("insert into daily_area_points values ($1,$3), ($2,$3)", [arA.id, arB.id, ptA.id]);
+await as(U.Q);
+let o = (await one("select daily_open($1) d", [ptA.qr_token])).d;
+ok(o.area?.id === arA.id && o.point === "1분석실", "같은 QR 을 여러 명이 담당 → 찍은 사람 본인의 점검표");
+await as(U.H);
+o = (await one("select daily_open($1) d", [ptA.qr_token])).d;
+ok(o.area?.id === arB.id, "다른 담당자는 자기 점검표");
+await as(U.W1);
+o = (await one("select daily_open($1) d", [ptA.qr_token])).d;
+ok(o.choose && o.areas.length === 2, "담당 아닌 사람 → 이 장소 담당자 목록 (대체할 사람 선택)");
+o = (await one("select daily_open($1,$2) d", [ptA.qr_token, arA.id])).d;
+ok(o.area.id === arA.id && !o.is_member, "고른 담당자의 점검표 열기 (대체 점검)");
+const bItems = o.items.map((i) => ({ item_id: i.id, result: "O" }));
+await db.query("select submit_daily_check($1,$2,now(),$3,'외근',$4)", [ptA.qr_token, JSON.stringify(bItems), U.Q, arA.id]);
+const ck = await one("select point_id, substitute_for from daily_checks where area_id=$1 and check_date=kst_today()", [arA.id]);
+ok(ck.point_id === ptA.id && ck.substitute_for === U.Q, "대체 점검 저장 · 찍은 QR 지점 기록");
+await expectError("A·B형은 담당 Area 링크로 열 수 없음 (현장 QR 필수)", "select daily_open($1)", [arA.qr_token], "현장에 붙은 QR");
+await as(null);
+const arC = await one("insert into daily_areas (site_id, name, form_code, department_id) values ($1,'부서장 (D형)','D',$2) returning id, qr_token", [site2, QA]);
+await db.query("insert into daily_area_members values ($1,$2)", [arC.id, U.Q]);
+await as(U.Q);
+o = (await one("select daily_open($1) d", [arC.qr_token])).d;
+ok(o.area.id === arC.id && o.form.use_qr === false, "C·D형은 QR 없이 [점검하기] 로 열림");
+ok((await one("select daily_area_label($1) l", [arA.id])).l === "1분석실", "담당 Area 표시 = 묶인 장소");
 await as(null);
 
 
