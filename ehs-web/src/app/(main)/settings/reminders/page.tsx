@@ -41,7 +41,10 @@ export default async function RemindersPage() {
   ]);
   const v = (setting?.value ?? {}) as Record<string, number>;
   const previewRows = (preview ?? []) as PreviewRow[];
-  const people = new Set(previewRows.map((r) => r.user_id)).size;
+  const groups = new Map<string, PreviewRow[]>();
+  for (const r of previewRows) groups.set(r.user_id, [...(groups.get(r.user_id) ?? []), r]);
+  const byPerson = [...groups.entries()]; // 사람별로 접어서 (누르면 펼침)
+  const people = byPerson.length;
 
   return (
     <div className="space-y-4">
@@ -91,14 +94,33 @@ export default async function RemindersPage() {
           <p className="py-3 text-sm text-gray-500">오늘 기준으로 알릴 건이 없습니다.</p>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {previewRows.map((r, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-sm">
-                <b className="font-medium whitespace-nowrap">{r.user_name}</b>
-                <Stage s={r.stage} />
-                {r.target_date && <span className="text-xs whitespace-nowrap text-gray-500">목표 {fmtDate(r.target_date)}</span>}
-                <Link href={`/findings/${r.finding_id}`} className="min-w-0 basis-full break-keep text-gray-700 hover:underline">
-                  {r.label}
-                </Link>
+            {byPerson.map(([uid, items]) => (
+              <li key={uid}>
+                <details className="group py-1.5">
+                  <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    <b className="font-medium whitespace-nowrap">{items[0].user_name}</b>
+                    <span className="text-xs text-gray-500">{items.length}건</span>
+                    {Object.keys(STAGE)
+                      .filter((s) => items.some((r) => r.stage === s))
+                      .map((s) => (
+                        <span key={s} className="flex items-center gap-0.5">
+                          <Stage s={s} />
+                          <span className="text-xs text-gray-600">{items.filter((r) => r.stage === s).length}</span>
+                        </span>
+                      ))}
+                  </summary>
+                  <ul className="mt-1 space-y-1 border-l-2 border-gray-100 pl-2">
+                    {items.map((r, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-x-2 text-sm">
+                        <Stage s={r.stage} />
+                        {r.target_date && <span className="text-xs whitespace-nowrap text-gray-500">목표 {fmtDate(r.target_date)}</span>}
+                        <Link href={`/findings/${r.finding_id}`} className="min-w-0 basis-full break-keep text-gray-700 hover:underline">
+                          {r.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               </li>
             ))}
           </ul>
