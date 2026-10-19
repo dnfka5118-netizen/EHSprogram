@@ -71,7 +71,17 @@ export function parseDate(v: unknown): string | null {
 export async function readImportFile(file: File): Promise<ImportRow[]> {
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await file.arrayBuffer());
+  const buf = await file.arrayBuffer();
+  const sig = new Uint8Array(buf.slice(0, 4));
+  // D0 CF 11 E0 = 암호가 걸린 엑셀(또는 예전 .xls), 50 4B = 일반 .xlsx
+  if (sig[0] === 0xd0 && sig[1] === 0xcf && sig[2] === 0x11 && sig[3] === 0xe0)
+    throw new Error("엑셀 열기 암호가 걸려 있거나 예전 형식(.xls)의 파일입니다. 엑셀에서 파일을 열고 [파일 → 정보 → 통합 문서 보호 → 암호 설정]에서 암호를 지운 뒤 .xlsx 로 저장해서 다시 올려 주세요.");
+  if (sig[0] !== 0x50 || sig[1] !== 0x4b) throw new Error("엑셀(.xlsx) 파일이 아닙니다. 프로그램의 '엑셀 다운로드'로 받은 양식을 사용해 주세요.");
+  try {
+    await wb.xlsx.load(buf);
+  } catch {
+    throw new Error("엑셀 파일을 읽지 못했습니다. 파일이 손상되었을 수 있습니다. 엑셀에서 열어 .xlsx 로 다시 저장한 뒤 올려 주세요.");
+  }
 
   let ws: Worksheet | undefined;
   let headerRow = 0;
