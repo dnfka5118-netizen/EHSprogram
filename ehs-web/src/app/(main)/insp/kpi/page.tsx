@@ -10,6 +10,7 @@ import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
 import { KpiExcelButton } from "./KpiExcelButton";
 import { ConfirmKpiButton } from "./ConfirmKpiButton";
 import type { KpiData, KpiRow } from "./types";
+import { DailyStatusTable } from "../[slug]/DailyStatus";
 
 const FIRST_YEAR = 2026;
 const pct = (late: number, due: number) => (due ? `${Math.round((late / due) * 1000) / 10}%` : "-");
@@ -84,6 +85,8 @@ export default async function KpiPage({ searchParams }: PageProps<"/insp/kpi">) 
         <Tile label="개선조치 지연율" value={pct(totals.late, totals.due)} sub={`지연 ${totals.late} / 목표일 지난 조치 ${totals.due}`} warn={totals.late > 0} />
         <Tile label="점검 미진행" value={`${totals.missed}회`} sub={totals.expected ? `주기 ${totals.expected}회 중` : "점검 주기 미설정"} warn={totals.missed > 0} />
       </div>
+
+      {thisYear === year && (!mod || mod === "insp_daily") && <DailyStatusTable />}
 
       <Card title="팀별">
         <KpiTable rows={k.teams} kind="team" />

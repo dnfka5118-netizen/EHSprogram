@@ -10,7 +10,7 @@ import { findingRowsPage } from "../excel-actions";
 import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
-import { DailyStatus } from "./DailyStatus";
+import { MyDaily } from "./DailyStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
@@ -47,7 +47,6 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   return (
     <div className="space-y-4">
-      {mod.code === "insp_daily" && <DailyStatus />}
       <Card
         title={`지적사항 현황 (${rows.length}건)`}
         actions={
@@ -76,6 +75,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
         <FindingTable rows={rows} />
         {rows.length >= 500 && <p className="mt-2 text-xs text-gray-500">최근 500건까지만 표시합니다. 조건을 좁혀 조회하세요.</p>}
       </Card>
+      {mod.code === "insp_daily" && <MyDaily />}
     </div>
   );
 }
