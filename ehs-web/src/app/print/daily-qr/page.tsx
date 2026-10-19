@@ -29,14 +29,15 @@ export default async function DailyQrPrintPage({ searchParams }: PageProps<"/pri
   }));
 
   const h = await headers();
-  const origin = process.env.APP_URL?.replace(/\/$/, "") || `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  // 지금 이 화면을 연 주소 그대로 (APP_URL 은 아직 연결 안 된 도메인일 수 있어 쓰지 않음) — 인쇄 전에 아래 주소로 접속되는지 확인
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const cards = await Promise.all(
     areas.map(async (a) => ({ ...a, url: origin + qrPath(a.qr_token), svg: await QRCode.toString(origin + qrPath(a.qr_token), { type: "svg", margin: 1, errorCorrectionLevel: "M" }) })),
   );
 
   return (
     <div className="paper-screen">
-      <PrintBar title="관리감독자 일일점검 QR 인쇄" sub={`A4 세로 · 한 장에 2개 · ${cards.length}개 구역`} />
+      <PrintBar title="관리감독자 일일점검 QR 인쇄" sub={`A4 세로 · 한 장에 2개 · ${cards.length}곳 · QR 주소 ${origin}`} />
       <style>{`@page { size: A4 portrait; margin: 10mm; } .qr-card { break-inside: avoid; }`}</style>
       <div className="mx-auto grid max-w-[190mm] gap-[8mm] bg-white p-[6mm] print:p-0">
         {cards.map((c) => (
