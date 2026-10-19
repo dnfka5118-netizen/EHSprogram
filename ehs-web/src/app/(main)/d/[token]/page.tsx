@@ -52,18 +52,18 @@ export default async function DailyQrPage({ params }: PageProps<"/d/[token]">) {
         </dl>
         {d.checked_at && (
           <p className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            오늘 {d.checked_by} 님이 {fmtDateTime(d.checked_at)} 에 저장했습니다. 고쳐서 다시 저장할 수 있습니다.
+            오늘 {d.checked_by} 님이{d.substitute_for ? ` (${d.substitute_for} 님 대체)` : ""} {fmtDateTime(d.checked_at)} 에 저장했습니다. 고쳐서 다시 저장할 수 있습니다.
           </p>
         )}
         {!d.biz_day && <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">오늘은 휴일입니다. 점검하면 기록은 남습니다.</p>}
       </Card>
 
-      {d.is_member ? (
-        <DailyCheckForm token={token} data={d} departments={(depts ?? []) as { id: string; name: string }[]} scannedAt={new Date().toISOString()} />
+      {d.is_member || (d.can_substitute && d.member_list.length > 0) ? (
+        <DailyCheckForm mode={{ kind: "qr", token, scannedAt: new Date().toISOString() }} data={d} departments={(depts ?? []) as { id: string; name: string }[]} />
       ) : (
         <Card>
           <p className="text-sm break-keep text-gray-700">
-            이 구역의 담당 관리감독자가 아니어서 점검할 수 없습니다. 담당 지정이 필요하면 EHS부서에 요청해 주세요.
+            이 구역의 담당 관리감독자가 아니어서 점검할 수 없습니다. {d.member_list.length === 0 ? "이 구역에 담당자가 지정되어 있지 않습니다. " : ""}EHS부서에 문의해 주세요.
           </p>
           <Link href="/insp/daily" className="mt-3 inline-block text-sm text-brand-700 hover:underline">
             관리감독자 일일점검 현황으로 →

@@ -5,6 +5,8 @@ import { fmtDate } from "@/lib/format";
 
 const RESULT_CLS: Record<string, string> = { O: "text-emerald-700", X: "font-bold text-red-600", "△": "font-bold text-amber-600", "-": "text-gray-400" };
 const B = "border border-gray-400";
+const DAY_BG = { missed: "bg-red-100", backfill: "bg-violet-100", substitute: "bg-amber-100" } as const;
+const DAY_LABEL = { missed: "미점검", backfill: "소급", substitute: "대체" } as const;
 
 // 안전보건 관리감독자 일일업무일지 (원본 양식 배치 : 1. 주요 점검 활동 1~31일 · 2. 점검 결과 기록 · 3. 세부 개선 진행사항)
 export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label: string; name: string; date: string }[] }) {
@@ -68,8 +70,9 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
                 <th className={`${B} px-1`}>세부 항목</th>
                 <th className={`${B} w-9 px-1`}>주기</th>
                 {dayCols.map((n) => (
-                  <th key={n} className={`${B} w-[18px] px-0 ${n > d.days ? "bg-gray-300" : ""}`}>
+                  <th key={n} className={`${B} w-[18px] px-0 ${n > d.days ? "bg-gray-300" : d.dayKind[n] ? DAY_BG[d.dayKind[n]] : ""}`} title={d.dayKind[n] ? DAY_LABEL[d.dayKind[n]] : undefined}>
                     {n}
+                    {d.dayKind[n] && <div className="text-[7px] leading-none font-normal">{DAY_LABEL[d.dayKind[n]]}</div>}
                   </th>
                 ))}
               </tr>
@@ -94,7 +97,7 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
                     {dayCols.map((n) => {
                       const v = d.cells[it.id]?.[n];
                       return (
-                        <td key={n} className={`${B} px-0 text-center ${n > d.days ? "bg-gray-300" : ""} ${v ? RESULT_CLS[v] : ""}`}>
+                        <td key={n} className={`${B} px-0 text-center ${n > d.days ? "bg-gray-300" : d.dayKind[n] ? DAY_BG[d.dayKind[n]] : ""} ${v ? RESULT_CLS[v] : ""}`}>
                           {v ?? ""}
                         </td>
                       );
@@ -106,6 +109,40 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
           </table>
         </div>
       </section>
+
+      {d.dayNotes.length > 0 && (
+        <section className="break-inside-avoid">
+          <p className="mb-1 flex flex-wrap gap-x-3 font-bold">
+            점검 실시 기록 (미점검 · 대체 · 소급)
+            <span className="font-normal text-gray-600">
+              <span className={`mr-1 inline-block h-2.5 w-3 ${DAY_BG.missed}`} />
+              미점검 <span className={`mr-1 ml-2 inline-block h-2.5 w-3 ${DAY_BG.substitute}`} />
+              대체 점검 <span className={`mr-1 ml-2 inline-block h-2.5 w-3 ${DAY_BG.backfill}`} />
+              소급 입력
+            </span>
+          </p>
+          <table className="w-full border-collapse">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className={`${B} w-20`}>일자</th>
+                <th className={`${B} w-16`}>구분</th>
+                <th className={`${B} w-24`}>점검자</th>
+                <th className={B}>내용</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.dayNotes.map((n) => (
+                <tr key={n.date} className={DAY_BG[n.kind]}>
+                  <td className={`${B} text-center`}>{fmtDate(n.date)}</td>
+                  <td className={`${B} text-center font-medium`}>{DAY_LABEL[n.kind]}</td>
+                  <td className={`${B} text-center`}>{n.who || "-"}</td>
+                  <td className={`${B} px-1 break-keep`}>{n.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
 
       <section className="break-inside-avoid">
         <p className="mb-1 font-bold">2. 주요 점검 결과 및 개선 내용 기록</p>

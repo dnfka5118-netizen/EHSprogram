@@ -29,6 +29,8 @@ export type DailyLogData = {
   inspectors: string[];
   records: { date: string; code: string; result: DailyResult; note: string; remark: string }[]; // 2. 주요 점검 결과
   findings: LogFinding[]; // 3. 세부 개선 진행사항 (이번 달)
+  dayKind: Record<number, "missed" | "backfill" | "substitute">; // 미점검 · 소급 · 대체 (1~31일)
+  dayNotes: { date: string; kind: "missed" | "backfill" | "substitute"; who: string; note: string }[]; // 점검 실시 기록
   counts: { found: number; foundYear: number; closed: number; closedYear: number };
 };
 
@@ -45,21 +47,31 @@ export async function getDailyLog(supabase: SupabaseClient, id: string): Promise
   const days = new Date(y, m, 0).getDate();
   const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
-  const [{ data: form }, { data: items }, { data: checks }, { data: yearChecks }] = await Promise.all([
+  const [{ data: form }, { data: items }, { data: checks }, { data: yearChecks }, { data: hol }] = await Promise.all([
     supabase.from("daily_forms").select("*").eq("code", a.form_code).single(),
     supabase.from("daily_form_items").select("*").eq("form_code", a.form_code).order("sort_order"),
     supabase
       .from("daily_checks")
-      .select("check_date, profiles(name), daily_results(item_id, result, note, action, finding_id)")
+      .select("check_date, submitted_at, is_backfill, backfill_reason, sub_reason, profiles!daily_checks_user_id_fkey(name), sub:profiles!daily_checks_substitute_for_fkey(name), daily_results(item_id, result, note, action, finding_id)")
       .eq("area_id", a.id)
       .gte("check_date", ym)
       .lt("check_date", next)
       .order("check_date"),
     supabase.from("daily_checks").select("check_date, daily_results(finding_id)").eq("area_id", a.id).gte("check_date", `${y}-01-01`).lt("check_date", next),
+    supabase.from("holidays").select("day").gte("day", ym).lt("day", next),
   ]);
 
   type Res = { item_id: string; result: DailyResult; note: string | null; action: "immediate" | "request" | null; finding_id: string | null };
-  type Check = { check_date: string; profiles: { name: string } | null; daily_results: Res[] };
+  type Check = {
+    check_date: string;
+    submitted_at: string;
+    is_backfill: boolean;
+    backfill_reason: string | null;
+    sub_reason: string | null;
+    profiles: { name: string } | null;
+    sub: { name: string } | null;
+    daily_results: Res[];
+  };
   const list = (checks ?? []) as unknown as Check[];
   const allItems = (items ?? []) as DailyFormItem[];
   const usedIds = new Set(list.flatMap((c) => c.daily_results.map((r) => r.item_id)));
@@ -123,15 +135,42 @@ export async function getDailyLog(supabase: SupabaseClient, id: string): Promise
     })
     .sort((p, q) => p.date.localeCompare(q.date));
 
+  // 미점검 : 지난 영업일(구역 등록 이후) 중 기록 없는 날 · 소급 · 대체
+  const holidays = new Set((hol ?? []).map((h) => h.day as string));
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date());
+  const since = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date((a as unknown as { created_at: string }).created_at));
+  const byDay = new Map(list.map((c) => [c.check_date, c]));
+  const dayKind: DailyLogData["dayKind"] = {};
+  const dayNotes: DailyLogData["dayNotes"] = [];
+  for (let n = 1; n <= days; n++) {
+    const date = `${ym.slice(0, 8)}${String(n).padStart(2, "0")}`;
+    const c = byDay.get(date);
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay();
+    if (!c) {
+      if (date < today && date >= since && dow !== 0 && dow !== 6 && !holidays.has(date)) {
+        dayKind[n] = "missed";
+        dayNotes.push({ date, kind: "missed", who: "", note: "점검 기록 없음" });
+      }
+    } else if (c.is_backfill) {
+      dayKind[n] = "backfill";
+      dayNotes.push({ date, kind: "backfill", who: c.profiles?.name ?? "", note: `${c.backfill_reason ?? ""} (입력 ${new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date(c.submitted_at))})` });
+    } else if (c.sub) {
+      dayKind[n] = "substitute";
+      dayNotes.push({ date, kind: "substitute", who: c.profiles?.name ?? "", note: `${c.sub.name} 대신 · ${c.sub_reason ?? ""}` });
+    }
+  }
+
   return {
     id,
+    dayKind,
+    dayNotes,
     ym,
     days,
     area: { ...a, department: a.departments?.name ?? null, site: a.sites?.name ?? null },
     form: form as DailyForm,
     items: shown,
     cells,
-    inspectors: [...new Set(list.map((c) => c.profiles?.name).filter(Boolean) as string[])],
+    inspectors: [...new Set(list.map((c) => (c.profiles?.name ? c.profiles.name + (c.sub ? "(대체)" : "") : "")).filter(Boolean))],
     records,
     findings,
     counts: {

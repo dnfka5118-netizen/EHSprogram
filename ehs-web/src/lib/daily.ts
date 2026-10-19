@@ -61,11 +61,17 @@ export type DailyOpen = {
   };
   form: DailyForm;
   is_member: boolean;
+  can_substitute: boolean; // 담당자가 아니어도 대체 점검 가능 (임직원)
   members: string[];
+  member_list: { id: string; name: string; position: string | null }[]; // 대신할 담당자 (본인 제외)
   checked_by: string | null;
   checked_at: string | null;
+  is_backfill: boolean;
+  substitute_for: string | null;
   items: DailyOpenItem[];
 };
+
+export const SUB_REASONS = ["휴가", "외근", "교육", "출장", "기타"];
 
 export const qrPath = (token: string) => `/d/${token}`;
 export const ymLabel = (ym: string) => `${Number(ym.slice(0, 4))}년 ${Number(ym.slice(5, 7))}월`;

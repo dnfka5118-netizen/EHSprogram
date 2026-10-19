@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -523,7 +523,7 @@ await as(U.A);
 const area = (await one(`insert into daily_areas (site_id, name, form_code, department_id, location_id) values ($1,'HBC-C2 제조실','A',$2,$3) returning id, qr_token`, [site, PROD, loc]));
 await db.query("select set_daily_area_members($1, array[$2]::uuid[])", [area.id, U.W1]);
 await as(U.W2);
-await expectError("담당 아닌 사람 저장 차단", "select submit_daily_check($1,'[]')", [area.qr_token], "담당 관리감독자");
+await expectError("담당 아닌 사람은 대체 점검으로만 저장", "select submit_daily_check($1,'[]')", [area.qr_token], "누구 대신");
 await expectError("없는 QR 차단", "select daily_open('nope')", [], "QR");
 await as(U.W1);
 let opened = (await one("select daily_open($1) d", [area.qr_token])).d;
@@ -572,6 +572,46 @@ ok(ap.status === "in_review" && ap.title.includes("일일업무일지(A형)"), "
 ok((await one("select approval_doc_path('insp_daily',$1) p", [logId])).p === `/insp/daily/logs/${logId}`, "전자결재함 → 일지 화면 연결");
 await as(U.A); ok((await one("select length(reissue_daily_qr($1)) n", [area.id])).n === 32, "QR 재발급");
 await as(U.W1); await expectError("재발급 후 이전 QR 무효", "select daily_open($1)", [area.qr_token], "QR");
+await as(null);
+
+
+console.log("\n[일일점검 : 대체 점검 · 소급 입력]");
+await as(U.A);
+const area2 = await one(`insert into daily_areas (site_id, name, form_code, department_id) values ($1,'C형 사무동','C',$2) returning id, qr_token`, [site, PROD]);
+await db.query("select set_daily_area_members($1, array[$2]::uuid[])", [area2.id, U.W2]);
+ok(!!(await one("select 1 x from inspection_schedules where module_code='insp_daily' and user_id=$1 and period='daily' and is_active", [U.W2])), "담당 지정 → 점검 주기(매일) 자동 등록");
+const cItems = (await one("select daily_open($1) d", [area2.qr_token])).d.items;
+const allC = JSON.stringify(cItems.map((i) => ({ item_id: i.id, result: "O" })));
+await as(U.Q);
+let op2 = (await one("select daily_open($1) d", [area2.qr_token])).d;
+ok(!op2.is_member && op2.can_substitute && op2.member_list.length === 1, "담당 아닌 임직원 : 대체 점검 가능, 대신할 담당자 목록");
+await expectError("대체 점검은 누구 대신인지 필수", "select submit_daily_check($1,$2)", [area2.qr_token, allC], "누구 대신");
+await expectError("대체 점검 사유 필수", "select submit_daily_check($1,$2,now(),$3,'')", [area2.qr_token, allC, U.W2], "사유");
+await db.query("select submit_daily_check($1,$2,now(),$3,'휴가')", [area2.qr_token, allC, U.W2]);
+const sc = await one("select c.substitute_for, c.sub_reason, p.name from daily_checks c join profiles p on p.id=c.user_id where c.area_id=$1", [area2.id]);
+ok(sc.substitute_for === U.W2 && sc.sub_reason === "휴가" && sc.name === "품질직원", "대체 점검 기록 (점검자 · 대신한 담당자 · 사유)");
+ok((await one("select count(*)::int c from inspection_checks where module_code='insp_daily' and user_id=$1 and done_on=kst_today()", [U.W2])).c === 1, "대신한 담당자는 그날 미진행에서 빠짐");
+// 소급
+await as(null); await db.query("delete from daily_checks where area_id=$1", [area2.id]); await db.query("delete from inspection_checks where user_id=$1 and module_code='insp_daily'", [U.W2]);
+await as(U.Q); await expectError("담당 아닌 사람 소급 차단", "select submit_daily_backfill($1, kst_today()-1, $2, '누락')", [area2.id, allC], "담당");
+await as(U.W2);
+await expectError("오늘은 소급 불가", "select submit_daily_backfill($1, kst_today(), $2, '누락')", [area2.id, allC], "지난 날짜");
+await expectError("소급 사유 필수", "select submit_daily_backfill($1, kst_today()-1, $2, '')", [area2.id, allC], "사유");
+const bo = (await one("select daily_backfill_open($1, kst_today()-1) d", [area2.id])).d;
+ok(bo.items.length === cItems.length, "소급 입력 화면 : 그날 할 항목");
+const bx = "33333333-0000-0000-0000-000000000001";
+await db.query("select submit_daily_backfill($1, kst_today()-1, $2, '외근으로 누락, 현장 확인함')", [area2.id, JSON.stringify(cItems.map((i, k) => (k === 0 ? { item_id: i.id, result: "X", note: "멀티탭 과열", action: "request", finding: { id: bx } } : { item_id: i.id, result: "O" })))]);
+const bk = await one("select is_backfill, backfill_reason from daily_checks where area_id=$1 and check_date=kst_today()-1", [area2.id]);
+ok(bk.is_backfill && bk.backfill_reason.startsWith("외근"), "소급 기록 (표시 · 사유)");
+ok((await one("select status from findings where id=$1", [bx])).status === "assign_wait", "소급 입력 부적합도 개선 요청 (사진 없이 가능)");
+ok((await one("select count(*)::int c from inspection_checks where module_code='insp_daily' and user_id=$1", [U.W2])).c === 0, "소급 입력한 날은 점검 지표에서 미진행으로 셈");
+await expectError("이미 기록 있는 날 소급 차단", "select submit_daily_backfill($1, kst_today()-1, $2, '중복')", [area2.id, allC], "이미 점검 기록");
+// 상신된 달은 소급 불가
+const lg = (await one("select open_daily_log($1, kst_today()-1) id", [area2.id])).id;
+await db.query("select submit_daily_log($1,$2)", [lg, JSON.stringify([{ step_kind: "담당", label: "작성", approver_id: U.W2 }, { step_kind: "승인", label: "승인", approver_id: U.H }])]);
+await expectError("상신된 달은 소급 차단", "select submit_daily_backfill($1, kst_today()-2, $2, '누락')", [area2.id, allC], "상신");
+await as(U.A); await db.query("select set_daily_area_members($1, '{}'::uuid[])", [area2.id]);
+ok((await one("select end_date is not null or not is_active x from inspection_schedules where module_code='insp_daily' and user_id=$1", [U.W2])).x, "담당 해제 → 점검 주기 종료");
 await as(null);
 
 

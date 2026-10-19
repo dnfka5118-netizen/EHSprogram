@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { PhotoPicker } from "@/components/PhotoPicker";
 import { VoiceButton } from "@/components/VoiceButton";
-import { Button, Select, Textarea } from "@/components/ui";
+import { Button, Input, Select, Textarea } from "@/components/ui";
 import { uploadPhotos, removePhotos } from "@/lib/upload";
 import type { ProcessedPhoto } from "@/lib/image";
-import { CYCLE_LABEL, RESULT_HINT, RESULT_LABEL, type DailyOpen, type DailyOpenItem, type DailyResult } from "@/lib/daily";
+import { CYCLE_LABEL, RESULT_HINT, RESULT_LABEL, SUB_REASONS, type DailyOpen, type DailyOpenItem, type DailyResult } from "@/lib/daily";
 import { fmtDate } from "@/lib/format";
-import { submitDailyCheck } from "../../insp/daily-actions";
+import { submitDailyBackfill, submitDailyCheck } from "../../insp/daily-actions";
+
+// qr = 현장 (담당자 또는 대체 점검) · backfill = 월간 일지에서 빠진 날 소급 입력 (컴퓨터, 사진 선택)
+export type CheckMode = { kind: "qr"; token: string; scannedAt: string } | { kind: "backfill"; areaId: string; day: string; logId: string };
 
 type Entry = {
   result: DailyResult | null;
@@ -30,7 +34,14 @@ const RESULTS: { v: DailyResult; cls: string; on: string }[] = [
 ];
 
 // QR 점검 : 항목마다 O / X / △ / - · X 는 사진 + 즉시 조치(개선 전·후) 또는 개선 요청(부서 지정)
-export function DailyCheckForm({ token, data, departments, scannedAt }: { token: string; data: DailyOpen; departments: { id: string; name: string }[]; scannedAt: string }) {
+export function DailyCheckForm({ mode, data, departments }: { mode: CheckMode; data: DailyOpen; departments: { id: string; name: string }[] }) {
+  const router = useRouter();
+  const backfill = mode.kind === "backfill";
+  const substitute = mode.kind === "qr" && !data.is_member; // 담당자가 아니면 대체 점검
+  const [subFor, setSubFor] = useState(data.member_list.length === 1 ? data.member_list[0].id : "");
+  const [subKind, setSubKind] = useState("");
+  const [subText, setSubText] = useState("");
+  const [reason, setReason] = useState(""); // 소급 사유
   const [entries, setEntries] = useState<Record<string, Entry>>(() =>
     Object.fromEntries(
       data.items.map((i) => [
@@ -56,6 +67,10 @@ export function DailyCheckForm({ token, data, departments, scannedAt }: { token:
   const patch = (id: string, p: Partial<Entry>) => setEntries((e) => ({ ...e, [id]: { ...e[id], ...p } }));
 
   function check(): string | null {
+    if (substitute && !subFor) return "누구 대신 점검하는지 골라 주세요.";
+    if (substitute && !subKind) return "대체 점검 사유를 골라 주세요.";
+    if (substitute && subKind === "기타" && !subText.trim()) return "대체 점검 사유를 적어 주세요.";
+    if (backfill && !reason.trim()) return "소급 입력 사유를 적어 주세요.";
     for (const i of data.items) {
       const e = entries[i.id];
       if (!e.result) {
@@ -64,10 +79,10 @@ export function DailyCheckForm({ token, data, departments, scannedAt }: { token:
       }
       if ((e.result === "X" || e.result === "△") && !e.note.trim()) return `${i.code} 의 내용을 적어 주세요.`;
       if (e.result === "X" && !i.finding_id) {
-        if (e.photos.length === 0) return `${i.code} 의 개선 전 사진을 찍어 주세요.`;
+        if (!backfill && e.photos.length === 0) return `${i.code} 의 개선 전 사진을 찍어 주세요.`;
         if (!e.action) return `${i.code} 의 처리 방법(즉시 조치 / 개선 요청)을 골라 주세요.`;
         if (e.action === "immediate" && !e.fix.trim()) return `${i.code} 의 즉시 조치 내용을 적어 주세요.`;
-        if (e.action === "immediate" && e.after.length === 0) return `${i.code} 의 개선 후 사진을 찍어 주세요.`;
+        if (!backfill && e.action === "immediate" && e.after.length === 0) return `${i.code} 의 개선 후 사진을 찍어 주세요.`;
         if (!e.dept) return `${i.code} 의 부서를 골라 주세요.`;
       }
     }
@@ -96,10 +111,18 @@ export function DailyCheckForm({ token, data, departments, scannedAt }: { token:
           }
           results.push(r);
         }
-        const res = await submitDailyCheck(token, results, scannedAt);
+        const res =
+          mode.kind === "qr"
+            ? await submitDailyCheck(mode.token, results, mode.scannedAt, substitute ? subFor : null, substitute ? [subKind, subText.trim()].filter(Boolean).join(" · ") : "")
+            : await submitDailyBackfill(mode.areaId, mode.day, results, reason);
         if ("error" in res) {
           await removePhotos(uploaded);
           return setError(res.error);
+        }
+        if (mode.kind === "backfill") {
+          router.push(`/insp/daily/logs/${mode.logId}`);
+          router.refresh();
+          return;
         }
         setDone(res.findings);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -131,6 +154,45 @@ export function DailyCheckForm({ token, data, departments, scannedAt }: { token:
 
   return (
     <div className="space-y-3 pb-24">
+      {substitute && (
+        <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="font-semibold text-amber-900">대체 점검 — 이 구역 담당자가 아닙니다</p>
+          <p className="text-xs break-keep text-amber-800">담당자가 휴가·외근 등으로 없을 때 대신 점검합니다. 일지에 &apos;대체&apos; 로 표시됩니다.</p>
+          <label className="block">
+            <span className="text-xs text-amber-900">누구 대신</span>
+            <Select value={subFor} onChange={(ev) => setSubFor(ev.target.value)} className="mt-1 w-full">
+              <option value="">담당자 선택</option>
+              {data.member_list.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} {m.position ?? ""}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {SUB_REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setSubKind(r)}
+                className={`rounded-full border px-3 py-1 text-sm ${subKind === r ? "border-amber-600 bg-amber-600 text-white" : "border-amber-300 bg-white"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <Input value={subText} onChange={(ev) => setSubText(ev.target.value)} placeholder={subKind === "기타" ? "사유 (필수)" : "추가 설명 (선택)"} className="w-full" />
+        </div>
+      )}
+      {backfill && (
+        <div className="space-y-2 rounded-lg border border-violet-300 bg-violet-50 p-3 text-sm">
+          <p className="font-semibold text-violet-900">소급 입력 — {fmtDate(mode.day)}</p>
+          <p className="text-xs break-keep text-violet-800">
+            빠진 날의 점검 기록을 채웁니다. 일지에 &apos;소급&apos; 으로 표시되고, 점검 지표에서는 그날을 미진행으로 셉니다. 부적합 사진은 있으면 넣어 주세요(선택).
+          </p>
+          <Input value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="소급 사유 (필수, 예 : 외근으로 기록 누락 · 현장 점검은 실시함)" className="w-full" />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white p-3">
         <p className="min-w-0 flex-1 text-xs break-keep text-gray-600">{RESULT_HINT}</p>
         <Button
@@ -171,7 +233,7 @@ export function DailyCheckForm({ token, data, departments, scannedAt }: { token:
             판정 <b className={answered === due.length ? "text-emerald-700" : "text-red-600"}>{answered}</b> / {due.length}
           </span>
           <Button className="ml-auto px-6 py-2.5" disabled={pending} onClick={submit}>
-            {pending ? "저장 중…" : "점검 저장"}
+            {pending ? "저장 중…" : backfill ? "소급 저장" : substitute ? "대체 점검 저장" : "점검 저장"}
           </Button>
         </div>
       </div>

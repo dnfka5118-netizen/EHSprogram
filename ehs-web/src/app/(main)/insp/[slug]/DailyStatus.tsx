@@ -13,10 +13,10 @@ export async function DailyStatus() {
   const [{ data: areas }, { data: members }, { data: checks }] = await Promise.all([
     supabase.from("daily_areas").select("id, name, form_code, departments(name)").eq("is_active", true).order("sort_order").order("name"),
     supabase.from("daily_area_members").select("area_id, user_id, profiles(name)"),
-    supabase.from("daily_checks").select("area_id, check_date, submitted_at, profiles(name)").gte("check_date", month0),
+    supabase.from("daily_checks").select("area_id, check_date, submitted_at, is_backfill, profiles!daily_checks_user_id_fkey(name), sub:profiles!daily_checks_substitute_for_fkey(name)").gte("check_date", month0),
   ]);
   type Area = { id: string; name: string; form_code: string; departments: { name: string } | null };
-  type Check = { area_id: string; check_date: string; submitted_at: string; profiles: { name: string } | null };
+  type Check = { area_id: string; check_date: string; submitted_at: string; is_backfill: boolean; profiles: { name: string } | null; sub: { name: string } | null };
   const mem = (members ?? []) as unknown as { area_id: string; user_id: string; profiles: { name: string } | null }[];
   const ck = (checks ?? []) as unknown as Check[];
   const mine = new Set(mem.filter((m) => m.user_id === me?.id).map((m) => m.area_id));
@@ -57,7 +57,8 @@ export async function DailyStatus() {
               <span className="text-xs whitespace-nowrap">
                 {t ? (
                   <span className="text-emerald-700">
-                    ✓ {t.profiles?.name} {fmtDateTime(t.submitted_at).slice(-5)}
+                    ✓ {t.profiles?.name}
+                    {t.sub ? ` (${t.sub.name} 대체)` : ""} {fmtDateTime(t.submitted_at).slice(-5)}
                   </span>
                 ) : (
                   <span className="font-medium text-red-600">오늘 미실시</span>

@@ -7,9 +7,20 @@ import { processOutbox } from "@/lib/mail";
 import { toMessage } from "@/lib/errors";
 
 // 관리감독자 일일점검 저장 (QR 화면) — 검사·지적사항 생성은 DB submit_daily_check
-export async function submitDailyCheck(token: string, results: unknown[], scannedAt: string): Promise<{ findings: number } | { error: string }> {
+//   대체 점검이면 subFor(대신한 담당자) · subReason(휴가·외근 등)
+export async function submitDailyCheck(token: string, results: unknown[], scannedAt: string, subFor: string | null, subReason: string): Promise<{ findings: number } | { error: string }> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("submit_daily_check", { p_token: token, p_results: results, p_scanned_at: scannedAt });
+  const { data, error } = await supabase.rpc("submit_daily_check", { p_token: token, p_results: results, p_scanned_at: scannedAt, p_sub_for: subFor, p_sub_reason: subReason });
+  if (error) return { error: toMessage(error) };
+  after(() => processOutbox());
+  revalidatePath("/", "layout");
+  return { findings: (data as { findings: number }).findings };
+}
+
+// 소급 입력 (월간 일지에서 빠진 날) — 그 달 일지 상신 전까지, 지표에서는 미진행
+export async function submitDailyBackfill(areaId: string, day: string, results: unknown[], reason: string): Promise<{ findings: number } | { error: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("submit_daily_backfill", { p_area: areaId, p_day: day, p_results: results, p_reason: reason });
   if (error) return { error: toMessage(error) };
   after(() => processOutbox());
   revalidatePath("/", "layout");
