@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -450,6 +450,68 @@ await expectError("미래 날짜 차단", "select register_finding_on('insp_ceo'
 const ex2 = (await one("select register_finding_on('insp_ceo',$1,'',$2,'xlsx-up:t2') id", [past, fd("오프라인 2")])).id;
 ok(ex1 === ex2, "같은 날 엑셀 건은 같은 회차로");
 ok((await one("select register_finding('insp_ceo','',$1) id", [fd("화면 등록")])).id !== ex1, "화면 등록(register_finding)은 오늘 회차");
+await as(null);
+
+console.log("\n[영업일 · 단계별 알림]");
+ok((await one("select biz_days_between('2026-10-16','2026-10-19') n")).n === 1, "금요일 → 월요일 = 1영업일");
+await db.query("insert into holidays values ('2026-10-19','시험 공휴일')");
+ok((await one("select biz_days_between('2026-10-16','2026-10-20') n")).n === 1, "공휴일은 영업일에서 뺌");
+await db.query("delete from holidays");
+const rmF = (await one("select id from findings where inspection_id=$1 order by seq desc limit 1", [await reg("insp_plant", U.I, "알림 시험 - 담당자 미지정")])).id;
+await db.query("update findings set created_at='2026-10-16 09:00+09' where id=$1", [rmF]);
+const rmCount = async (uid, f, stage) => (await one("select count(*)::int c from reminder_log where user_id=$1 and finding_id=$2 and stage=$3", [uid, f, stage])).c;
+await db.query("select queue_reminders('2026-10-19')");
+ok((await rmCount(U.S, rmF, "assign")) === 0, "1영업일 지남 → 아직 안 보냄");
+await db.query("select queue_reminders('2026-10-20')");
+ok((await rmCount(U.S, rmF, "assign")) === 1, "2영업일 지남 → 부서 조치담당자 지정자에게");
+const dig = await one("select subject, body from notifications where user_id=$1 and kind='reminder' order by created_at desc limit 1", [U.S]);
+ok(dig.body.includes("조치담당자 지정이 필요한 건") && dig.body.includes("알림 시험"), "하루 한 통 요약 메일 내용");
+await db.query("select queue_reminders('2026-10-21')");
+ok((await rmCount(U.S, rmF, "assign")) === 1, "다시 알림 간격(2영업일) 전에는 반복 안 함");
+await db.query("select queue_reminders('2026-10-22')");
+ok((await rmCount(U.S, rmF, "assign")) === 2, "2영업일 뒤 다시 알림");
+ok((await one("select queue_reminders('2026-10-24') n")).n === 0, "토요일에는 보내지 않음");
+await db.query("update app_settings set value = jsonb_set(value, '{assign_days}', '5') where key='reminder'");
+ok((await one("select count(*)::int c from _reminder_targets('2026-10-20') where finding_id=$1 and stage='assign'", [rmF])).c === 0, "기한 숫자는 환경설정 값을 따름");
+await db.query("update app_settings set value = jsonb_set(value, '{assign_days}', '2') where key='reminder'");
+// 계획 미수립 · 목표일 임박
+await as(U.S); await db.query("select assign_finding($1,$2)", [rmF, [U.W1]]); await as(null);
+await db.query("update finding_assignees set assigned_at='2026-10-16 10:00+09' where finding_id=$1", [rmF]);
+ok((await one("select count(*)::int c from _reminder_targets('2026-10-20') where finding_id=$1 and stage='plan' and user_id=$2", [rmF, U.W1])).c === 1, "지정 후 2영업일 계획 미수립 → 조치담당자");
+await as(U.W1); await db.query("select save_plan($1,$2)", [rmF, JSON.stringify([{ kind: "short", content: "보강", target_date: "2026-10-23" }])]); await as(null);
+ok((await one("select count(*)::int c from _reminder_targets('2026-10-22') where finding_id=$1 and stage='due_soon'", [rmF])).c === 1, "목표일 1영업일 전 → 조치담당자");
+ok((await one("select count(*)::int c from _reminder_targets('2026-10-27') where finding_id=$1 and stage='overdue'", [rmF])).c === 1, "목표일 지남 → 조치담당자");
+
+console.log("\n[점검 지표 · 권한]");
+const yr = Number((await one("select extract(year from kst_today())::int y")).y);
+await db.exec("set role authenticated");
+await as(U.I); await expectError("기본은 지표 열람 불가 (임직원도)", "select kpi_year($1)", [yr], "권한");
+await as(U.A); const k1 = (await one("select kpi_year($1) k", [yr])).k;
+const iRow = k1.people.find((p) => p.uid === U.I);
+ok(iRow && iRow.found >= 3, `관리자는 열람 · 등록자 발굴 실적 집계 (점검자 ${iRow?.found}건)`);
+ok(k1.months.length === 12, "월별 추이 12개월");
+await db.exec("reset role"); await as(null);
+await db.query("insert into user_permissions values ($1,'insp_kpi','read') on conflict (user_id, module_code) do update set level='read'", [U.H]);
+await db.exec("set role authenticated"); await as(U.H);
+ok(!!(await one("select kpi_year($1) k", [yr])).k, "권한을 준 사람은 열람 가능");
+await db.exec("reset role"); await as(null);
+// 점검 주기 : 3주 전부터 매주 → 끝난 주에 등록이 없으면 미진행
+await db.query("insert into inspection_schedules (module_code, user_id, period, start_date) values ('insp_daily',$1,'weekly', kst_today() - 21)", [U.Q]);
+let q = (await one("select _kpi_compute($1) k", [yr])).k.people.find((p) => p.uid === U.Q);
+ok(q && q.expected >= 2 && q.missed === q.expected, `점검 미진행 : 끝난 주기 ${q?.expected}회 모두 미실시`);
+await db.query("insert into inspection_checks (module_code, user_id, done_on) values ('insp_daily',$1, kst_today() - 14)", [U.Q]);
+q = (await one("select _kpi_compute($1) k", [yr])).k.people.find((p) => p.uid === U.Q);
+ok(q.missed === q.expected - 1, "'지적사항 없이 점검 완료' 기록이 있는 주는 실시로 봄");
+// 조치 · 지연 : 종결 건 × 조치담당자, 원래 목표일 넘김 = 지연
+const kpiAll = (await one("select _kpi_compute($1) k", [yr])).k;
+const w2 = kpiAll.people.find((p) => p.uid === U.W2);
+ok(w2 && w2.closed >= 1, `조치담당자 개인 조치 건 집계 (작업자2 ${w2?.closed}건)`);
+const prodTeam = kpiAll.teams.find((t) => t.team === PROD);
+ok(prodTeam && prodTeam.due >= prodTeam.late, `팀 지연 집계 (생산팀 지연 ${prodTeam?.late}/${prodTeam?.due})`);
+// 확정 저장
+await as(U.A); await db.query("select confirm_kpi($1,'시험')", [yr - 1]);
+await expectError("올해는 확정 불가", "select confirm_kpi($1)", [yr], "해가 바뀐 뒤");
+ok(!!(await one("select kpi_year($1) k", [yr - 1])).k.confirmed_at, "지난해는 확정본으로 조회");
 await as(null);
 
 console.log("\n[비슷한 과거 지적 사례]");

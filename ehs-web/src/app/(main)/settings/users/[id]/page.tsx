@@ -54,7 +54,7 @@ export default async function UserEditPage({ params }: PageProps<"/settings/user
                     </td>
                     <td className="py-2">
                       <select name={`perm_${m.code}`} defaultValue={current} className="rounded-md border border-gray-300 bg-white px-2 py-1">
-                        <option value="default">기본값 ({PERM_LABEL[defaultLevel]})</option>
+                        <option value="default">기본값 ({PERM_LABEL[m.restricted ? "none" : defaultLevel]})</option>
                         <option value="none">없음</option>
                         <option value="read">열람</option>
                         <option value="write">작성</option>

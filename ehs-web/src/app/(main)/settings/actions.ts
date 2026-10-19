@@ -321,3 +321,57 @@ export async function saveApprovalTemplate(moduleCode: string, steps: TemplateIn
   if (error) return { error: toMessage(error) };
   return done("결재선을 저장했습니다. 다음 상신부터 적용됩니다.");
 }
+
+// ---------------------------------------------------------------- 단계별 알림 · 공휴일 · 점검 주기
+const REMINDER_KEYS = ["assign_days", "plan_days", "due_before_days", "approve_days", "repeat_days"] as const;
+
+export async function saveReminderSettings(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const value: Record<string, number> = {};
+  for (const k of REMINDER_KEYS) {
+    const v = Number(fd.get(k));
+    if (!Number.isInteger(v) || v < (k === "due_before_days" ? 0 : 1) || v > 30) return { error: "일수는 1 ~ 30 사이 정수로 입력해 주세요 (목표일 전 알림은 0 가능)." };
+    value[k] = v;
+  }
+  const supabase = await createClient();
+  const { error } = await supabase.from("app_settings").upsert({ key: "reminder", value, updated_at: new Date().toISOString() });
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function saveHoliday(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const day = s(fd, "day");
+  if (fd.get("intent") === "delete") {
+    const { error } = await supabase.from("holidays").delete().eq("day", day);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return { error: "날짜를 선택해 주세요." };
+  const { error } = await supabase.from("holidays").upsert({ day, name: s(fd, "name") });
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function saveSchedule(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { error } = await supabase.from("inspection_schedules").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const period = s(fd, "period");
+  if (!["daily", "weekly", "monthly"].includes(period)) return { error: "주기를 선택해 주세요." };
+  const start = s(fd, "start_date");
+  const end = nullable(s(fd, "end_date"));
+  if (end && start && end < start) return { error: "종료일이 시작일보다 빠릅니다." };
+  const row = { period, end_date: end, note: nullable(s(fd, "note")), ...(start ? { start_date: start } : {}) };
+  if (id) {
+    const { error } = await supabase.from("inspection_schedules").update({ ...row, is_active: fd.get("is_active") === "on" }).eq("id", id);
+    return error ? { error: toMessage(error) } : done();
+  }
+  const module_code = s(fd, "module_code");
+  const users = fd.getAll("user_id").map(String).filter(Boolean);
+  if (!module_code || users.length === 0) return { error: "점검과 점검자를 선택해 주세요." };
+  const { error } = await supabase.from("inspection_schedules").insert(users.map((user_id) => ({ ...row, module_code, user_id })));
+  return error ? { error: toMessage(error).replace("이미 등록된 값입니다.", "이미 주기가 정해진 사람이 있습니다. 목록에서 수정해 주세요.") } : done();
+}

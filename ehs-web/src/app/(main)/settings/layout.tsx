@@ -9,6 +9,8 @@ const TABS = [
   { href: "/settings/sites", label: "사업장" },
   { href: "/settings/locations", label: "장소" },
   { href: "/settings/types", label: "유형" },
+  { href: "/settings/schedules", label: "점검 주기" },
+  { href: "/settings/reminders", label: "알림" },
   { href: "/settings/mail", label: "메일 발송" },
 ];
 

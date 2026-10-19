@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getInternalModules, getModuleBySlug } from "@/lib/access";
+import { canViewKpi, getInternalModules, getModuleBySlug } from "@/lib/access";
 import { PageHeader } from "@/components/PageHeader";
 import { TabLinks } from "@/components/TabLinks";
 
@@ -10,6 +10,7 @@ export default async function InternalInspectionLayout({ params, children }: Lay
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level === "none") notFound();
   const tabs = (await getInternalModules()).map((m) => ({ href: `/insp/${m.slug}`, label: m.name }));
+  if (await canViewKpi()) tabs.push({ href: "/insp/kpi", label: "점검 지표" });
 
   return (
     <>

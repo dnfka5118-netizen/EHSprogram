@@ -46,3 +46,12 @@ export async function deleteFinding(findingId: string, backTo: string): Promise<
   revalidatePath("/", "layout");
   redirect(backTo);
 }
+
+// 점검은 했지만 지적사항이 없을 때 : 점검 지표에서 '미진행' 으로 세지 않도록 기록
+export async function recordNoFinding(module: string, note: string): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("record_no_finding", { p_module: module, p_note: note });
+  if (error) return { error: toMessage(error) };
+  revalidatePath("/insp", "layout");
+  return { ok: true };
+}

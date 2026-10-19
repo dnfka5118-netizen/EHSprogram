@@ -11,7 +11,9 @@ export const getModuleAccess = cache(async (): Promise<ModuleAccess[]> => {
   if (!s) return [];
   const map = new Map(s.perms.map((p) => [p.module_code, p.level as PermLevel]));
   return s.modules.map((m) => {
-    const level: PermLevel = s.profile.is_admin ? "write" : (map.get(m.code) ?? (s.profile.user_type === "employee" ? "write" : "none"));
+    const level: PermLevel = s.profile.is_admin
+      ? "write"
+      : (map.get(m.code) ?? (m.restricted ? "none" : s.profile.user_type === "employee" ? "write" : "none"));
     return { ...m, level };
   });
 });
@@ -19,6 +21,11 @@ export const getModuleAccess = cache(async (): Promise<ModuleAccess[]> => {
 export async function getModuleBySlug(slug: string) {
   const list = await getModuleAccess();
   return list.find((m) => m.slug === slug && m.is_enabled && m.form === "finding") ?? null;
+}
+
+// 점검 지표 탭을 볼 수 있는지 (환경설정 → 사용자 권한에서 '점검 지표' 를 준 사람 · 관리자)
+export async function canViewKpi() {
+  return (await getModuleAccess()).some((m) => m.code === "insp_kpi" && m.level !== "none");
 }
 
 // 내부점검(사내점검) 탭 : 사용 중이고 열람 권한이 있는 지적사항형 점검

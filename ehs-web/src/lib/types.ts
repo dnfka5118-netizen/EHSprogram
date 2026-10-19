@@ -40,6 +40,7 @@ export type Module = {
   form: string | null;
   sort_order: number;
   is_enabled: boolean;
+  restricted?: boolean; // 기본 권한 '없음' (점검 지표 등) — 개별로 준 사람만
 };
 
 export type Location = { id: string; site_id: string; name: string; sort_order: number; is_active: boolean };
