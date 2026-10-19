@@ -543,3 +543,11 @@ export async function saveChemItem(_prev: ActionState, fd: FormData): Promise<Ac
   const { error } = id ? await supabase.from("chem_items").update({ ...row, is_active: fd.get("is_active") === "on" }).eq("id", id) : await supabase.from("chem_items").insert(row);
   return error ? { error: toMessage(error) } : done();
 }
+
+// 유해화학물질 대체 점검자 명단 (기본 : EHS부서장 · EHS 점검원)
+export async function saveChemSubstitutes(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_chem_substitutes", { p_users: fd.getAll("member").map(String).filter(Boolean) });
+  return error ? { error: toMessage(error) } : done();
+}

@@ -25,8 +25,9 @@ export default async function ChemCheckPage({ params }: PageProps<"/insp/[slug]/
   const locked = approval?.status === "in_review" || approval?.status === "approved";
   const first = await getChemCheck(supabase, id, !locked);
   if (!first) notFound();
-  const isMember = me.is_admin || first.memberIds.includes(me.id);
-  const editable = isMember && !locked;
+  const { data: subRow } = await supabase.from("chem_substitutes").select("user_id").eq("user_id", me.id).maybeSingle();
+  const isMember = first.memberIds.includes(me.id);
+  const editable = (isMember || me.is_admin || !!subRow) && !locked;
   const d = editable ? first : await getChemCheck(supabase, id, false);
   if (!d) notFound();
   const [template, depts, people] = editable ? await Promise.all([getTemplate(supabase, "insp_chem"), getDeptHeads(supabase), getPeople(supabase)]) : [[], [], []];
@@ -61,7 +62,7 @@ export default async function ChemCheckPage({ params }: PageProps<"/insp/[slug]/
       )}
 
       {editable ? (
-        <ChemForm d={d} today={todayKst()} />
+        <ChemForm d={d} today={todayKst()} substitute={!isMember} />
       ) : (
         <Card>
           <ScrollX>

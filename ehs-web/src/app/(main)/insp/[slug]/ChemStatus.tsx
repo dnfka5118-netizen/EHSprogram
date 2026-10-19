@@ -16,11 +16,12 @@ export async function ChemStatus() {
   const today = todayKst();
   const dow = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
   const week = new Date(Date.parse(today) - dow * 86400000).toISOString().slice(0, 10);
-  const [{ data: groups }, { data: members }, { data: checks }, { data: aps }] = await Promise.all([
+  const [{ data: groups }, { data: members }, { data: checks }, { data: aps }, { data: subRow }] = await Promise.all([
     supabase.from("chem_groups").select("id, name, departments(name), chem_places(id, is_active)").eq("is_active", true).order("sort_order"),
     supabase.from("chem_group_members").select("group_id, user_id, profiles(name)"),
     supabase.from("chem_checks").select("id, group_id, check_date, week_start, saved_at, profiles(name), chem_groups(name)").order("week_start", { ascending: false }).limit(60),
     supabase.from("approvals").select("doc_id, status").eq("module_code", "insp_chem"),
+    supabase.from("chem_substitutes").select("user_id").eq("user_id", me?.id ?? "").maybeSingle(),
   ]);
   const gs = (groups ?? []) as unknown as { id: string; name: string; departments: { name: string } | null; chem_places: { id: string; is_active: boolean }[] }[];
   const mem = (members ?? []) as unknown as { group_id: string; user_id: string; profiles: { name: string } | null }[];
@@ -28,6 +29,8 @@ export async function ChemStatus() {
   const st = new Map((aps ?? []).map((a) => [a.doc_id as string, a.status as keyof typeof APPROVAL_STATUS_LABEL]));
   const mine = gs.filter((g) => mem.some((m) => m.group_id === g.id && m.user_id === me?.id));
   const thisWeek = (gid: string) => ck.find((c) => c.group_id === gid && c.week_start === week);
+  const canSub = !!subRow || !!me?.is_admin; // 대체 점검자 (환경설정 명단)
+  const others = gs.filter((g) => !mine.includes(g));
   const label = (c: Check | undefined) => (!c || !c.saved_at ? "미실시" : st.get(c.id) ? APPROVAL_STATUS_LABEL[st.get(c.id)!] : "저장됨 · 상신 전");
 
   return (
@@ -44,6 +47,32 @@ export async function ChemStatus() {
                   </span>
                   <span className={`text-xs ${c?.saved_at ? "text-emerald-700" : "font-medium text-red-600"}`}>이번 주 {label(c)}</span>
                   <OpenChemButton groupId={g.id} label={c?.saved_at ? "이번 주 점검대장" : "이번 주 점검하기"} primary={!c?.saved_at} />
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      {canSub && others.length > 0 && (
+        <Card title="대체 점검 (점검자 휴가·외근 시)">
+          <p className="mb-2 text-xs break-keep text-gray-500">대체 점검자로 지정되어 있습니다. 점검자가 없을 때 그 점검 단위의 이번 주 점검대장을 대신 작성합니다 (사유 필수).</p>
+          <ul className="divide-y divide-gray-100">
+            {others.map((g) => {
+              const c = thisWeek(g.id);
+              return (
+                <li key={g.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm">
+                  <span className="min-w-0 flex-1 basis-40">
+                    <b className="font-medium">{g.name}</b>{" "}
+                    <span className="text-xs text-gray-500">
+                      {mem
+                        .filter((m) => m.group_id === g.id)
+                        .map((m) => m.profiles?.name)
+                        .join(", ")}
+                    </span>
+                  </span>
+                  <span className={`text-xs ${c?.saved_at ? "text-emerald-700" : "text-red-600"}`}>{label(c)}</span>
+                  {!c?.saved_at && <OpenChemButton groupId={g.id} label="대체 점검" />}
                 </li>
               );
             })}

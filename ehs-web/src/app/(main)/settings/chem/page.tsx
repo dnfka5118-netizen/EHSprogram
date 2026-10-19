@@ -1,21 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
 import { ActionForm } from "@/components/ActionForm";
 import { Card, DeleteSubmit, Input, SubmitButton, Textarea } from "@/components/ui";
-import { saveChemGroup, saveChemItem, saveChemPlace } from "../actions";
+import { saveChemGroup, saveChemItem, saveChemPlace, saveChemSubstitutes } from "../actions";
+import { SubstituteEditor } from "./SubstituteEditor";
 import { GroupEditor, GroupTable, type GroupRow } from "./GroupTable";
 import type { ChemGroup, ChemItem, ChemPlace } from "@/lib/chem";
 
 // 환경설정 → 유해화학물질 점검 : 점검 단위(부서별) · 점검자 · 점검장소 · 점검 항목(별지 제42호서식 12개)
 export default async function ChemSettingsPage() {
   const supabase = await createClient();
-  const [{ data: groups }, { data: members }, { data: places }, { data: items }, { data: depts }, { data: people }] = await Promise.all([
+  const [{ data: groups }, { data: members }, { data: places }, { data: items }, { data: depts }, { data: people }, { data: subs }] = await Promise.all([
     supabase.from("chem_groups").select("*").order("sort_order"),
     supabase.from("chem_group_members").select("group_id, user_id, profiles(name)"),
     supabase.from("chem_places").select("*").order("sort_order"),
     supabase.from("chem_items").select("*").order("sort_order"),
     supabase.from("departments").select("id, name").eq("is_active", true).is("parent_id", null).order("sort_order"),
     supabase.from("profiles").select("id, name, position").eq("is_active", true).order("name"),
+    supabase.from("chem_substitutes").select("user_id, profiles(name)"),
   ]);
+  const subList = (subs ?? []) as unknown as { user_id: string; profiles: { name: string } | null }[];
   const mem = (members ?? []) as unknown as { group_id: string; user_id: string; profiles: { name: string } | null }[];
   const deptName = new Map((depts ?? []).map((d) => [d.id, d.name]));
   const rows: GroupRow[] = ((groups ?? []) as ChemGroup[]).map((g) => ({
@@ -37,6 +40,16 @@ export default async function ChemSettingsPage() {
           <summary className="cursor-pointer text-sm font-medium text-brand-800">+ 점검 단위 추가</summary>
           <div className="mt-3">
             <GroupEditor group={null} departments={depts ?? []} people={people ?? []} action={saveChemGroup} />
+          </div>
+        </details>
+      </Card>
+
+      <Card title={`대체 점검자 (${subList.length}명 · ${subList.map((x) => x.profiles?.name).join(", ") || "없음"})`}>
+        <p className="mb-2 text-xs break-keep text-gray-500">점검자가 휴가·외근 등으로 없을 때 어느 점검 단위든 대신 점검할 수 있는 사람입니다 (EHS부서장 · EHS 유해화학물질 점검원). 대체 점검은 사유를 남기고, 점검대장에 &apos;대체 점검&apos; 으로 표시됩니다.</p>
+        <details>
+          <summary className="cursor-pointer text-sm text-brand-800">명단 바꾸기</summary>
+          <div className="mt-2">
+            <SubstituteEditor people={people ?? []} ids={subList.map((x) => x.user_id)} action={saveChemSubstitutes} />
           </div>
         </details>
       </Card>

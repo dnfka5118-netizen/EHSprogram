@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Input, Textarea } from "@/components/ui";
 import { CHEM_RESULTS, type ChemCheck, type ChemResult } from "@/lib/chem";
 import { saveChemCheck } from "../../../chem-actions";
+import { SUB_REASONS } from "@/lib/daily";
 
 const ON: Record<ChemResult, string> = {
   ok: "border-emerald-600 bg-emerald-600 text-white",
@@ -13,7 +14,9 @@ const ON: Record<ChemResult, string> = {
 };
 
 // 점검대장 작성 : 점검일 · 시간 · 항목별 장소마다 문제없음/조치완료/재점검 · 비고
-export function ChemForm({ d, today }: { d: ChemCheck; today: string }) {
+export function ChemForm({ d, today, substitute }: { d: ChemCheck; today: string; substitute: boolean }) {
+  const [subKind, setSubKind] = useState(d.sub_reason ? (SUB_REASONS.find((r) => d.sub_reason!.startsWith(r)) ?? "기타") : "");
+  const [subText, setSubText] = useState(d.sub_reason && !SUB_REASONS.some((r) => d.sub_reason === r) ? d.sub_reason.replace(/^(휴가|외근|교육|출장|기타)( · )?/, "") : "");
   const router = useRouter();
   const [date, setDate] = useState(d.check_date);
   const [time, setTime] = useState(d.time_text ?? "");
@@ -35,6 +38,8 @@ export function ChemForm({ d, today }: { d: ChemCheck; today: string }) {
 
   function save() {
     setMsg(null);
+    if (substitute && !subKind) return setMsg({ error: "대체 점검 사유를 골라 주세요." });
+    if (substitute && subKind === "기타" && !subText.trim()) return setMsg({ error: "대체 점검 사유를 적어 주세요." });
     for (const i of d.items) {
       const bad = d.places.some((p) => cells[`${i.id}|${p.id}`] && cells[`${i.id}|${p.id}`] !== "ok");
       if (bad && !notes[i.id]?.trim()) return setMsg({ error: `${i.code}번 항목의 비고(조치 내용 또는 재점검 필요 사항)를 적어 주세요.` });
@@ -50,6 +55,7 @@ export function ChemForm({ d, today }: { d: ChemCheck; today: string }) {
           return { item_id, place_id, result };
         }),
         Object.entries(notes).map(([item_id, note]) => ({ item_id, note })),
+        substitute ? [subKind, subText.trim()].filter(Boolean).join(" · ") : null,
       );
       if ("error" in r) return setMsg({ error: r.error });
       setMsg({ ok: `저장했습니다.${r.findings ? ` 정밀 재점검 필요 ${r.findings}건을 지적사항(개선 요청)으로 등록했습니다.` : ""} 아래에서 상신해 주세요.` });
@@ -59,6 +65,25 @@ export function ChemForm({ d, today }: { d: ChemCheck; today: string }) {
 
   return (
     <div className="space-y-3">
+      {substitute && (
+        <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          <p className="font-semibold text-amber-900">대체 점검 — 이 점검 단위의 점검자가 아닙니다</p>
+          <p className="text-xs break-keep text-amber-800">점검자가 휴가·외근 등으로 없을 때 대신 점검합니다. 점검대장 성명 칸에 &apos;대체 점검&apos; 과 사유가 표시됩니다.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {SUB_REASONS.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setSubKind(r)}
+                className={`rounded-full border px-3 py-1 text-sm ${subKind === r ? "border-amber-600 bg-amber-600 text-white" : "border-amber-300 bg-white"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <Input value={subText} onChange={(e) => setSubText(e.target.value)} placeholder={subKind === "기타" ? "사유 (필수)" : "추가 설명 (선택, 예 : 이진혁 대리 휴가)"} className="px-2 py-1.5" />
+        </div>
+      )}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
         <label className="space-y-1">
           <span className="block text-xs text-gray-500">점검일 ({d.week_start.slice(5).replace("-", ".")} 주)</span>

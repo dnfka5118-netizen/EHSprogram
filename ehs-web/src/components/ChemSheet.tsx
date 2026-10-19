@@ -46,7 +46,10 @@ export function ChemSheet({ d, stamps }: { d: ChemCheck; stamps: { label: string
             <td className={`${B} py-1`}>{fmtDate(d.check_date)}</td>
             <td className={B}>{d.time_text ?? ""}</td>
             <td className={B}>{d.inspector?.department ?? d.group.department ?? ""}</td>
-            <td className={B}>{d.inspector?.name ?? ""}</td>
+            <td className={B}>
+              {d.inspector?.name ?? ""}
+              {d.sub_reason && <div className="text-[9px] text-gray-600">(대체 점검 · {d.sub_reason})</div>}
+            </td>
           </tr>
         </tbody>
       </table>

@@ -20,6 +20,7 @@ export type ChemCheck = {
   time_text: string | null;
   inspector: { name: string; department: string | null } | null;
   saved_at: string | null;
+  sub_reason: string | null; // 대체 점검 사유 (null = 점검자 본인)
   items: ChemItem[];
   places: ChemPlace[];
   results: Record<string, ChemResult>; // `${item}|${place}`

@@ -29,6 +29,7 @@ export async function getChemCheck(supabase: SupabaseClient, id: string, editabl
     time_text: c.time_text,
     inspector: p ? { name: p.name, department: p.departments?.name ?? null } : null,
     saved_at: c.saved_at,
+    sub_reason: c.sub_reason ?? null,
     items: ((items ?? []) as ChemItem[]).filter((i) => (editable || !usedItems.size ? i.is_active : false) || usedItems.has(i.id)),
     places: ((places ?? []) as ChemPlace[]).filter((x) => (editable || !usedPlaces.size ? x.is_active : false) || usedPlaces.has(x.id)),
     results: Object.fromEntries(res.map((r) => [`${r.item_id}|${r.place_id}`, r.result])),

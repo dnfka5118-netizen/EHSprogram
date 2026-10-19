@@ -21,9 +21,10 @@ export async function saveChemCheck(
   time: string,
   results: { item_id: string; place_id: string; result: string }[],
   notes: { item_id: string; note: string }[],
+  subReason: string | null, // 대체 점검 사유 (점검자 본인이면 null)
 ): Promise<{ findings: number } | { error: string }> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("save_chem_check", { p_id: id, p_date: date, p_time: time, p_results: results, p_notes: notes });
+  const { data, error } = await supabase.rpc("save_chem_check", { p_id: id, p_date: date, p_time: time, p_results: results, p_notes: notes, p_sub_reason: subReason });
   if (error) return { error: toMessage(error) };
   after(() => processOutbox());
   revalidatePath("/insp/chem", "layout");

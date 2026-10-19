@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -705,6 +705,28 @@ await db.query("select submit_chem_check($1,$2)", [cid, JSON.stringify([{ step_k
 ok((await one("select status from approvals where module_code='insp_chem' and doc_id=$1", [cid])).status === "in_review", "상신 → 결재 진행");
 await expectError("결재 중 수정 차단", "select save_chem_check($1, kst_today(), '', $2, '[]')", [cid, grid()], "결재 중");
 ok((await one("select approval_doc_path('insp_chem',$1) p", [cid])).p === `/insp/chem/checks/${cid}`, "전자결재함 → 점검대장 연결");
+await as(null);
+
+
+console.log("\n[유해화학물질 자체점검 : 대체 점검]");
+await as(null);
+const sg = await one("insert into chem_groups (site_id, name, department_id) values ($1,'품질 (시험)',$2) returning id", [site, QA]);
+const sp = await one("insert into chem_places (group_id, name) values ($1,'분석실') returning id", [sg.id]);
+await as(U.A); await db.query("select set_chem_group_members($1, array[$2]::uuid[])", [sg.id, U.Q]);
+await as(U.W2); await expectError("대체 점검자 명단에 없으면 차단", "select open_chem_check($1)", [sg.id], "대체 점검자만");
+await as(U.A); await db.query("select set_chem_substitutes(array[$1]::uuid[])", [U.W2]);
+await as(U.W2);
+const sid = (await one("select open_chem_check($1) id", [sg.id])).id;
+const sItems = (await db.query("select id from chem_items where is_active")).rows;
+const sGrid = JSON.stringify(sItems.map((i) => ({ item_id: i.id, place_id: sp.id, result: "ok" })));
+await expectError("대체 점검 사유 필수", "select save_chem_check($1, kst_today(), '', $2, '[]')", [sid, sGrid], "대체 점검 사유");
+await db.query("select save_chem_check($1, kst_today(), '09:00 ~ 09:30', $2, '[]', '휴가')", [sid, sGrid]);
+const subCk = await one("select sub_reason, user_id from chem_checks where id=$1", [sid]);
+ok(subCk.sub_reason === "휴가" && subCk.user_id === U.W2, "대체 점검 저장 (점검한 사람 · 사유)");
+ok((await one("select count(*)::int c from inspection_checks where module_code='insp_chem' and user_id=$1 and note like '%대체 점검%'", [U.Q])).c === 1, "원래 점검자도 이번 주 실시");
+await as(U.Q);
+await db.query("select save_chem_check($1, kst_today(), '09:00 ~ 09:30', $2, '[]')", [sid, sGrid]);
+ok((await one("select sub_reason from chem_checks where id=$1", [sid])).sub_reason === null, "점검자 본인이 다시 저장하면 대체 표시 없음");
 await as(null);
 
 
