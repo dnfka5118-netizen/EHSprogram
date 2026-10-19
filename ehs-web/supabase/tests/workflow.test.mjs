@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -612,6 +612,32 @@ await db.query("select submit_daily_log($1,$2)", [lg, JSON.stringify([{ step_kin
 await expectError("상신된 달은 소급 차단", "select submit_daily_backfill($1, kst_today()-2, $2, '누락')", [area2.id, allC], "상신");
 await as(U.A); await db.query("select set_daily_area_members($1, '{}'::uuid[])", [area2.id]);
 ok((await one("select end_date is not null or not is_active x from inspection_schedules where module_code='insp_daily' and user_id=$1", [U.W2])).x, "담당 해제 → 점검 주기 종료");
+await as(null);
+
+
+console.log("\n[지적사항 수정]");
+await as(U.I);
+const ef = "44444444-0000-0000-0000-000000000001";
+await db.query("select register_finding('insp_monthly','',$1)", [JSON.stringify({ id: ef, location_id: loc, problem: "소화기 압력 미달", department_id: PROD, photos: [] })]);
+const loc2 = (await one("select id from locations where name<>'HBC-C2' order by name limit 1")).id;
+const edit = (o) => JSON.stringify({ location_id: loc2, sub_location_id: null, sub_location_text: "2층 복도", type_id: typ, problem: "소화기 압력 미달 (게이지 적색)", department_id: PROD, ...o });
+await as(U.W1); await expectError("등록자·관리자 아니면 수정 차단", "select update_finding($1,$2)", [ef, edit({})], "수정할 수 없습니다");
+await as(U.I);
+await expectError("세부장소-장소 불일치 차단", "select update_finding($1,$2)", [ef, edit({ sub_location_id: sub })], "세부장소");
+await db.query("select update_finding($1,$2)", [ef, edit({})]);
+let ed = await one("select location_id, sub_location_text, finding_type_id, problem from findings where id=$1", [ef]);
+ok(ed.location_id === loc2 && ed.sub_location_text === "2층 복도" && ed.finding_type_id === typ && ed.problem.includes("게이지"), "등록자가 장소·유형·문제점 수정");
+ok((await one("select detail from finding_events where finding_id=$1 and action='수정'", [ef])).detail.includes("문제점"), "수정 내용이 처리 이력에 남음");
+await db.query("select update_finding($1,$2)", [ef, edit({ department_id: QA })]);
+ok((await one("select request_department_id d from findings where id=$1", [ef])).d === QA, "담당자 지정 전 : 조치 요청 부서 변경");
+ok((await one("select count(*)::int c from notifications where finding_id=$1 and kind='request' and subject like '%조치 요청%'", [ef])).c >= 1, "새 부서에 조치 요청 알림");
+await as(U.A); await db.query("select assign_finding($1, array[$2]::uuid[])", [ef, U.Q]);
+await as(U.I); await expectError("담당자 지정 후 등록자는 부서 변경 불가", "select update_finding($1,$2)", [ef, edit({ department_id: PROD })], "관리자");
+await db.query("select update_finding($1,$2)", [ef, edit({ department_id: QA, problem: "소화기 압력 미달 (교체 필요)" })]);
+ok((await one("select problem from findings where id=$1", [ef])).problem.includes("교체"), "담당자 지정 후에도 문제점 수정 가능");
+await as(U.A); await db.query("select update_finding($1,$2)", [ef, edit({ department_id: PROD })]);
+const rs = await one("select status, request_department_id d, (select count(*)::int from finding_assignees where finding_id=$1) n from findings where id=$1", [ef]);
+ok(rs.status === "assign_wait" && rs.d === PROD && rs.n === 0, "관리자 부서 변경 → 담당자 초기화 · 담당자 지정 대기");
 await as(null);
 
 

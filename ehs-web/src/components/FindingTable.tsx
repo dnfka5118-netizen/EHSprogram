@@ -12,6 +12,7 @@ import { PhotoViewer } from "@/components/PhotoViewer";
 import { ScrollX } from "@/components/ScrollX";
 import { KEYS, useStored, write } from "@/components/shell/store";
 import { PlanForm } from "@/app/(main)/findings/[id]/PlanForm";
+import { EditFindingButton } from "./EditFindingButton";
 import { ReportForm } from "@/app/(main)/findings/[id]/ReportForm";
 
 const short = (d: string) => d.slice(2).replaceAll("-", ".");
@@ -148,6 +149,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                 </span>
                 <AssignButton row={r} onClick={showAssign} />
                 <SelfAssignButton row={r} />
+                {r.canEdit && <EditFindingButton row={r} canEditDept={r.canEditDept} />}
                 <ApproveButtons row={r} onReject={showReject} />
                 {r.canPlan && <PlanButton row={r} onClick={showPlan} />}
                 {r.canReport && <ReportButton row={r} onClick={showReport} />}
@@ -204,6 +206,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                 <Td className="whitespace-nowrap">{r.type_name ?? "-"}</Td>
                 <Td>
                   <span className="line-clamp-4 whitespace-pre-wrap">{r.problem}</span>
+                  {r.canEdit && <EditFindingButton row={r} canEditDept={r.canEditDept} className="mt-1" />}
                 </Td>
                 <Td>
                   <Thumb row={r} onOpen={showPhotos} className="h-32 w-40" />

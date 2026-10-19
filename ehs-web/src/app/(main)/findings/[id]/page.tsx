@@ -14,6 +14,7 @@ import { ApprovalPanel } from "./ApprovalPanel";
 import { CommentForm } from "./CommentForm";
 import { DeleteButton } from "./DeleteButton";
 import { SelfAssignButton } from "./SelfAssignButton";
+import { EditFindingButton } from "@/components/EditFindingButton";
 import { thumbPathOf } from "@/lib/photo-path";
 import type { FindingOverview, Measure, Photo } from "@/lib/types";
 
@@ -94,6 +95,8 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
       .filter(Boolean)
       .join(", ") || "미지정";
   const canDelete = isAdmin || (f.created_by === profile.id && f.status === "assign_wait");
+  const canEdit = isAdmin || (f.created_by === profile.id && f.status !== "closed");
+  const canEditDept = f.status !== "closed" && (f.status === "assign_wait" || isAdmin);
   const today = todayKst();
   const measureKey = measures.map((m) => `${m.id}:${m.target_date}:${m.is_done}`).join("|");
 
@@ -109,7 +112,14 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           { label: "점검" },
           { label: f.module_name, href: `/insp/${f.module_slug}` },
         ]}
-        actions={canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}`} />}
+        actions={
+          (canEdit || canDelete) && (
+            <>
+              {canEdit && <EditFindingButton row={f} canEditDept={canEditDept} className="px-3 py-2 text-sm" />}
+              {canDelete && <DeleteButton findingId={f.id} backTo={`/insp/${f.module_slug}`} />}
+            </>
+          )
+        }
       />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link href={`/insp/${f.module_slug}`} className="text-sm text-gray-600 hover:underline">

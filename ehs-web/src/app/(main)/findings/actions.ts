@@ -131,3 +131,35 @@ export async function rotatePhoto(fd: FormData): Promise<ActionState> {
   revalidatePath("/", "layout");
   return { ok: true, message: "회전해 저장했습니다." };
 }
+
+// 지적사항 수정 (등록자 : 종결 전 · 관리자 : 언제든) — 규칙은 DB update_finding
+export type FindingEdit = {
+  location_id: string;
+  sub_location_id: string;
+  sub_location_text: string;
+  type_id: string;
+  problem: string;
+  department_id: string;
+};
+export async function updateFinding(findingId: string, edit: FindingEdit) {
+  return run("update_finding", { p_finding: findingId, p: edit }, findingId, "수정되었습니다.");
+}
+
+// 수정 창 선택지 : 그 사업장의 장소(세부장소 포함) · 유형 · 부서(팀)
+export async function getEditOptions(siteId: string) {
+  const supabase = await createClient();
+  const [{ data: locations }, { data: types }, { data: depts }] = await Promise.all([
+    supabase.from("locations").select("id, name, sub_locations(id, name, is_active, sort_order)").eq("site_id", siteId).eq("is_active", true).order("sort_order"),
+    supabase.from("finding_types").select("id, name").eq("is_active", true).order("sort_order"),
+    supabase.from("departments").select("id, name").eq("site_id", siteId).eq("is_active", true).is("parent_id", null).order("sort_order"),
+  ]);
+  return {
+    locations: ((locations ?? []) as { id: string; name: string; sub_locations: { id: string; name: string; is_active: boolean; sort_order: number }[] }[]).map((l) => ({
+      id: l.id,
+      name: l.name,
+      subs: l.sub_locations.filter((x) => x.is_active).sort((a, b) => a.sort_order - b.sort_order),
+    })),
+    types: (types ?? []) as { id: string; name: string }[],
+    departments: (depts ?? []) as { id: string; name: string }[],
+  };
+}
