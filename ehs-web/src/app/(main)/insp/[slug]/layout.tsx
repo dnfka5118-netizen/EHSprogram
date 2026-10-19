@@ -22,7 +22,12 @@ export default async function InternalInspectionLayout({ params, children }: Lay
             <Link href={`/insp/${slug}/report`} className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50">
               월별 보고서
             </Link>
-            {mod.level === "write" && (
+            {mod.code === "insp_daily" && (
+              <Link href="/insp/daily/logs" className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">
+                월간 일지
+              </Link>
+            )}
+            {mod.level === "write" && mod.code !== "insp_daily" && (
               <Link href={`/insp/${slug}/new`} className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">
                 + 점검 등록
               </Link>

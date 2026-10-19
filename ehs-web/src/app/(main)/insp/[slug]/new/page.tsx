@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { getSession } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
   const { slug } = await params;
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level !== "write") notFound();
+  if (mod.code === "insp_daily") redirect("/insp/daily"); // 일일점검은 현장 QR 로만 등록
   const session = await getSession();
   if (!session) notFound();
   const { profile, siteName } = session;

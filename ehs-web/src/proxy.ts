@@ -30,8 +30,9 @@ export async function proxy(request: NextRequest) {
 
   if (!data?.claims && !isPublic) {
     const url = request.nextUrl.clone();
+    const back = request.nextUrl.pathname;
     url.pathname = "/login";
-    url.search = "";
+    url.search = back.startsWith("/d/") ? `?next=${encodeURIComponent(back)}` : ""; // 현장 QR 은 로그인 후 그 화면으로
     return NextResponse.redirect(url);
   }
   return response;

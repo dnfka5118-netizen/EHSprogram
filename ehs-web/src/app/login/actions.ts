@@ -24,7 +24,9 @@ export async function login(_prev: ActionState, formData: FormData): Promise<Act
     await supabase.auth.signOut();
     return { error: "사용이 중지되었거나 등록되지 않은 계정입니다. 관리자에게 문의하세요." };
   }
-  redirect(profile.must_change_password ? "/account/password" : "/");
+  const next = String(formData.get("next") ?? "");
+  const safeNext = /^\/d\/[0-9a-f]+$/.test(next) ? next : "/"; // 현장 QR 화면만 허용
+  redirect(profile.must_change_password ? "/account/password" : safeNext);
 }
 
 export async function logout() {

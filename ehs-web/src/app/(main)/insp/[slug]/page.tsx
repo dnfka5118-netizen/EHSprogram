@@ -10,6 +10,7 @@ import { findingRowsPage } from "../excel-actions";
 import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
+import { DailyStatus } from "./DailyStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
@@ -21,7 +22,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const supabase = await createClient();
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
   const profile = await getProfile();
-  const canImport = mod.level === "write" && !!profile?.site_id;
+  const canImport = mod.level === "write" && !!profile?.site_id && mod.code !== "insp_daily"; // 일일점검은 현장 QR 로만
   const none = Promise.resolve({ data: [] as unknown[] });
   const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }, { data: locRows }, { data: usedRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
@@ -46,6 +47,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   return (
     <div className="space-y-4">
+      {mod.code === "insp_daily" && <DailyStatus />}
       <Card
         title={`지적사항 현황 (${rows.length}건)`}
         actions={

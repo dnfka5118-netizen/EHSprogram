@@ -4,10 +4,11 @@ import { useActionState } from "react";
 import { login } from "./actions";
 import { Field, FormMessage, Input, SubmitButton } from "@/components/ui";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, action] = useActionState(login, undefined);
   return (
     <form action={action} className="space-y-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <Field label="아이디 (회사 이메일)">
         <Input name="email" type="email" autoComplete="username" required placeholder="name@sypchem.co.kr" />
       </Field>

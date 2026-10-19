@@ -59,7 +59,7 @@ export const DOMAINS: Domain[] = [
         { label: "CEO 안전점검", href: "/insp/ceo", module: "insp_ceo", match: ["/insp/ceo"] },
         { label: "월간환경안전점검", href: "/insp/monthly", module: "insp_monthly", match: ["/insp/monthly"] },
         { label: "공장장 안전점검", href: "/insp/plant", module: "insp_plant", match: ["/insp/plant"] },
-        { label: "관리감독자 일일점검", module: "insp_daily" },
+        { label: "관리감독자 일일점검", href: "/insp/daily", module: "insp_daily", match: ["/insp/daily"] },
         { label: "외부점검", href: "/insp/external" },
         { label: "점검 지표", href: "/insp/kpi", module: "insp_kpi", match: ["/insp/kpi"] },
       ]),

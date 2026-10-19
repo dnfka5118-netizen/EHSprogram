@@ -375,3 +375,78 @@ export async function saveSchedule(_prev: ActionState, fd: FormData): Promise<Ac
   const { error } = await supabase.from("inspection_schedules").insert(users.map((user_id) => ({ ...row, module_code, user_id })));
   return error ? { error: toMessage(error).replace("이미 등록된 값입니다.", "이미 주기가 정해진 사람이 있습니다. 목록에서 수정해 주세요.") } : done();
 }
+
+// ---------------------------------------------------------------- 관리감독자 일일점검 : 구역 · 양식 항목
+export async function saveDailyArea(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const me = await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("daily_checks").select("id", { count: "exact", head: true }).eq("area_id", id);
+    if (count) return { error: `점검 기록이 ${count}건 있어 삭제할 수 없습니다. '사용' 을 끄면 QR 이 막힙니다.` };
+    const { error } = await supabase.from("daily_areas").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const name = s(fd, "name");
+  const form_code = s(fd, "form_code");
+  if (!name || !form_code) return { error: "구역 이름과 양식을 입력해 주세요." };
+  const row = {
+    name,
+    form_code,
+    department_id: nullable(s(fd, "department_id")),
+    location_id: nullable(s(fd, "location_id")),
+    sort_order: n(fd, "sort_order"),
+    is_active: id ? fd.get("is_active") === "on" : true,
+  };
+  let areaId = id;
+  if (id) {
+    const { error } = await supabase.from("daily_areas").update(row).eq("id", id);
+    if (error) return { error: toMessage(error) };
+  } else {
+    if (!me.site_id) return { error: "관리자 계정에 사업장이 지정되어 있지 않습니다." };
+    const { data, error } = await supabase.from("daily_areas").insert({ ...row, site_id: s(fd, "site_id") || me.site_id }).select("id").single();
+    if (error) return { error: toMessage(error) };
+    areaId = data.id;
+  }
+  const members = fd.getAll("member").map(String).filter(Boolean);
+  const { error } = await supabase.rpc("set_daily_area_members", { p_area: areaId, p_users: members });
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function reissueDailyQr(areaId: string): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reissue_daily_qr", { p_area: areaId });
+  return error ? { error: toMessage(error) } : done("QR 을 새로 발급했습니다. 이전 QR 은 더 이상 열리지 않으니 새로 인쇄해 붙여 주세요.");
+}
+
+export async function saveDailyForm(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("daily_forms")
+    .update({ name: s(fd, "name"), form_no: nullable(s(fd, "form_no")), writer_note: nullable(s(fd, "writer_note")), is_active: fd.get("is_active") === "on" })
+    .eq("code", s(fd, "code"));
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function saveDailyItem(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("daily_results").select("item_id", { count: "exact", head: true }).eq("item_id", id);
+    if (count) return { error: "점검 기록이 있는 항목은 삭제할 수 없습니다. '사용' 을 꺼 주세요." };
+    const { error } = await supabase.from("daily_form_items").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const content = s(fd, "content");
+  const cycle = s(fd, "cycle");
+  if (!content) return { error: "세부 항목을 입력해 주세요." };
+  if (!["D", "W", "M"].includes(cycle)) return { error: "점검 주기를 골라 주세요." };
+  const row = { category: s(fd, "category"), code: s(fd, "code"), content, cycle, cycle_note: nullable(s(fd, "cycle_note")), sort_order: n(fd, "sort_order") };
+  const { error } = id
+    ? await supabase.from("daily_form_items").update({ ...row, is_active: fd.get("is_active") === "on" }).eq("id", id)
+    : await supabase.from("daily_form_items").insert({ ...row, form_code: s(fd, "form_code") });
+  return error ? { error: toMessage(error) } : done();
+}

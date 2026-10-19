@@ -6,12 +6,13 @@ import { TemplateEditor } from "./TemplateEditor";
 import type { Department, Module, Site } from "@/lib/types";
 
 const APPROVAL_FORMS = ["permit", "jsa"]; // 결재가 있는 양식 종류 (modules.form)
+const APPROVAL_CODES = ["insp_daily"]; // 지적사항형이지만 결재가 있는 양식 (관리감독자 일일업무일지)
 
 export default async function ApprovalTemplatesPage({ searchParams }: PageProps<"/settings/approvals">) {
   const sp = await searchParams;
   const supabase = await createClient();
   const [{ data: mods }, { data: depts }, { data: sites }, people] = await Promise.all([
-    supabase.from("modules").select("*").in("form", APPROVAL_FORMS).order("sort_order"),
+    supabase.from("modules").select("*").or(`form.in.(${APPROVAL_FORMS.join(",")}),code.in.(${APPROVAL_CODES.join(",")})`).order("sort_order"),
     supabase.from("departments").select("*").eq("is_active", true).is("parent_id", null).order("sort_order"),
     supabase.from("sites").select("*").order("sort_order"),
     getPeople(supabase),
