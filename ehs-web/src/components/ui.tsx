@@ -83,16 +83,26 @@ export function Field({ label, required, hint, children }: { label: string; requ
 
 const INPUT = "w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-700 disabled:bg-gray-100";
 
+// 입력칸 기본값(w-full · px-3 · py-2)은 className 에 같은 종류(폭 · 안쪽 여백)가 있으면 빼서 덮어쓰기 되게 함
+//   (예 : 순서 칸 w-16 이 w-full 에 밀려 한 줄을 다 차지하던 문제)
+const OVERRIDE: [string, RegExp][] = [
+  ["w-full", /(^|\s)w-/],
+  ["px-3", /(^|\s)(px|p)-/],
+  ["py-2", /(^|\s)(py|p)-/],
+];
+const inputClass = (className?: string) =>
+  cx(INPUT.split(" ").filter((t) => !OVERRIDE.some(([base, re]) => t === base && className && re.test(className))).join(" "), className);
+
 export function Input({ className, ...props }: ComponentProps<"input">) {
-  return <input {...props} className={cx(INPUT, className)} />;
+  return <input {...props} className={inputClass(className)} />;
 }
 
 export function Select({ className, ...props }: ComponentProps<"select">) {
-  return <select {...props} className={cx(INPUT, className)} />;
+  return <select {...props} className={inputClass(className)} />;
 }
 
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return <textarea rows={3} {...props} className={cx(INPUT, className)} />;
+  return <textarea rows={3} {...props} className={inputClass(className)} />;
 }
 
 export function Card({ title, actions, children, className }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {

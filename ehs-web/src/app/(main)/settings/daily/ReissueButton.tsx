@@ -10,7 +10,7 @@ export function ReissueButton({ pointId }: { pointId: string }) {
     <button
       type="button"
       disabled={pending}
-      className="rounded-md px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+      className="rounded px-2 py-1 text-xs whitespace-nowrap text-red-600 hover:bg-red-50"
       onClick={() => {
         if (!confirm("QR 을 새로 발급할까요?\n지금 현장에 붙어 있는 QR 은 더 이상 열리지 않으니 새로 인쇄해 붙여야 합니다.")) return;
         start(async () => {

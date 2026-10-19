@@ -4,8 +4,9 @@ import { Card } from "@/components/ui";
 import { saveDailyArea, saveDailyPoint } from "../actions";
 import { AreaEditor } from "./AreaEditor";
 import { PointEditor } from "./PointEditor";
+import { AreaTable, type AreaRow } from "./AreaTable";
 import { ReissueButton } from "./ReissueButton";
-import type { DailyArea, DailyForm, DailyPoint } from "@/lib/daily";
+import { POINT_GRID, type DailyArea, type DailyForm, type DailyPoint } from "@/lib/daily";
 
 // 환경설정 → 일일점검 구역 : 관리감독자별 담당 Area(양식 A~D · 담당 장소) + 현장 QR 지점
 export default async function DailyAreasPage() {
@@ -34,6 +35,21 @@ export default async function DailyAreasPage() {
     subs: l.sub_locations.filter((x) => x.is_active).sort((a, b) => a.sort_order - b.sort_order),
   }));
   const common = { forms: formList, departments: depts ?? [], points: pointList.filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name })), people: people ?? [], action: saveDailyArea };
+  // 표 : 부서 → 이름 순
+  const rows: AreaRow[] = list
+    .map((a) => {
+      const pointIds = lk.filter((x) => x.area_id === a.id).map((x) => x.point_id);
+      return {
+        ...a,
+        dept: a.department_id ? (deptName.get(a.department_id) ?? "") : "",
+        where: qrForm.has(a.form_code) ? pointIds.map((p) => pointName.get(p)).join(", ") : (a.area_text ?? "QR 없음"),
+        who: mem.filter((m) => m.area_id === a.id).map((m) => m.profiles?.name ?? "").join(", "),
+        memberIds: mem.filter((m) => m.area_id === a.id).map((m) => m.user_id),
+        pointIds,
+        noPoint: qrForm.has(a.form_code) && pointIds.length === 0,
+      };
+    })
+    .sort((x, y) => x.dept.localeCompare(y.dept, "ko") || x.who.localeCompare(y.who, "ko"));
   const usedBy = (pid: string) => lk.filter((x) => x.point_id === pid).map((x) => list.find((a) => a.id === x.area_id)?.name ?? "");
 
   return (
@@ -48,31 +64,7 @@ export default async function DailyAreasPage() {
       </div>
 
       <Card title={`관리감독자 담당 Area (${list.length})`}>
-        <ul className="divide-y divide-gray-100">
-          {list.map((a) => {
-            const names = mem.filter((m) => m.area_id === a.id).map((m) => m.profiles?.name ?? "");
-            const myPts = lk.filter((x) => x.area_id === a.id).map((x) => x.point_id);
-            return (
-              <li key={a.id} className="py-2">
-                <details>
-                  <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                    <b className={`font-medium ${a.is_active ? "" : "text-gray-400 line-through"}`}>{a.name}</b>
-                    <span className="rounded bg-brand-50 px-1.5 py-0.5 text-xs text-brand-900">{a.form_code}형</span>
-                    {a.department_id && <span className="text-xs text-gray-500">{deptName.get(a.department_id)}</span>}
-                    {!names.length && <span className="text-xs text-red-600">관리감독자 없음</span>}
-                    <span className="basis-full text-xs break-keep text-gray-600 sm:basis-auto">
-                      {qrForm.has(a.form_code) ? (myPts.length ? myPts.map((p) => pointName.get(p)).join(", ") : <span className="text-red-600">담당 장소 QR 없음</span>) : (a.area_text ?? "QR 없음")}
-                    </span>
-                  </summary>
-                  <div className="mt-3 border-l-2 border-gray-100 pl-3">
-                    <AreaEditor area={a} memberIds={mem.filter((m) => m.area_id === a.id).map((m) => m.user_id)} pointIds={myPts} {...common} />
-                  </div>
-                </details>
-              </li>
-            );
-          })}
-          {list.length === 0 && <li className="py-3 text-sm text-gray-500">아직 등록된 담당 Area 가 없습니다.</li>}
-        </ul>
+        <AreaTable rows={rows} {...common} />
         <details className="mt-3 border-t border-gray-100 pt-3">
           <summary className="cursor-pointer text-sm font-medium text-brand-800">+ 담당 Area 추가</summary>
           <div className="mt-3">
@@ -92,19 +84,38 @@ export default async function DailyAreasPage() {
         }
       >
         <p className="mb-3 text-xs break-keep text-gray-500">현장(세부장소)마다 붙이는 QR 입니다. 여러 관리감독자가 같은 QR 을 같이 쓸 수 있습니다. 부적합은 찍은 QR 의 장소로 등록됩니다.</p>
+        <div className={`${POINT_GRID} hidden border-b border-gray-200 pb-1 text-xs font-medium text-gray-500 sm:grid`}>
+          <span>QR 이름</span>
+          <span>장소</span>
+          <span>세부장소</span>
+          <span>순서</span>
+          <span className="text-center">사용</span>
+          <span />
+        </div>
         <ul className="divide-y divide-gray-100">
-          {pointList.map((p) => (
-            <li key={p.id} className="space-y-1.5 py-2">
-              <PointEditor point={p} locations={locList} action={saveDailyPoint} />
-              <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                <span className="min-w-0 flex-1 break-keep">담당 : {usedBy(p.id).join(", ") || <span className="text-red-600">없음</span>}</span>
-                <Link href={`/print/daily-qr?point=${p.id}`} target="_blank" className="rounded border border-gray-300 bg-white px-2 py-1 text-gray-700 hover:bg-gray-50">
-                  🖶 인쇄
-                </Link>
-                <ReissueButton pointId={p.id} />
-              </div>
-            </li>
-          ))}
+          {pointList.map((p) => {
+            const who = usedBy(p.id);
+            return (
+              <li key={p.id}>
+                <PointEditor
+                  point={p}
+                  locations={locList}
+                  action={saveDailyPoint}
+                  extra={
+                    <>
+                      <span className={`px-1 text-xs whitespace-nowrap ${who.length ? "text-gray-500" : "text-red-600"}`} title={who.join(", ")}>
+                        담당 {who.length}
+                      </span>
+                      <Link href={`/print/daily-qr?point=${p.id}`} target="_blank" className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                        🖶
+                      </Link>
+                      <ReissueButton pointId={p.id} />
+                    </>
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
         <div className="mt-3 border-t border-gray-100 pt-3">
           <PointEditor point={null} locations={locList} action={saveDailyPoint} />

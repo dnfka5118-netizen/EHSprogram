@@ -1,33 +1,23 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
-import { ActionForm } from "@/components/ActionForm";
+import { Card } from "@/components/ui";
 import { saveType } from "../actions";
+import { NameRow, ROWS_GRID } from "../NameRow";
 import type { FindingType } from "@/lib/types";
 
 export default async function TypesPage() {
   const supabase = await createClient();
   const { data } = await supabase.from("finding_types").select("*").order("sort_order");
+  const list = (data ?? []) as FindingType[];
 
   return (
-    <Card title="지적사항 유형">
-      <div className="space-y-2">
-        {((data ?? []) as FindingType[]).map((t) => (
-          <ActionForm key={t.id} action={saveType} className="flex flex-wrap items-center gap-2">
-            <input type="hidden" name="id" value={t.id} />
-            <Input name="name" defaultValue={t.name} className="w-48" />
-            <Input name="sort_order" type="number" defaultValue={t.sort_order} className="w-20" />
-            <label className="flex items-center gap-1 text-sm">
-              <input type="checkbox" name="is_active" defaultChecked={t.is_active} className="h-4 w-4" /> 사용
-            </label>
-            <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
-            <DeleteSubmit what={t.name} />
-          </ActionForm>
+    <Card title={`지적사항 유형 (${list.length})`}>
+      <div className={ROWS_GRID}>
+        {list.map((t) => (
+          <NameRow key={t.id} action={saveType} id={t.id} name={t.name} sortOrder={t.sort_order} isActive={t.is_active} />
         ))}
-        <ActionForm action={saveType} resetOnSuccess className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-          <Input name="name" placeholder="새 유형" className="w-48" />
-          <Input name="sort_order" type="number" placeholder="순서" className="w-20" />
-          <SubmitButton>추가</SubmitButton>
-        </ActionForm>
+      </div>
+      <div className="mt-3 max-w-md">
+        <NameRow action={saveType} placeholder="새 유형" />
       </div>
     </Card>
   );

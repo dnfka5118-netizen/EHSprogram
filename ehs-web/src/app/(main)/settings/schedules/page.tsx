@@ -4,6 +4,9 @@ import { ActionForm } from "@/components/ActionForm";
 import { saveSchedule } from "../actions";
 import { AddSchedule } from "./AddSchedule";
 
+// 한 줄 칸 배치 (머리글과 같이 씀) — 휴대폰은 2칸씩
+const GRID = "grid grid-cols-2 items-center gap-1.5 lg:grid-cols-[10rem_8rem_9.5rem_9.5rem_minmax(6rem,1fr)_3rem_7rem] lg:gap-2";
+
 const PERIOD: Record<string, string> = { daily: "매일 (영업일)", weekly: "매주", monthly: "매월" };
 
 type Row = {
@@ -41,29 +44,39 @@ export default async function SchedulesPage() {
         if (items.length === 0) return null;
         return (
           <Card key={m.code} title={`${m.name} (${items.length}명)`}>
+            <div className={`${GRID} hidden border-b border-gray-200 pb-1 text-xs font-medium text-gray-500 lg:grid`}>
+              <span>점검자</span>
+              <span>주기</span>
+              <span>시작일</span>
+              <span>종료일</span>
+              <span>메모</span>
+              <span className="text-center">사용</span>
+              <span />
+            </div>
             <ul className="divide-y divide-gray-100">
               {items.map((r) => (
-                <li key={r.id} className="py-2">
-                  <ActionForm action={saveSchedule} className="flex flex-wrap items-center gap-2">
+                <li key={r.id}>
+                  <ActionForm action={saveSchedule} className={`${GRID} py-1`}>
                     <input type="hidden" name="id" value={r.id} />
-                    <span className="w-full text-sm sm:w-32">
+                    <span className="col-span-2 truncate text-sm lg:col-span-1">
                       <b className="font-medium">{r.profiles?.name}</b> <span className="text-xs text-gray-500">{r.profiles?.position ?? ""}</span>
                     </span>
-                    <Select name="period" defaultValue={r.period} className="w-32">
+                    <Select name="period" defaultValue={r.period} className="px-2 py-1 text-sm" aria-label="주기">
                       {Object.entries(PERIOD).map(([k, v]) => (
                         <option key={k} value={k}>{v}</option>
                       ))}
                     </Select>
-                    <span className="flex w-full items-center gap-1 text-sm sm:w-auto">
-                      <Input name="start_date" type="date" defaultValue={r.start_date} className="min-w-0 flex-1 sm:w-36 sm:flex-none" aria-label="시작일" />~
-                      <Input name="end_date" type="date" defaultValue={r.end_date ?? ""} className="min-w-0 flex-1 sm:w-36 sm:flex-none" aria-label="종료일" />
-                    </span>
-                    <Input name="note" defaultValue={r.note ?? ""} placeholder="메모" className="min-w-0 flex-1 sm:max-w-48" />
-                    <label className="flex items-center gap-1 text-sm">
-                      <input type="checkbox" name="is_active" defaultChecked={r.is_active} className="h-4 w-4" /> 사용
+                    <Input name="start_date" type="date" defaultValue={r.start_date} className="px-2 py-1 text-sm" aria-label="시작일" />
+                    <Input name="end_date" type="date" defaultValue={r.end_date ?? ""} className="px-2 py-1 text-sm" aria-label="종료일" />
+                    <Input name="note" defaultValue={r.note ?? ""} placeholder="메모" className="px-2 py-1 text-sm col-span-2 lg:col-span-1" aria-label="메모" />
+                    <label className="flex items-center justify-center gap-1 text-xs">
+                      <input type="checkbox" name="is_active" defaultChecked={r.is_active} className="h-4 w-4" />
+                      <span className="lg:hidden">사용</span>
                     </label>
-                    <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
-                    <DeleteSubmit what={`${r.profiles?.name} ${m.name} 주기`} />
+                    <span className="flex items-center gap-1">
+                      <SubmitButton variant="secondary" className="px-2 py-1 text-xs">저장</SubmitButton>
+                      <DeleteSubmit what={`${r.profiles?.name} ${m.name} 주기`} />
+                    </span>
                   </ActionForm>
                 </li>
               ))}

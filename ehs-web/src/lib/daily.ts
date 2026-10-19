@@ -92,3 +92,6 @@ export const SUB_REASONS = ["휴가", "외근", "교육", "출장", "기타"];
 
 export const qrPath = (token: string) => `/d/${token}`;
 export const ymLabel = (ym: string) => `${Number(ym.slice(0, 4))}년 ${Number(ym.slice(5, 7))}월`;
+
+// 환경설정 QR 지점 한 줄 칸 배치 (머리글과 같이 씀 · "use client" 파일에 두면 서버 화면에서 문자열로 못 받음)
+export const POINT_GRID = "grid grid-cols-2 gap-1.5 sm:grid-cols-[minmax(9rem,1fr)_9rem_9rem_4rem_3rem_17rem] sm:items-center sm:gap-2";

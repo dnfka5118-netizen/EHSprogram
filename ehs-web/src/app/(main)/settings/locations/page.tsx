@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
-import { ActionForm } from "@/components/ActionForm";
+import { Card } from "@/components/ui";
+import { NameRow, ROWS_GRID } from "../NameRow";
 import { saveLocation, saveSubLocation } from "../actions";
 import type { Location, Site, SubLocation } from "@/lib/types";
 
@@ -30,52 +30,24 @@ export default async function LocationsPage({ searchParams }: PageProps<"/settin
       </div>
 
       <Card title="장소 추가">
-        <ActionForm action={saveLocation} resetOnSuccess className="flex flex-wrap gap-2">
-          <input type="hidden" name="site_id" value={siteId} />
-          <Input name="name" placeholder="장소명 (예: HBC-C3)" className="max-w-xs" />
-          <Input name="sort_order" type="number" placeholder="순서" className="w-24" />
-          <SubmitButton>추가</SubmitButton>
-        </ActionForm>
+        <div className="max-w-md">
+          <NameRow action={saveLocation} hidden={{ site_id: siteId }} placeholder="장소명 (예: HBC-C3)" />
+        </div>
       </Card>
 
       {locations.map((l) => (
-        <Card
-          key={l.id}
-          title={
-            <ActionForm action={saveLocation} className="flex flex-wrap items-center gap-2">
-              <input type="hidden" name="id" value={l.id} />
-              <Input name="name" defaultValue={l.name} className="w-48 font-semibold" />
-              <Input name="sort_order" type="number" defaultValue={l.sort_order} className="w-20" />
-              <label className="flex items-center gap-1 text-sm font-normal">
-                <input type="checkbox" name="is_active" defaultChecked={l.is_active} className="h-4 w-4" /> 사용
-              </label>
-              <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
-              <DeleteSubmit what={l.name} warning="세부장소도 함께 삭제됩니다." />
-            </ActionForm>
-          }
-        >
-          <p className="mb-2 text-xs text-gray-500">세부장소</p>
-          <div className="space-y-2">
+        <Card key={l.id}>
+          <div className="mb-2 max-w-md">
+            <NameRow action={saveLocation} id={l.id} name={l.name} sortOrder={l.sort_order} isActive={l.is_active} bold deleteWarning="세부장소도 함께 삭제됩니다." />
+          </div>
+          <p className="mb-1 text-xs text-gray-500">세부장소 ({l.sub_locations.length})</p>
+          <div className={ROWS_GRID}>
             {l.sub_locations
               .sort((a, b) => a.sort_order - b.sort_order)
               .map((s) => (
-                <ActionForm key={s.id} action={saveSubLocation} className="flex flex-wrap items-center gap-2">
-                  <input type="hidden" name="id" value={s.id} />
-                  <Input name="name" defaultValue={s.name} className="w-48" />
-                  <Input name="sort_order" type="number" defaultValue={s.sort_order} className="w-20" />
-                  <label className="flex items-center gap-1 text-sm">
-                    <input type="checkbox" name="is_active" defaultChecked={s.is_active} className="h-4 w-4" /> 사용
-                  </label>
-                  <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
-                  <DeleteSubmit what={s.name} />
-                </ActionForm>
+                <NameRow key={s.id} action={saveSubLocation} id={s.id} name={s.name} sortOrder={s.sort_order} isActive={s.is_active} />
               ))}
-            <ActionForm action={saveSubLocation} resetOnSuccess className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">
-              <input type="hidden" name="location_id" value={l.id} />
-              <Input name="name" placeholder="세부장소 추가" className="w-48" />
-              <Input name="sort_order" type="number" placeholder="순서" className="w-20" />
-              <SubmitButton variant="secondary" className="px-2 py-1">추가</SubmitButton>
-            </ActionForm>
+            <NameRow action={saveSubLocation} hidden={{ location_id: l.id }} placeholder="세부장소 추가" />
           </div>
         </Card>
       ))}
