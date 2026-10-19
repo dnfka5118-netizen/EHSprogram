@@ -27,7 +27,7 @@ export const DOMAINS: Domain[] = [
     home: "/ehs/env",
     sections: [
       g("plan", [{ label: "환경 인허가 관리" }, { label: "환경법규 등록부" }, { label: "환경목표·추진계획" }]),
-      g("inspect", [{ label: "배출시설 자체점검" }, { label: "유해화학물질 자체점검", module: "insp_chem" }, { label: "환경 순회점검" }]),
+      g("inspect", [{ label: "배출시설 자체점검" }, { label: "유해화학물질 자체점검", href: "/insp/chem", module: "insp_chem" }, { label: "환경 순회점검" }]),
       g("measure", [{ label: "대기 자가측정" }, { label: "수질 자가측정" }, { label: "소음·진동 측정" }, { label: "환경측면 영향평가" }]),
       g("work", [{ label: "폐기물 관리" }, { label: "화학물질 취급량 관리" }, { label: "방지시설 운영일지" }, { label: "용수·폐수 관리" }]),
       g("edu", [{ label: "환경교육" }]),
@@ -59,6 +59,7 @@ export const DOMAINS: Domain[] = [
         { label: "CEO 안전점검", href: "/insp/ceo", module: "insp_ceo", match: ["/insp/ceo"] },
         { label: "월간환경안전점검", href: "/insp/monthly", module: "insp_monthly", match: ["/insp/monthly"] },
         { label: "공장장 안전점검", href: "/insp/plant", module: "insp_plant", match: ["/insp/plant"] },
+        { label: "유해화학물질 자체점검", href: "/insp/chem", module: "insp_chem", match: ["/insp/chem"] },
         { label: "관리감독자 일일점검", href: "/insp/daily", module: "insp_daily", match: ["/insp/daily"] },
         { label: "외부점검", href: "/insp/external" },
         { label: "점검 지표", href: "/insp/kpi", module: "insp_kpi", match: ["/insp/kpi"] },

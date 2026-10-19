@@ -27,7 +27,7 @@ export default async function InternalInspectionLayout({ params, children }: Lay
                 월간 일지
               </Link>
             )}
-            {mod.level === "write" && mod.code !== "insp_daily" && (
+            {mod.level === "write" && !["insp_daily", "insp_chem"].includes(mod.code) && (
               <Link href={`/insp/${slug}/new`} className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">
                 + 점검 등록
               </Link>

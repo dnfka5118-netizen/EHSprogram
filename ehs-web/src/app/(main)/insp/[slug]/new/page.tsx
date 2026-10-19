@@ -15,7 +15,7 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
   const { slug } = await params;
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level !== "write") notFound();
-  if (mod.code === "insp_daily") redirect("/insp/daily"); // 일일점검은 현장 QR 로만 등록
+  if (mod.code === "insp_daily" || mod.code === "insp_chem") redirect(`/insp/${slug}`); // 일일점검은 현장 QR, 유해화학물질은 점검대장으로만 등록
   const session = await getSession();
   if (!session) notFound();
   const { profile, siteName } = session;

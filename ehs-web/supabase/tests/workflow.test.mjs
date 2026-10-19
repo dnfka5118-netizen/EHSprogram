@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -674,6 +674,37 @@ await as(U.Q);
 o = (await one("select daily_open($1) d", [arC.qr_token])).d;
 ok(o.area.id === arC.id && o.form.use_qr === false, "C·D형은 QR 없이 [점검하기] 로 열림");
 ok((await one("select daily_area_label($1) l", [arA.id])).l === "1분석실", "담당 Area 표시 = 묶인 장소");
+await as(null);
+
+
+console.log("\n[유해화학물질 자체점검]");
+await as(null);
+ok((await one("select count(*)::int c from chem_items")).c === 12, "점검 항목 12개 (별지 제42호서식)");
+ok((await one("select form, is_enabled from modules where code='insp_chem'")).is_enabled, "유해화학물질 자체점검 사용");
+const cg = await one("insert into chem_groups (site_id, name, department_id) values ($1,'생산팀 (시험)',$2) returning id", [site, PROD]);
+const cp1 = await one("insert into chem_places (group_id, name, sort_order) values ($1,'과수 TANK',10) returning id", [cg.id]);
+const cp2 = await one("insert into chem_places (group_id, name, sort_order) values ($1,'WLC',20) returning id", [cg.id]);
+await as(U.A); await db.query("select set_chem_group_members($1, array[$2]::uuid[])", [cg.id, U.W1]);
+ok(!!(await one("select 1 x from inspection_schedules where module_code='insp_chem' and user_id=$1 and period='weekly'", [U.W1])), "점검자 지정 → 점검 주기(매주) 자동 등록");
+await as(U.W2); await expectError("점검자 아닌 사람 차단", "select open_chem_check($1)", [cg.id], "점검자만");
+await as(U.W1);
+const cid = (await one("select open_chem_check($1) id", [cg.id])).id;
+ok((await one("select open_chem_check($1) id", [cg.id])).id === cid, "같은 주에는 점검대장 1장");
+const chemItems = (await db.query("select id, code from chem_items order by sort_order")).rows;
+const grid = (over = {}) => JSON.stringify(chemItems.flatMap((i) => [cp1.id, cp2.id].map((p) => ({ item_id: i.id, place_id: p, result: over[`${i.code}|${p}`] ?? "ok" }))));
+await expectError("빈 칸 차단", "select save_chem_check($1, kst_today(), '10:00 ~ 11:00', $2, '[]')", [cid, JSON.stringify([])], "표시하지 않은");
+await expectError("재점검 항목은 비고 필수", "select save_chem_check($1, kst_today(), '', $2, '[]')", [cid, grid({ [`⑫|${cp1.id}`]: "recheck" })], "비고");
+const r = (await one("select save_chem_check($1, kst_today(), '13:00 ~ 14:00', $2, $3) r", [cid, grid({ [`⑫|${cp1.id}`]: "recheck", [`①|${cp2.id}`]: "fixed" }), JSON.stringify([{ item_id: chemItems[11].id, note: "방류벽 균열 및 바닥 들뜸" }, { item_id: chemItems[0].id, note: "밸브 체결" }])])).r;
+ok(r.findings === 1, "정밀 재점검 필요 → 지적사항 1건");
+const cf = await one("select f.status, f.module_code, f.sub_location_text from chem_notes n join findings f on f.id = n.finding_id where n.check_id=$1", [cid]);
+ok(cf.status === "assign_wait" && cf.module_code === "insp_chem" && cf.sub_location_text === "과수 TANK", "재점검 지적사항 : 개선 부서 담당자 지정 대기 · 장소");
+await db.query("select save_chem_check($1, kst_today(), '13:00 ~ 14:00', $2, $3)", [cid, grid({ [`⑫|${cp1.id}`]: "recheck" }), JSON.stringify([{ item_id: chemItems[11].id, note: "방류벽 균열" }])]);
+ok((await one("select count(*)::int c from findings where module_code='insp_chem'")).c === 1, "다시 저장해도 지적사항 중복 없음");
+ok((await one("select count(*)::int c from inspection_checks where module_code='insp_chem' and user_id=$1", [U.W1])).c === 1, "점검 지표 실시 기록");
+await db.query("select submit_chem_check($1,$2)", [cid, JSON.stringify([{ step_kind: "담당", label: "점검자", approver_id: U.W1 }, { step_kind: "협조", label: "EHS부서장", approver_id: U.A }, { step_kind: "승인", label: "해당부서장", approver_id: U.H }])]);
+ok((await one("select status from approvals where module_code='insp_chem' and doc_id=$1", [cid])).status === "in_review", "상신 → 결재 진행");
+await expectError("결재 중 수정 차단", "select save_chem_check($1, kst_today(), '', $2, '[]')", [cid, grid()], "결재 중");
+ok((await one("select approval_doc_path('insp_chem',$1) p", [cid])).p === `/insp/chem/checks/${cid}`, "전자결재함 → 점검대장 연결");
 await as(null);
 
 

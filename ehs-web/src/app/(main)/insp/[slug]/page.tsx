@@ -11,6 +11,7 @@ import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import { MyDaily } from "./DailyStatus";
+import { ChemStatus } from "./ChemStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
@@ -22,7 +23,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const supabase = await createClient();
   const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
   const profile = await getProfile();
-  const canImport = mod.level === "write" && !!profile?.site_id && mod.code !== "insp_daily"; // 일일점검은 현장 QR 로만
+  const canImport = mod.level === "write" && !!profile?.site_id && !["insp_daily", "insp_chem"].includes(mod.code); // 일일점검은 현장 QR, 유해화학물질은 점검대장으로만
   const none = Promise.resolve({ data: [] as unknown[] });
   const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }, { data: locRows }, { data: usedRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
@@ -76,6 +77,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
         {rows.length >= 500 && <p className="mt-2 text-xs text-gray-500">최근 500건까지만 표시합니다. 조건을 좁혀 조회하세요.</p>}
       </Card>
       {mod.code === "insp_daily" && <MyDaily />}
+      {mod.code === "insp_chem" && <ChemStatus />}
     </div>
   );
 }

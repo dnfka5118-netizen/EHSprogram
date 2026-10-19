@@ -6,7 +6,7 @@ import { TemplateEditor } from "./TemplateEditor";
 import type { Department, Module, Site } from "@/lib/types";
 
 const APPROVAL_FORMS = ["permit", "jsa"]; // 결재가 있는 양식 종류 (modules.form)
-const APPROVAL_CODES = ["insp_daily"]; // 지적사항형이지만 결재가 있는 양식 (관리감독자 일일업무일지)
+const APPROVAL_CODES = ["insp_daily", "insp_chem"]; // 지적사항형이지만 결재가 있는 양식 (관리감독자 일일업무일지)
 
 export default async function ApprovalTemplatesPage({ searchParams }: PageProps<"/settings/approvals">) {
   const sp = await searchParams;

@@ -479,3 +479,67 @@ export async function saveDailyItem(_prev: ActionState, fd: FormData): Promise<A
     : await supabase.from("daily_form_items").insert({ ...row, form_code: s(fd, "form_code") });
   return error ? { error: toMessage(error) } : done();
 }
+
+// ---------------------------------------------------------------- 유해화학물질 자체점검 : 점검 단위 · 장소 · 항목
+export async function saveChemGroup(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const me = await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("chem_checks").select("id", { count: "exact", head: true }).eq("group_id", id);
+    if (count) return { error: `점검대장이 ${count}장 있어 삭제할 수 없습니다. '사용' 을 꺼 주세요.` };
+    const { error } = await supabase.from("chem_groups").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const name = s(fd, "name");
+  if (!name) return { error: "점검 단위 이름을 입력해 주세요. (예 : 생산팀 (HBC))" };
+  const row = { name, department_id: nullable(s(fd, "department_id")), sort_order: n(fd, "sort_order"), is_active: id ? fd.get("is_active") === "on" : true };
+  let gid = id;
+  if (id) {
+    const { error } = await supabase.from("chem_groups").update(row).eq("id", id);
+    if (error) return { error: toMessage(error) };
+  } else {
+    if (!me.site_id) return { error: "관리자 계정에 사업장이 지정되어 있지 않습니다." };
+    const { data, error } = await supabase.from("chem_groups").insert({ ...row, site_id: me.site_id }).select("id").single();
+    if (error) return { error: toMessage(error) };
+    gid = data.id;
+  }
+  const { error } = await supabase.rpc("set_chem_group_members", { p_group: gid, p_users: fd.getAll("member").map(String).filter(Boolean) });
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function saveChemPlace(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("chem_results").select("place_id", { count: "exact", head: true }).eq("place_id", id);
+    if (count) return { error: "점검 기록이 있는 장소는 삭제할 수 없습니다. '사용' 을 꺼 주세요." };
+    const { error } = await supabase.from("chem_places").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const name = s(fd, "name");
+  if (!name) return { error: "점검장소 이름을 입력해 주세요." };
+  const row = { name, sort_order: n(fd, "sort_order") };
+  const { error } = id
+    ? await supabase.from("chem_places").update({ ...row, is_active: fd.get("is_active") === "on" }).eq("id", id)
+    : await supabase.from("chem_places").insert({ ...row, group_id: s(fd, "group_id") });
+  return error ? { error: toMessage(error) } : done();
+}
+
+export async function saveChemItem(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const id = s(fd, "id");
+  if (fd.get("intent") === "delete") {
+    const { count } = await supabase.from("chem_results").select("item_id", { count: "exact", head: true }).eq("item_id", id);
+    if (count) return { error: "점검 기록이 있는 항목은 삭제할 수 없습니다. '사용' 을 꺼 주세요." };
+    const { error } = await supabase.from("chem_items").delete().eq("id", id);
+    return error ? { error: toMessage(error) } : done("삭제되었습니다.");
+  }
+  const content = s(fd, "content");
+  if (!content) return { error: "점검 항목 내용을 입력해 주세요." };
+  const row = { code: s(fd, "code"), content, sort_order: n(fd, "sort_order") };
+  const { error } = id ? await supabase.from("chem_items").update({ ...row, is_active: fd.get("is_active") === "on" }).eq("id", id) : await supabase.from("chem_items").insert(row);
+  return error ? { error: toMessage(error) } : done();
+}
