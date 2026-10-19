@@ -35,7 +35,7 @@ export default async function ChemCheckPage({ params }: PageProps<"/insp/[slug]/
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/insp/chem" className="text-sm text-brand-700 hover:underline">
+        <Link href="/insp/chem" className="basis-full text-sm text-brand-700 hover:underline sm:basis-auto">
           ← 유해화학물질 자체점검
         </Link>
         <h2 className="min-w-0 flex-1 text-base font-bold break-keep">

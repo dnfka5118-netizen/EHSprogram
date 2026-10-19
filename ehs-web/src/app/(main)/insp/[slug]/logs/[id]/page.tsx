@@ -37,7 +37,7 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/insp/daily/logs" className="text-sm text-brand-700 hover:underline">
+        <Link href="/insp/daily/logs" className="basis-full text-sm text-brand-700 hover:underline sm:basis-auto">
           ← 월간 일지
         </Link>
         <h2 className="min-w-0 flex-1 text-base font-bold break-keep">
