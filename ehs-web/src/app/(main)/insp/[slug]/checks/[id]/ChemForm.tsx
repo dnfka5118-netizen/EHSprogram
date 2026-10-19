@@ -13,7 +13,8 @@ const ON: Record<ChemResult, string> = {
   recheck: "border-red-600 bg-red-600 text-white",
 };
 
-// 점검대장 작성 : 점검일 · 시간 · 항목별 장소마다 문제없음/조치완료/재점검 · 비고
+// 점검대장 작성 : 원본 양식(별지 제42호) 그대로 — 항목 × 이상 유무 3줄 × 점검장소, 비고
+//   PC : 양식 표에서 칸을 눌러 체크 · 휴대폰 : 장소를 골라 그 장소의 항목을 한 번에 (현장에서 장소별로 점검)
 export function ChemForm({ d, today, substitute }: { d: ChemCheck; today: string; substitute: boolean }) {
   const [subKind, setSubKind] = useState(d.sub_reason ? (SUB_REASONS.find((r) => d.sub_reason!.startsWith(r)) ?? "기타") : "");
   const [subText, setSubText] = useState(d.sub_reason && !SUB_REASONS.some((r) => d.sub_reason === r) ? d.sub_reason.replace(/^(휴가|외근|교육|출장|기타)( · )?/, "") : "");
@@ -24,25 +25,39 @@ export function ChemForm({ d, today, substitute }: { d: ChemCheck; today: string
   const [notes, setNotes] = useState<Record<string, string>>(Object.fromEntries(Object.entries(d.notes).map(([k, v]) => [k, v.note ?? ""])));
   const [msg, setMsg] = useState<{ ok?: string; error?: string } | null>(null);
   const [pending, start] = useTransition();
+  const [place, setPlace] = useState(d.places[0]?.id ?? "");
   const weekEnd = new Date(Date.parse(d.week_start) + 6 * 86400000).toISOString().slice(0, 10);
   const total = d.items.length * d.places.length;
   const filled = Object.keys(cells).filter((k) => d.items.some((i) => k.startsWith(i.id)) && d.places.some((p) => k.endsWith(p.id))).length;
+  const curIdx = d.places.findIndex((p) => p.id === place);
+  const cur = d.places[curIdx];
+  const next = d.places[curIdx + 1];
 
-  const setCell = (item: string, place: string, v: ChemResult) => setCells((c) => ({ ...c, [`${item}|${place}`]: v }));
-  const allOk = () =>
+  const key = (item: string, pid: string) => `${item}|${pid}`;
+  const setCell = (item: string, pid: string, v: ChemResult) => setCells((c) => ({ ...c, [key(item, pid)]: v }));
+  const fill = (pids: string[]) =>
     setCells((c) => {
       const n = { ...c };
-      for (const i of d.items) for (const p of d.places) n[`${i.id}|${p.id}`] ??= "ok";
+      for (const i of d.items) for (const p of pids) n[key(i.id, p)] ??= "ok";
       return n;
     });
+  const isBad = (item: string) => d.places.some((p) => cells[key(item, p.id)] && cells[key(item, p.id)] !== "ok");
+  const noteBox = (item: string, rows: number, className: string) => (
+    <Textarea
+      rows={rows}
+      value={notes[item] ?? ""}
+      onChange={(e) => setNotes((n) => ({ ...n, [item]: e.target.value }))}
+      placeholder={isBad(item) ? "필수 : 조치한 내용 또는 재점검 필요 사항" : "비고"}
+      className={`${className} ${isBad(item) && !notes[item]?.trim() ? "border-red-400" : ""}`}
+    />
+  );
 
   function save() {
     setMsg(null);
     if (substitute && !subKind) return setMsg({ error: "대체 점검 사유를 골라 주세요." });
     if (substitute && subKind === "기타" && !subText.trim()) return setMsg({ error: "대체 점검 사유를 적어 주세요." });
     for (const i of d.items) {
-      const bad = d.places.some((p) => cells[`${i.id}|${p.id}`] && cells[`${i.id}|${p.id}`] !== "ok");
-      if (bad && !notes[i.id]?.trim()) return setMsg({ error: `${i.code}번 항목의 비고(조치 내용 또는 재점검 필요 사항)를 적어 주세요.` });
+      if (isBad(i.id) && !notes[i.id]?.trim()) return setMsg({ error: `${i.code}번 항목의 비고(조치 내용 또는 재점검 필요 사항)를 적어 주세요.` });
     }
     if (filled < total) return setMsg({ error: `표시하지 않은 칸이 ${total - filled}개 있습니다. 문제없으면 [남은 칸 모두 문제없음] 을 누르세요.` });
     start(async () => {
@@ -86,60 +101,159 @@ export function ChemForm({ d, today, substitute }: { d: ChemCheck; today: string
       )}
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm">
         <label className="space-y-1">
-          <span className="block text-xs text-gray-500">점검일 ({d.week_start.slice(5).replace("-", ".")} 주)</span>
+          <span className="block text-xs text-gray-500">점검연월일 ({d.week_start.slice(5).replace("-", ".")} 주)</span>
           <Input type="date" value={date} min={d.week_start} max={weekEnd < today ? weekEnd : today} onChange={(e) => setDate(e.target.value)} className="w-40 px-2 py-1.5" />
         </label>
         <label className="min-w-0 flex-1 basis-40 space-y-1">
           <span className="block text-xs text-gray-500">점검시간</span>
           <Input value={time} onChange={(e) => setTime(e.target.value)} placeholder="예 : 10:00 ~ 11:00" className="px-2 py-1.5" />
         </label>
-        <Button variant="secondary" onClick={allOk}>
+        <Button variant="secondary" onClick={() => fill(d.places.map((p) => p.id))}>
           남은 칸 모두 문제없음
         </Button>
       </div>
 
-      {d.items.map((i) => {
-        const bad = d.places.some((p) => cells[`${i.id}|${p.id}`] && cells[`${i.id}|${p.id}`] !== "ok");
-        return (
-          <section key={i.id} className="rounded-lg border border-gray-200 bg-white">
-            <p className="border-b border-gray-100 px-3 py-2 text-sm break-keep">
-              <b className="mr-1">{i.code}</b>
-              {i.content}
-            </p>
-            <ul className="divide-y divide-gray-50">
-              {d.places.map((p) => {
-                const v = cells[`${i.id}|${p.id}`];
+      {/* ---------- PC : 원본 양식 표 (칸을 눌러 체크) ---------- */}
+      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white lg:block">
+        <table className="w-full border-collapse text-xs">
+          <thead className="bg-gray-50">
+            <tr>
+              <th rowSpan={2} className="w-64 border border-gray-300 px-2 py-1.5">
+                점검 항목
+              </th>
+              <th rowSpan={2} className="w-24 border border-gray-300 px-1">
+                이상 유무
+              </th>
+              <th colSpan={d.places.length} className="border border-gray-300 px-1 py-1">
+                점검장소
+              </th>
+              <th rowSpan={2} className="w-48 border border-gray-300 px-1">
+                비고
+              </th>
+            </tr>
+            <tr>
+              {d.places.map((p) => (
+                <th key={p.id} className="min-w-16 border border-gray-300 px-1 py-1 font-medium break-keep">
+                  {p.name}
+                  <button type="button" onClick={() => fill([p.id])} className="mt-0.5 block w-full text-[10px] font-normal text-emerald-700 hover:underline">
+                    모두 문제없음
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {d.items.map((i) =>
+              CHEM_RESULTS.map((r, k) => (
+                <tr key={`${i.id}${r.v}`} className={k === 2 ? "border-b-2 border-gray-400" : ""}>
+                  {k === 0 && (
+                    <td rowSpan={3} className="border border-gray-300 px-2 py-1 align-middle break-keep">
+                      <b className="mr-1">{i.code}</b>
+                      {i.content}
+                    </td>
+                  )}
+                  <td className="border border-gray-300 px-1 text-center break-keep text-gray-700">{r.label}</td>
+                  {d.places.map((p) => {
+                    const on = cells[key(i.id, p.id)] === r.v;
+                    return (
+                      <td key={p.id} className="border border-gray-300 p-0 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setCell(i.id, p.id, r.v)}
+                          aria-label={`${i.code} ${p.name} ${r.label}`}
+                          className={`h-8 w-full text-sm ${on ? ON[r.v] : "text-gray-300 hover:bg-gray-100"}`}
+                        >
+                          {on ? "✔" : "□"}
+                        </button>
+                      </td>
+                    );
+                  })}
+                  {k === 0 && (
+                    <td rowSpan={3} className="border border-gray-300 p-1 align-top">
+                      {noteBox(i.id, 4, "px-1.5 py-1 text-xs")}
+                    </td>
+                  )}
+                </tr>
+              )),
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ---------- 휴대폰 : 장소를 골라 그 장소의 항목을 한 번에 ---------- */}
+      <div className="space-y-3 lg:hidden">
+        <div className="flex gap-1.5 overflow-x-auto rounded-lg border border-gray-200 bg-white p-2">
+          {d.places.map((p) => {
+            const n = d.items.filter((i) => cells[key(i.id, p.id)]).length;
+            const done = n === d.items.length;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPlace(p.id)}
+                className={`shrink-0 rounded-full border px-3 py-1 text-xs whitespace-nowrap ${
+                  place === p.id ? "border-brand-800 bg-brand-800 text-white" : done ? "border-emerald-500 bg-emerald-50 text-emerald-800" : "border-gray-300 bg-white"
+                }`}
+              >
+                {done ? "✓ " : ""}
+                {p.name}
+                {!done && n > 0 ? ` ${n}/${d.items.length}` : ""}
+              </button>
+            );
+          })}
+        </div>
+        {cur && (
+          <section className="rounded-lg border border-gray-200 bg-white">
+            <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-3 py-2">
+              <b className="min-w-0 flex-1 text-sm break-keep">📍 {cur.name}</b>
+              <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => fill([cur.id])}>
+                이 장소 모두 문제없음
+              </Button>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {d.items.map((i) => {
+                const v = cells[key(i.id, cur.id)];
                 return (
-                  <li key={p.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5">
-                    <span className="min-w-0 flex-1 basis-32 text-sm break-keep text-gray-700">{p.name}</span>
+                  <li key={i.id} className="space-y-1.5 px-3 py-2">
+                    <p className="text-sm break-keep">
+                      <b className="mr-1">{i.code}</b>
+                      {i.content}
+                    </p>
                     <span className="grid grid-cols-3 gap-1">
                       {CHEM_RESULTS.map((r) => (
                         <button
                           key={r.v}
                           type="button"
-                          onClick={() => setCell(i.id, p.id, r.v)}
-                          className={`rounded-md border px-2 py-1 text-xs whitespace-nowrap ${v === r.v ? ON[r.v] : "border-gray-300 bg-white text-gray-700"}`}
+                          onClick={() => setCell(i.id, cur.id, r.v)}
+                          className={`rounded-md border px-1 py-1.5 text-xs break-keep ${v === r.v ? ON[r.v] : "border-gray-300 bg-white text-gray-700"}`}
                         >
-                          {r.short}
+                          {r.label}
                         </button>
                       ))}
                     </span>
+                    {(isBad(i.id) || notes[i.id]) && noteBox(i.id, 2, "px-2 py-1.5 text-sm")}
                   </li>
                 );
               })}
             </ul>
-            <div className="border-t border-gray-100 px-3 py-2">
-              <Textarea
-                rows={1}
-                value={notes[i.id] ?? ""}
-                onChange={(e) => setNotes((n) => ({ ...n, [i.id]: e.target.value }))}
-                placeholder={bad ? "비고 (필수) : 조치한 내용 또는 재점검 필요 사항" : "비고 (선택, 예 : 해당 없음)"}
-                className={`px-2 py-1.5 text-sm ${bad && !notes[i.id]?.trim() ? "border-red-400" : ""}`}
-              />
-            </div>
+            {next && (
+              <div className="border-t border-gray-100 px-3 py-2 text-right">
+                <Button
+                  variant="secondary"
+                  className="text-sm"
+                  onClick={() => {
+                    setPlace(next.id);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  다음 장소 : {next.name} →
+                </Button>
+              </div>
+            )}
           </section>
-        );
-      })}
+        )}
+        <p className="text-xs break-keep text-gray-500">비고는 원본 양식처럼 항목마다 1칸이고, 모든 장소에 공통입니다. 어느 장소의 일인지 비고에 적어 주세요.</p>
+      </div>
 
       <div className="sticky bottom-0 z-20 -mx-3 border-t border-gray-200 bg-white/95 px-3 py-2 backdrop-blur sm:-mx-4 sm:px-4">
         {msg && <p className={`mb-1 rounded-md px-3 py-1.5 text-sm break-keep ${msg.error ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>{msg.error ?? msg.ok}</p>}
