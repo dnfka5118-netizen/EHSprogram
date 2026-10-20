@@ -260,11 +260,15 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
           <Icon name="common" size={22} />
           <span className="text-xs font-medium">메뉴</span>
         </button>
-        <Link href="/" className="flex h-full min-w-0 shrink items-center gap-2 px-2 text-brand-900 lg:w-60 lg:shrink-0 lg:px-4">
-          <span className="rounded-md bg-brand-800 px-1.5 py-1 text-xs font-bold text-white">EHS</span>
+        <Link href="/" className="flex h-full min-w-0 shrink items-center gap-2 px-2 text-brand-900 lg:min-w-60 lg:shrink-0 lg:px-4">
+          {/* 회사 로고 : 휴대폰은 심볼만, 넓은 화면은 전체 로고 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-symbol.png" alt="삼영순화" className="h-7 w-7 shrink-0 sm:hidden" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="삼영순화(주)" className="hidden h-6 w-auto shrink-0 sm:block" />
           <span className="leading-tight">
-            <b className="hidden text-[15px] min-[400px]:block">환경안전 통합관리</b>
-            <span className="hidden text-[11px] text-gray-500 sm:block">EHS 시스템</span>
+            <b className="hidden text-[15px] whitespace-nowrap min-[400px]:block">시스템 통합관리</b>
+            <span className="hidden text-[11px] text-gray-500 sm:block">Smart System</span>
           </span>
         </Link>
         {/* 분야 탭 */}
