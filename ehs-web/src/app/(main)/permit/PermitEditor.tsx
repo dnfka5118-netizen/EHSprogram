@@ -414,7 +414,7 @@ function RiskPicker({ options, startDt, onClose, onPick }: { options: JsaOption[
         <Hint>평가일자가 허가서의 작업 시작일시와 365일(1년) 이상 차이나는 평가서는 유효성 검증이 필요하여 연동되지 않습니다.</Hint>
         {warn && <p className="my-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{warn}</p>}
         {options.length === 0 ? (
-          <p className="py-8 text-center text-sm text-gray-500">결재 완료된 위험성평가가 없습니다. 먼저 위험성평가 → 수시 위험성평가(JSA)에서 평가서를 작성·결재해 주세요.</p>
+          <p className="py-8 text-center text-sm text-gray-500">결재 완료된 위험성평가가 없습니다. 먼저 위험성평가 → 수시 작업위험성평가에서 평가서를 작성·결재해 주세요.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">

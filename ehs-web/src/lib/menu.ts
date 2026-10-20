@@ -4,7 +4,7 @@
 export type DomainKey = "env" | "health" | "safety" | "common";
 export type GroupKey = "plan" | "inspect" | "measure" | "work" | "edu" | "accident" | "common";
 
-export type MenuItem = { label: string; href?: string; module?: string; match?: string[]; adminOnly?: boolean };
+export type MenuItem = { label: string; href?: string; module?: string; match?: string[]; exclude?: string[]; adminOnly?: boolean }; // exclude : 이 경로는 다른 메뉴
 export type MenuSection = { key: GroupKey; label: string; items: MenuItem[] };
 export type Domain = { key: DomainKey; label: string; short: string; home: string; sections: MenuSection[] };
 
@@ -53,8 +53,8 @@ export const DOMAINS: Domain[] = [
     label: "안전",
     short: "S",
     home: "/ehs/safety",
+    // 안전 : 점검 · 위험성평가 · 안전작업허가 만 사용
     sections: [
-      g("plan", [{ label: "안전관리계획서" }, { label: "안전 법규 등록부" }]),
       g("inspect", [
         { label: "CEO 안전점검", href: "/insp/ceo", module: "insp_ceo", match: ["/insp/ceo"] },
         { label: "월간환경안전점검", href: "/insp/monthly", module: "insp_monthly", match: ["/insp/monthly"] },
@@ -64,19 +64,26 @@ export const DOMAINS: Domain[] = [
         { label: "외부점검", href: "/insp/external" },
         { label: "점검 지표", href: "/insp/kpi", module: "insp_kpi", match: ["/insp/kpi"] },
       ]),
-      g("measure", [
-        { label: "수시 위험성평가(JSA)", href: "/risk/adhoc", module: "risk_adhoc" },
-        { label: "정기 위험성평가", module: "risk" },
-        { label: "공정안전관리(PSM)" },
-      ]),
-      g("work", [
-        { label: "안전작업허가 현황", href: "/permit", module: "permit", match: ["/permit"] },
-        { label: "금일 작업 현황", href: "/permit?tab=today", module: "permit" },
-        { label: "유해위험기계기구" },
-        { label: "도급업체 안전관리" },
-      ]),
-      g("edu", [{ label: "안전교육" }, { label: "비상대응훈련" }]),
-      g("accident", [{ label: "사고조사" }, { label: "아차사고" }, { label: "안전 실적 보고" }]),
+      {
+        key: "measure",
+        label: "위험성평가",
+        items: [
+          { label: "위험성평가계획" },
+          { label: "정기 작업위험성평가" },
+          { label: "정기 공정위험성평가" },
+          { label: "수시 작업위험성평가", href: "/risk/adhoc", module: "risk_adhoc" },
+          { label: "수시 위험성평가" },
+          { label: "위험성평가 감소대책" },
+        ],
+      },
+      {
+        key: "work",
+        label: "안전작업허가",
+        items: [
+          { label: "안전작업허가 신청", href: "/permit/new", module: "permit" },
+          { label: "안전작업허가 현황", href: "/permit", module: "permit", match: ["/permit"], exclude: ["/permit/new"] },
+        ],
+      },
     ],
   },
   {
@@ -109,7 +116,8 @@ export function matches(pathname: string, search: string, i: MenuItem): boolean 
   if (q) return pathname === path && search === `?${q}`;
   if (path === "/") return pathname === "/";
   const prefixes = [path, ...(i.match ?? [])];
-  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !(path === "/permit" && search.includes("tab=today"));
+  if (i.exclude?.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return false;
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
 export function findDomain(domains: Domain[], pathname: string, search: string): DomainKey | null {
