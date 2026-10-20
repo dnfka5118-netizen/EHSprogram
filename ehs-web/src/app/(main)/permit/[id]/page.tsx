@@ -50,7 +50,7 @@ export default async function PermitDetailPage({ params, searchParams }: PagePro
 
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
         <Card title="결재">
-          <ApprovalStatus approval={approval} meId={me.id} />
+          <ApprovalStatus approval={approval} meId={me.id} isAdmin={me.is_admin} />
         </Card>
       )}
 
@@ -77,7 +77,7 @@ export default async function PermitDetailPage({ params, searchParams }: PagePro
               {status === "issued" && (
                 <p className="text-sm text-gray-600">승인된 허가서입니다. 현장에서 안전조치 필요사항을 확인(○)하고, 작업 전·중·후 서명과 가스농도 측정 등을 기록하세요.</p>
               )}
-              <PermitFieldForm id={id} permit={permit} initial={fieldFromRow(row)} readOnly={status === "completed" || !writer} />
+              <PermitFieldForm id={id} permit={permit} initial={fieldFromRow(row)} savedAt={row.field_saved_at ?? null} readOnly={status === "completed" || !writer} />
             </div>
           ) : (
             <Card>

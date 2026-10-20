@@ -48,7 +48,7 @@ export default async function JsaDetailPage({ params, searchParams }: PageProps<
       {header}
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
         <Card title="결재">
-          <ApprovalStatus approval={approval} meId={me.id} />
+          <ApprovalStatus approval={approval} meId={me.id} isAdmin={me.is_admin} />
         </Card>
       )}
       {editable ? (

@@ -60,7 +60,7 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
 
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
         <Card title="결재 현황">
-          <ApprovalStatus approval={approval} meId={me.id} />
+          <ApprovalStatus approval={approval} meId={me.id} isAdmin={me.is_admin} />
         </Card>
       )}
       {canSubmit && d.ym <= maxBackfill && (

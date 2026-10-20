@@ -10,9 +10,10 @@ import type { ActionState } from "@/lib/types";
 import { CheckList, F, Hint, INPUT, Panel, Pill, Sub } from "./ui";
 
 // 발급된 허가서의 현장 기록 : ○ 확인 · 서명 · 연장/중단 · 작업완료 · 가스측정 · 밀폐 출입 · 작업자 확인서명
-export function PermitFieldForm({ id, permit, initial, readOnly }: { id: string; permit: PermitApply; initial: PermitField; readOnly: boolean }) {
+export function PermitFieldForm({ id, permit, initial, savedAt, readOnly }: { id: string; permit: PermitApply; initial: PermitField; savedAt: string | null; readOnly: boolean }) {
   const router = useRouter();
   const [f, setF] = useState<PermitField>(initial);
+  const [base, setBase] = useState<string | null>(savedAt); // 동시 저장 합치기 기준
   const [state, setState] = useState<ActionState>();
   const [pending, start] = useTransition();
   const edit = !readOnly;
@@ -40,8 +41,13 @@ export function PermitFieldForm({ id, permit, initial, readOnly }: { id: string;
     setState(undefined);
     start(async () => {
       if (done && !confirm("작업완료 처리할까요? 완료 후에는 현장 기록을 수정할 수 없습니다.")) return;
-      const res = done ? await completePermit(id, f) : await savePermitField(id, f);
+      const res = done ? await completePermit(id, f, base) : await savePermitField(id, f, base);
       if (res.error) return setState({ error: res.error });
+      const saved = res as { field?: PermitField; savedAt?: string };
+      if (saved.field) {
+        setF(saved.field);
+        setBase(saved.savedAt ?? null);
+      }
       setState({ message: res.message });
       router.refresh();
     });

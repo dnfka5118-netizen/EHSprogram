@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -728,6 +728,36 @@ await as(U.Q);
 await db.query("select save_chem_check($1, kst_today(), '09:00 ~ 09:30', $2, '[]')", [sid, sGrid]);
 ok((await one("select sub_reason from chem_checks where id=$1", [sid])).sub_reason === null, "점검자 본인이 다시 저장하면 대체 표시 없음");
 await as(null);
+
+
+console.log("\n[결재선 검사 · 결재자 변경 · 허가서 동시 저장]");
+{
+const apLine = (...s) => JSON.stringify(s.map(([k, u]) => ({ step_kind: k, label: k, approver_id: u })));
+const apSub = "select _submit_approval('risk_adhoc', gen_random_uuid(), '시험', $1, $2, $3) id";
+await as(U.W1);
+await expectError("본인 승인 차단", apSub, [site, PROD, apLine(["담당", U.W1], ["승인", U.W1])], "본인은 결재자");
+await expectError("필수 결재자(해당부서장) 누락 차단", apSub, [site, PROD, apLine(["담당", U.W1], ["검토", U.W2])], "필수 결재자");
+await expectError("협력업체 결재자 차단", apSub, [site, PROD, apLine(["담당", U.W1], ["검토", U.C], ["승인", U.H])], "협력업체");
+const apId = (await one(apSub, [site, PROD, apLine(["담당", U.W1], ["검토", U.W2], ["승인", U.H])])).id;
+ok(!!apId, "올바른 결재선은 상신");
+await as(U.H);
+ok(!!(await one(apSub, [site, PROD, apLine(["담당", U.H], ["승인", U.S])])).id, "부서장이 상신하면 본인 대신 다른 결재자로 상신 가능");
+await as(U.W1); await expectError("관리자 아니면 결재자 변경 불가", "select admin_change_approver((select id from approval_steps where approval_id=$1 and status='pending'), $2, '퇴사')", [apId, U.Q], "관리자만");
+await as(U.A);
+await db.query("select admin_change_approver((select id from approval_steps where approval_id=$1 and status='pending'), $2, '퇴사')", [apId, U.Q]);
+const ps = await one("select approver_id, comment from approval_steps where approval_id=$1 and status='pending'", [apId]);
+ok(ps.approver_id === U.Q && ps.comment.includes("결재자 변경"), "관리자 결재자 변경 (사유 기록)");
+ok((await one("select count(*)::int c from notifications where user_id=$1 and kind='approval_request'", [U.Q])).c >= 1, "새 결재자에게 결재 요청 알림");
+await as(null); await db.query("update profiles set is_active=false where id=$1", [U.H]);
+await as(U.A);
+ok((await db.query("select * from stuck_approvals() where approval_id=$1", [apId])).rows.length === 1, "결재자가 사용 중지된 결재 목록");
+await db.query("select admin_reject_approval($1, '결재자 퇴사로 다시 상신')", [apId]);
+ok((await one("select status from approvals where id=$1", [apId])).status === "rejected", "관리자 반려");
+await as(null); await db.query("update profiles set is_active=true where id=$1", [U.H]);
+const un = (await one(`select _jsonb_union('[{"id":"a","v":1},{"id":"b","v":1}]', '[{"id":"b","v":2},{"id":"c","v":1}]') u`)).u;
+ok(un.length === 3 && un.find((x) => x.id === "b").v === 2, "허가서 기록 합치기 : 양쪽 기록 모두 · 같은 id 는 새 값");
+ok(JSON.stringify((await one(`select _jsonb_nonempty('{"a":"x","b":"","c":null}') j`)).j) === '{"a":"x"}', "빈 서명은 다른 사람 서명을 덮지 않음");
+}
 
 
 console.log("\n[비슷한 과거 지적 사례]");

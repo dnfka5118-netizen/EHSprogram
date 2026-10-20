@@ -6,6 +6,7 @@ import { Button, FormMessage, Textarea } from "@/components/ui";
 import { fmtDateTime } from "@/lib/format";
 import type { ActionState } from "@/lib/types";
 import type { Approval, ApprovalStep } from "@/lib/approval";
+import { AdminApprovalTools } from "./AdminApprovalTools";
 
 const STEP_STYLE: Record<ApprovalStep["status"], string> = {
   approved: "border-brand-300 bg-white",
@@ -16,7 +17,7 @@ const STEP_STYLE: Record<ApprovalStep["status"], string> = {
 };
 
 // 결재 칸 (도장 칸 형태) + 내 차례면 승인/반려, 상신자면 상신 취소
-export function ApprovalStatus({ approval, meId }: { approval: Approval; meId: string }) {
+export function ApprovalStatus({ approval, meId, isAdmin }: { approval: Approval; meId: string; isAdmin?: boolean }) {
   const [comment, setComment] = useState("");
   const [state, setState] = useState<ActionState>();
   const [pending, start] = useTransition();
@@ -98,6 +99,7 @@ export function ApprovalStatus({ approval, meId }: { approval: Approval; meId: s
         </Button>
       )}
       <FormMessage state={state} />
+      {isAdmin && <AdminApprovalTools approval={approval} />}
 
       {approval.history.length > 0 && (
         <details className="text-xs text-gray-500">

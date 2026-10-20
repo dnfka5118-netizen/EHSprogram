@@ -75,7 +75,7 @@ export default async function ChemCheckPage({ params }: PageProps<"/insp/[slug]/
 
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
         <Card title="결재 현황">
-          <ApprovalStatus approval={approval} meId={me.id} />
+          <ApprovalStatus approval={approval} meId={me.id} isAdmin={me.is_admin} />
         </Card>
       )}
       {editable && (

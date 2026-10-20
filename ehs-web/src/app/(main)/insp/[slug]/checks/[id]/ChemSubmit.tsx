@@ -11,7 +11,7 @@ import { submitChemCheck } from "../../../chem-actions";
 // 점검대장 상신 : 점검자 → EHS부서장 → 해당 부서장 (같은 사람이 이어지면 한 번만 — EHS팀 자체 점검)
 export function ChemSubmit({ id, initialLine, people, meId, disabled }: { id: string; initialLine: LineStep[]; people: Person[]; meId: string; disabled?: boolean }) {
   const router = useRouter();
-  const [line, setLine] = useState<LineStep[]>(() => initialLine.filter((s, i, a) => !s.approver_id || a.findIndex((x) => x.approver_id === s.approver_id) === i));
+  const [line, setLine] = useState<LineStep[]>(() => initialLine.filter((s, i, a) => !s.approver_id || i === 0 || a.findLastIndex((x) => x.approver_id === s.approver_id) === i));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (

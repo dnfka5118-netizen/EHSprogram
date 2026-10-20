@@ -57,6 +57,10 @@ export default async function ApprovalsPage({ searchParams }: PageProps<"/approv
     }
   }
 
+  // 관리자 : 결재자가 사용 중지(퇴사 등)되어 멈춘 결재
+  const { data: stuck } = me.is_admin ? await supabase.rpc("stuck_approvals") : { data: [] };
+  const stuckRows = (stuck ?? []) as { approval_id: string; title: string; module_name: string; doc_path: string; step_label: string; approver_name: string }[];
+
   return (
     <div className="space-y-4">
       <PageHeader title="전자결재" crumbs={[{ label: "공통" }, { label: "전자결재" }]}>
@@ -74,6 +78,22 @@ export default async function ApprovalsPage({ searchParams }: PageProps<"/approv
           ))}
         </div>
       </PageHeader>
+
+      {stuckRows.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">결재자가 사용 중지(퇴사 등)되어 멈춘 결재 {stuckRows.length}건 — 문서를 열어 [관리자 : 결재자 변경] 으로 바꿔 주세요.</p>
+          <ul className="mt-1 space-y-0.5">
+            {stuckRows.map((r) => (
+              <li key={r.approval_id + r.step_label}>
+                <Link href={r.doc_path} className="underline">
+                  [{r.module_name}] {r.title}
+                </Link>{" "}
+                · {r.step_label} {r.approver_name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <Card>
         {rows.length === 0 ? (

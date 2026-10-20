@@ -29,17 +29,24 @@ export async function submitPermit(id: string | null, data: PermitApply, steps: 
   return { id: saved.id, message: "상신했습니다." };
 }
 
-export async function savePermitField(id: string, field: PermitField): Promise<Result> {
+// 현장 기록 저장 : base = 화면을 연(마지막 저장) 시각 — 그 뒤 다른 기기가 저장했으면 DB 가 합쳐서 저장
+export async function savePermitField(id: string, field: PermitField, base: string | null): Promise<Result & { field?: PermitField; savedAt?: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("save_permit_field", { p_id: id, p_field: field });
+  const { data, error } = await supabase.rpc("save_permit_field", { p_id: id, p_field: field, p_base: base });
   if (error) return { error: toMessage(error) };
   revalidatePath(`/permit/${id}`, "layout");
   revalidatePath("/permit");
-  return { id, message: "현장 기록을 저장했습니다." };
+  const r = data as { field: PermitField; saved_at: string; merged: boolean };
+  return {
+    id,
+    field: r.field,
+    savedAt: r.saved_at,
+    message: r.merged ? "다른 기기에서 먼저 저장한 서명·기록과 합쳐서 저장했습니다. 화면을 확인해 주세요." : "현장 기록을 저장했습니다.",
+  };
 }
 
-export async function completePermit(id: string, field: PermitField): Promise<Result> {
-  const saved = await savePermitField(id, field);
+export async function completePermit(id: string, field: PermitField, base: string | null): Promise<Result> {
+  const saved = await savePermitField(id, field, base);
   if (saved.error) return saved;
   const supabase = await createClient();
   const { error } = await supabase.rpc("complete_permit", { p_id: id });
