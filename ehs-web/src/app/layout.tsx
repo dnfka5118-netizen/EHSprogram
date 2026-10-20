@@ -5,7 +5,7 @@ import "./globals.css";
 const noto = Noto_Sans_KR({ variable: "--font-noto", subsets: ["latin"], weight: ["400", "500", "700"] });
 
 export const metadata: Metadata = {
-  title: "EHS 통합관리",
+  title: "시스템 통합관리",
   description: "환경안전 점검·위험성평가·작업허가 통합관리",
 };
 
