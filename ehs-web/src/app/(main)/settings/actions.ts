@@ -551,3 +551,11 @@ export async function saveChemSubstitutes(_prev: ActionState, fd: FormData): Pro
   const { error } = await supabase.rpc("set_chem_substitutes", { p_users: fd.getAll("member").map(String).filter(Boolean) });
   return error ? { error: toMessage(error) } : done();
 }
+
+// ---------------------------------------------------------------- 유형 정리 (과거 사례)
+export async function reviewExampleTypes(ids: number[], keep: number[], type: string | null): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("review_example_types", { p_ids: ids, p_keep: keep, p_type: type });
+  return error ? { error: toMessage(error) } : { ok: true, message: ids.length ? `${ids.length}건을 '${type}'(으)로 정리했습니다.` : "그대로 두었습니다." };
+}

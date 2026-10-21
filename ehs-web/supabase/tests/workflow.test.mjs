@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -770,6 +770,18 @@ let blocked = false;
 try { await db.query("insert into finding_examples (problem, emb) values ('x','x')"); } catch { blocked = true; }
 ok(blocked, "화면 사용자는 사례를 넣을 수 없음");
 await db.exec("reset role"); await as(null);
+
+console.log("\n[유형 정리]");
+const rvA = (await one("insert into finding_examples (problem, emb, type_name) values ('소화기 압력 게이지 미달', 'AAAA', '부착물') returning id")).id;
+const rvB = (await one("insert into finding_examples (problem, emb, type_name) values ('소화기 위치 표시', 'AAAA', '3정5S') returning id")).id;
+await as(U.I);
+await expectError("관리자 아니면 유형 정리 불가", "select review_example_types($1, '{}', '전기')", [[rvA]], "관리자만");
+await as(U.A);
+await expectError("없는 유형으로는 정리 불가", "select review_example_types($1, '{}', '없는유형')", [[rvA]], "유형을 선택");
+ok((await one("select review_example_types($1, $2, '전기') n", [[rvA], [rvB]])).n === 2, "유형 정리 : 고른 사례 1건 변경 + 1건 그대로 확인");
+const rvRows = (await db.query("select type_name, type_checked from finding_examples where id = any($1) order by id", [[rvA, rvB]])).rows;
+ok(rvRows[0].type_name === "전기" && rvRows[1].type_name === "3정5S" && rvRows.every((r) => r.type_checked), "바꾼 사례는 새 유형, 그대로 둔 사례는 유지 · 모두 확인 표시");
+await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

@@ -3,7 +3,7 @@
 //   1) npx next build && npx next start -p 3457      (다른 창에서 켜 둠)
 //   2) node scripts/mobile-check.mjs / /insp/ceo /permit/new#line
 //        경로 뒤 #menu = 메뉴 열기, #line = 허가서 상신 → 결재라인 지정 창 열기,
-//        #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
+//        #review = 유형 정리 묶음 계산 기다림, #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
 //      W=360 node scripts/mobile-check.mjs /insp/ceo   ← 폭 바꾸기
 //
 // - 임시 관리자 계정(mobile-check@example.invalid)을 만들어 로그인하고 끝나면 지운다
@@ -64,6 +64,10 @@ try {
       await clickText(page, "상신하기");
       await new Promise((r) => setTimeout(r, 800));
       await clickText(page, "결재라인 지정");
+    }
+    if (action === "review") {
+      await page.waitForFunction(() => /정리할 묶음|불러오지 못했/.test(document.body.innerText), { timeout: 60000 }).catch(() => {});
+      console.log("  ", await page.evaluate(() => [...document.querySelectorAll("p")].find((e) => /정리할 묶음|불러오지 못했/.test(e.textContent ?? ""))?.textContent ?? "(없음)"));
     }
     if (action === "type") {
       await page.type("textarea", process.env.TEXT || "소화기 압력 게이지 미달, 교체 필요");

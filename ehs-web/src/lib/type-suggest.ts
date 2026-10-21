@@ -66,13 +66,13 @@ function getModel(types: FindingType[]) {
       fetchAll<{ type_name: string | null; problem: string }>("finding_examples", "type_name, problem"),
       fetchAll<{ finding_type_id: string | null; problem: string }>("findings", "finding_type_id, problem").catch(() => []),
     ]);
-    // 같은 문제점은 한 번만 (지적사항이 사례보다 최근 기록이므로 우선)
+    // 같은 문제점은 한 번만 (사례는 환경설정 → 유형 → 유형 정리에서 관리자가 다듬으므로 사례를 우선)
     const rows = new Map<string, string>();
+    for (const f of fs) if (f.finding_type_id && ids.has(f.finding_type_id) && f.problem) rows.set(norm(f.problem), f.finding_type_id);
     for (const e of ex) {
       const id = e.type_name ? byName.get(key(e.type_name)) : undefined;
       if (id && e.problem) rows.set(norm(e.problem), id);
     }
-    for (const f of fs) if (f.finding_type_id && ids.has(f.finding_type_id) && f.problem) rows.set(norm(f.problem), f.finding_type_id);
 
     const texts = [...rows.keys()];
     const labels = [...rows.values()];
@@ -114,4 +114,62 @@ export async function suggestTypes(text: string, types: FindingType[]): Promise<
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([typeId, v]) => ({ typeId, name: m.types.find((t) => t.id === typeId)?.name ?? "", share: v / total }));
+}
+
+// ---------------------------------------------------------------- 유형 정리 (애매한 사례 묶음)
+export type ReviewExample = { id: number; type_name: string | null; problem: string; type_checked: boolean };
+export type ReviewGroup = { items: ReviewExample[]; counts: [string, number][] };
+
+// 글자 조각 → 정렬된 번호 배열 (빠른 비교용)
+function packed(list: ReviewExample[]) {
+  const gs = list.map((e) => grams(e.problem));
+  const df = new Map<string, number>();
+  for (const g of gs) for (const x of g) df.set(x, (df.get(x) ?? 0) + 1);
+  const idx = new Map([...df.keys()].map((g, i) => [g, i]));
+  const idf = (g: string) => Math.log((list.length + 1) / ((df.get(g) ?? 0) + 1));
+  return gs.map((g) => {
+    const v = vec(g, idf);
+    const pairs = [...v].map(([x, w]) => [idx.get(x)!, w] as const).sort((a, b) => a[0] - b[0]);
+    return { ids: Int32Array.from(pairs.map((p) => p[0])), ws: Float32Array.from(pairs.map((p) => p[1])) };
+  });
+}
+
+// 비슷한 문제점(유사도 SIM 이상)끼리 묶고, 등록된 유형이 2가지 이상으로 갈린 묶음만 (큰 묶음 먼저)
+export function ambiguousGroups(list: ReviewExample[], typeNames: string[], SIM = 0.55): ReviewGroup[] {
+  const valid = new Map(typeNames.map((n) => [key(n), n]));
+  const vs = packed(list);
+  const nb: number[][] = list.map(() => []);
+  for (let i = 0; i < vs.length; i++) {
+    const a = vs[i];
+    for (let j = i + 1; j < vs.length; j++) {
+      const b = vs[j];
+      let s = 0;
+      for (let x = 0, y = 0; x < a.ids.length && y < b.ids.length; ) {
+        if (a.ids[x] === b.ids[y]) s += a.ws[x++] * b.ws[y++];
+        else if (a.ids[x] < b.ids[y]) x++;
+        else y++;
+      }
+      if (s >= SIM) {
+        nb[i].push(j);
+        nb[j].push(i);
+      }
+    }
+  }
+  const used = new Set<number>();
+  const out: ReviewGroup[] = [];
+  for (const i of list.map((_, i) => i).sort((a, b) => nb[b].length - nb[a].length)) {
+    if (used.has(i)) continue;
+    const m = [i, ...nb[i].filter((j) => !used.has(j))];
+    m.forEach((x) => used.add(x));
+    const items = m.map((x) => list[x]);
+    if (items.every((e) => e.type_checked)) continue;
+    const c = new Map<string, number>();
+    for (const e of items) {
+      const n = e.type_name ? valid.get(key(e.type_name)) : undefined;
+      if (n) c.set(n, (c.get(n) ?? 0) + 1);
+    }
+    if (c.size < 2) continue;
+    out.push({ items, counts: [...c].sort((a, b) => b[1] - a[1]) });
+  }
+  return out.sort((a, b) => b.items.length - a.items.length);
 }
