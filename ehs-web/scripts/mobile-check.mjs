@@ -2,7 +2,8 @@
 //
 //   1) npx next build && npx next start -p 3457      (다른 창에서 켜 둠)
 //   2) node scripts/mobile-check.mjs / /insp/ceo /permit/new#line
-//        경로 뒤 #menu = 메뉴 열기, #line = 허가서 상신 → 결재라인 지정 창 열기
+//        경로 뒤 #menu = 메뉴 열기, #line = 허가서 상신 → 결재라인 지정 창 열기,
+//        #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
 //      W=360 node scripts/mobile-check.mjs /insp/ceo   ← 폭 바꾸기
 //
 // - 임시 관리자 계정(mobile-check@example.invalid)을 만들어 로그인하고 끝나면 지운다
@@ -63,6 +64,12 @@ try {
       await clickText(page, "상신하기");
       await new Promise((r) => setTimeout(r, 800));
       await clickText(page, "결재라인 지정");
+    }
+    if (action === "type") {
+      await page.type("textarea", process.env.TEXT || "소화기 압력 게이지 미달, 교체 필요");
+      await page.waitForFunction(() => document.body.innerText.includes("문제점으로 추천"), { timeout: 30000 }).catch(() => {});
+      await page.evaluate(() => [...document.querySelectorAll("label, p")].find((e) => e.textContent?.startsWith("문제점"))?.scrollIntoView());
+      console.log("  유형 추천 :", await page.evaluate(() => [...document.querySelectorAll("p")].find((e) => e.textContent?.startsWith("문제점으로 추천"))?.textContent ?? "(없음)"));
     }
     await new Promise((r) => setTimeout(r, 800));
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
