@@ -98,6 +98,7 @@ export const DOMAINS: Domain[] = [
         items: [
           { label: "내 할 일", href: "/" },
           { label: "전자결재", href: "/approvals" },
+          { label: "개선 의견", href: "/suggestions" },
           { label: "부서별 점검 조치 현황", href: "/dept", match: ["/findings"] },
           { label: "개인설정", href: "/account/password" },
           { label: "환경설정", href: "/settings", adminOnly: true },

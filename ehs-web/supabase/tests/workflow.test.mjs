@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -793,6 +793,52 @@ ok((await db.query("select * from location_dept_stats($1)", [site])).rows.length
 await db.query("update locations set default_department_id=$1 where id=$2", [QA, loc]);
 ok((await one("select default_department_id d from locations where id=$1", [loc])).d === QA, "장소 기본 조치 부서 저장");
 await db.query("update locations set default_department_id=null where id=$1", [loc]);
+
+console.log("\n[개선 의견 게시판]");
+const sgId = (await one("select gen_random_uuid() id")).id;
+await as(U.W1);
+await expectError("사진 경로 검증", "select create_suggestion($1,'점검','제목','내용',true,array['other/x.jpg'])", [sgId], "경로");
+await expectError("제목 필수", "select create_suggestion($1,'점검','  ','내용',true,'{}')", [sgId], "제목");
+await db.query("select create_suggestion($1,'점검','사진 여러 장 한 번에','앨범에서 여러 장 고르기',true,array[$2])", [sgId, `suggestions/${sgId}/a.jpg`]);
+ok((await one("select count(*)::int c from notifications where kind='suggestion' and user_id=$1", [U.I])).c === 1, "새 의견 → EHS팀 알림");
+ok((await one("select count(*)::int c from notifications where kind='suggestion' and user_id=$1", [U.W1])).c === 0, "작성자 본인에게는 알림 없음");
+await as(U.Q);
+let sgRow = (await one("select * from list_suggestions(null, false) where id=$1", [sgId]));
+ok(sgRow.author_name === "익명" && !sgRow.is_mine, "다른 사용자 목록 : 익명 작성자 가림");
+ok((await one("select get_suggestion($1) j", [sgId])).j.author_name === "익명", "다른 사용자 상세 : 익명 작성자 가림");
+await as(U.W1);
+ok((await one("select * from list_suggestions(null, true) where id=$1", [sgId])).author_name === "익명 (나)", "본인 : 내 글 표시");
+await as(U.A);
+ok((await one("select get_suggestion($1) j", [sgId])).j.author_name === "작업자1 (익명)", "관리자 : 익명 글 실명 확인");
+await db.exec("set role authenticated");
+await as(U.Q); ok((await db.query("select * from suggestions")).rows.length === 0, "표 직접 조회로 작성자 확인 불가 (본인·관리자만)");
+await as(U.W1); ok((await db.query("select * from suggestions")).rows.length === 1, "본인 글은 직접 조회 가능");
+await db.exec("reset role");
+await as(U.W2);
+await expectError("EHS팀 아니면 처리 불가", "select answer_suggestion($1,'accepted','반영')", [sgId], "EHS팀만");
+await expectError("남의 글 수정 불가", "select update_suggestion($1,'점검','x','y',false,'{}')", [sgId], "작성자만");
+await as(U.I);
+await db.query("select answer_suggestion($1,'reviewing',null)", [sgId]);
+await as(U.W1);
+await expectError("접수 후 수정 불가", "select update_suggestion($1,'점검','x','y',false,'{}')", [sgId], "접수한 뒤");
+await expectError("접수 후 작성자 삭제 불가", "select delete_suggestion($1)", [sgId], "접수 대기");
+await as(U.I);
+await expectError("미수용은 사유 필수", "select answer_suggestion($1,'rejected','  ')", [sgId], "사유");
+await expectError("수용 전 반영 완료 불가", "select answer_suggestion($1,'done',null)", [sgId], "수용한 의견만");
+await db.query("select answer_suggestion($1,'accepted','11월 중 반영 예정')", [sgId]);
+await db.query("select answer_suggestion($1,'done',null)", [sgId]);
+const sgD = (await one("select get_suggestion($1) j", [sgId])).j;
+ok(sgD.status === "done" && sgD.answer === "11월 중 반영 예정" && sgD.answered_by_name === "점검자", "수용 → 반영 완료 (답변 유지)");
+ok(sgD.events.map((e) => e.action).join(",") === "created,reviewing,accepted,done", "처리 이력 기록");
+ok((await one("select count(*)::int c from notifications where kind='suggestion' and user_id=$1", [U.W1])).c === 3, "상태 변경마다 작성자 알림");
+await as(U.W1);
+await db.query("select add_suggestion_comment($1,'감사합니다')", [sgId]);
+ok((await one("select count(*)::int c from notifications where kind='suggestion' and user_id=$1 and subject like '%댓글%'", [U.I])).c === 1, "작성자 댓글 → 답변한 EHS 담당자 알림");
+ok((await one("select get_suggestion($1) j", [sgId])).j.comments[0].author_name === "익명 (나) · 작성자", "익명 작성자의 댓글도 이름 가림");
+await as(U.A);
+ok(JSON.stringify((await one("select delete_suggestion($1) p", [sgId])).p) === JSON.stringify([`suggestions/${sgId}/a.jpg`]), "관리자 삭제 → 지울 사진 경로");
+await as(null);
+ok((await db.query("select * from list_suggestions(null, false)")).rows.length === 0, "로그인 안 한 상태는 목록 조회 불가");
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
