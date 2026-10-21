@@ -8,6 +8,7 @@ import { inspectorLabel } from "@/lib/rank";
 import { NewInspectionForm } from "./NewInspectionForm";
 import { NoFindingButton } from "./NoFindingButton";
 import type { Department, FindingType, Location, SubLocation } from "@/lib/types";
+import type { DeptStat } from "@/lib/location-dept";
 import type { Person } from "./ParticipantPicker";
 
 // 점검 등록 : 사진 → (사업장·점검일·점검자 고정) → 장소 → 세부장소 → 유형 → 문제점 → 조치 요청 부서
@@ -29,12 +30,13 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
   }
 
   const supabase = await createClient();
-  const [{ data: users }, { data: locations }, { data: types }, { data: depts }, { count: checkedToday }] = await Promise.all([
+  const [{ data: users }, { data: locations }, { data: types }, { data: depts }, { count: checkedToday }, { data: deptStats }] = await Promise.all([
     supabase.from("profiles").select("id, name, position, departments!profiles_department_fk(name)").eq("is_active", true).order("name"),
     supabase.from("locations").select("*, sub_locations(*)").eq("site_id", profile.site_id).eq("is_active", true).order("sort_order"),
     supabase.from("finding_types").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").eq("site_id", profile.site_id).eq("is_active", true).is("parent_id", null).order("sort_order"), // 조치 요청은 부서(팀)까지
     supabase.from("inspection_checks").select("id", { count: "exact", head: true }).eq("module_code", mod.code).eq("user_id", profile.id).eq("done_on", todayKst()),
+    supabase.rpc("location_dept_stats", { p_site: profile.site_id }),
   ]);
   const people: Person[] = ((users ?? []) as unknown as { id: string; name: string; position: string | null; departments: { name: string } | null }[]).map((u) => ({
     id: u.id,
@@ -60,6 +62,7 @@ export default async function NewInspectionPage({ params }: PageProps<"/insp/[sl
           locations={locs}
           types={(types ?? []) as FindingType[]}
           departments={(depts ?? []) as Department[]}
+          deptStats={(deptStats ?? []) as DeptStat[]}
         />
       </Card>
       <Card title="지적사항이 없나요?">

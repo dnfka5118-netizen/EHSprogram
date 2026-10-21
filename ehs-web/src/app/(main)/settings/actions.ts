@@ -241,9 +241,11 @@ export async function saveLocation(_prev: ActionState, fd: FormData): Promise<Ac
   const id = s(fd, "id");
   const name = s(fd, "name");
   if (!name) return { error: "장소명을 입력해 주세요." };
+  const v = s(fd, "default_department_id");
+  const dept = fd.has("default_department_id") ? { default_department_id: nullable(v) } : {};
   const { error } = id
-    ? await supabase.from("locations").update({ name, sort_order: n(fd, "sort_order"), is_active: fd.get("is_active") === "on" }).eq("id", id)
-    : await supabase.from("locations").insert({ site_id: s(fd, "site_id"), name, sort_order: n(fd, "sort_order") });
+    ? await supabase.from("locations").update({ name, sort_order: n(fd, "sort_order"), is_active: fd.get("is_active") === "on", ...dept }).eq("id", id)
+    : await supabase.from("locations").insert({ site_id: s(fd, "site_id"), name, sort_order: n(fd, "sort_order"), ...dept });
   return error ? { error: toMessage(error) } : done();
 }
 
@@ -254,9 +256,11 @@ export async function saveSubLocation(_prev: ActionState, fd: FormData): Promise
   const id = s(fd, "id");
   const name = s(fd, "name");
   if (!name) return { error: "세부장소명을 입력해 주세요." };
+  const v = s(fd, "default_department_id");
+  const dept = fd.has("default_department_id") ? { default_department_id: nullable(v) } : {};
   const { error } = id
-    ? await supabase.from("sub_locations").update({ name, sort_order: n(fd, "sort_order"), is_active: fd.get("is_active") === "on" }).eq("id", id)
-    : await supabase.from("sub_locations").insert({ location_id: s(fd, "location_id"), name, sort_order: n(fd, "sort_order") });
+    ? await supabase.from("sub_locations").update({ name, sort_order: n(fd, "sort_order"), is_active: fd.get("is_active") === "on", ...dept }).eq("id", id)
+    : await supabase.from("sub_locations").insert({ location_id: s(fd, "location_id"), name, sort_order: n(fd, "sort_order"), ...dept });
   return error ? { error: toMessage(error) } : done();
 }
 

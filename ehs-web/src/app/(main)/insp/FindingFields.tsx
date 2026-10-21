@@ -8,10 +8,11 @@ import type { ProcessedPhoto } from "@/lib/image";
 import { Field, Input, Select, Textarea } from "@/components/ui";
 import type { Department, FindingType, Location, SubLocation } from "@/lib/types";
 import { AUTO_SHARE, suggestTypes, type TypeSuggestion } from "@/lib/type-suggest";
+import { suggestDept, type DeptStat } from "@/lib/location-dept";
 
 export const DIRECT = "__direct__";
 
-export type LocationWithSubs = Location & { sub_locations: SubLocation[] };
+export type LocationWithSubs = Location & { default_department_id?: string | null; sub_locations: (SubLocation & { default_department_id?: string | null })[] };
 
 // 지적사항 1건 입력값
 export type FindingDraft = {
@@ -23,10 +24,11 @@ export type FindingDraft = {
   typeAuto?: boolean; // 유형을 문제점 추천으로 자동 선택했는지 (직접 고르면 false → 더는 바꾸지 않음)
   problem: string;
   deptId: string;
+  deptAuto?: "setting" | "history"; // 장소로 자동 선택한 부서 (직접 고르면 없음 → 더는 바꾸지 않음)
   photos: ProcessedPhoto[];
 };
 
-export const emptyDraft = (keep?: Pick<FindingDraft, "locationId" | "subId" | "subText" | "deptId">): FindingDraft => ({
+export const emptyDraft = (keep?: Pick<FindingDraft, "locationId" | "subId" | "subText" | "deptId" | "deptAuto">): FindingDraft => ({
   key: crypto.randomUUID(),
   locationId: keep?.locationId ?? "",
   subId: keep?.subId ?? "",
@@ -34,6 +36,7 @@ export const emptyDraft = (keep?: Pick<FindingDraft, "locationId" | "subId" | "s
   typeId: "",
   problem: "",
   deptId: keep?.deptId ?? "",
+  deptAuto: keep?.deptAuto,
   photos: [],
 });
 
@@ -62,13 +65,14 @@ export const draftPayload = (d: FindingDraft, photos: string[]) => ({
 export type FindingPayload = ReturnType<typeof draftPayload>;
 
 // 현장 순서 : 사진 촬영 → (고정 정보) → 장소 → 세부장소 → 문제점 → 유형(문제점으로 추천) → 조치 요청 부서
-export function FindingFields({ value, onPatch, locations, types, departments, fixed }: {
+export function FindingFields({ value, onPatch, locations, types, departments, deptStats, fixed }: {
   fixed?: ReactNode; // 사진 바로 아래에 보여 줄 고정 정보 (사업장·점검일·점검자)
   value: FindingDraft;
   onPatch: (patch: Partial<FindingDraft>) => void;
   locations: LocationWithSubs[];
   types: FindingType[];
   departments: Department[];
+  deptStats?: DeptStat[];
 }) {
   const set = onPatch;
   const subs = locations.find((l) => l.id === value.locationId)?.sub_locations ?? [];
@@ -76,6 +80,12 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
   useEffect(() => {
     latest.current = value;
   });
+  // 장소·세부장소를 고르면 조치 요청 부서 자동 선택 (직접 고른 부서는 유지)
+  const pickPlace = (patch: Pick<FindingDraft, "locationId" | "subId">) => {
+    const p = suggestDept(locations, deptStats ?? [], departments.map((d) => d.id), patch.locationId, patch.subId);
+    const auto = !value.deptId || value.deptAuto;
+    set({ ...patch, ...(auto ? (p ? { deptId: p.deptId, deptAuto: p.from } : { deptId: "", deptAuto: undefined }) : {}) });
+  };
   const [sugg, setSugg] = useState<{ text: string; items: TypeSuggestion[] }>({ text: "", items: [] });
 
   // 문제점을 쓰면 (잠깐 멈췄을 때) 과거 기록으로 유형 추천 → 확신이 높고 직접 고른 적 없으면 자동 선택
@@ -111,7 +121,7 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
 
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="장소" required>
-          <Select value={value.locationId} onChange={(e) => set({ locationId: e.target.value, subId: "" })}>
+          <Select value={value.locationId} onChange={(e) => pickPlace({ locationId: e.target.value, subId: "" })}>
             <option value="">선택</option>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
@@ -119,7 +129,7 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
           </Select>
         </Field>
         <Field label="세부장소">
-          <Select value={value.subId} onChange={(e) => set({ subId: e.target.value })} disabled={!value.locationId}>
+          <Select value={value.subId} onChange={(e) => pickPlace({ locationId: value.locationId, subId: e.target.value })} disabled={!value.locationId}>
             <option value="">{subs.length ? "선택" : "없음"}</option>
             {subs.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
@@ -177,7 +187,12 @@ export function FindingFields({ value, onPatch, locations, types, departments, f
       </Field>
 
       <Field label="조치 요청 부서" required>
-        <Select value={value.deptId} onChange={(e) => set({ deptId: e.target.value })}>
+        {value.deptAuto && value.deptId && (
+          <p className="mb-1 text-xs text-brand-700">
+            {value.deptAuto === "setting" ? "장소에 정해진 부서로 자동 선택됨" : "이 장소 과거 기록에서 가장 많은 부서로 자동 선택됨"} — 다르면 바꾸세요
+          </p>
+        )}
+        <Select value={value.deptId} onChange={(e) => set({ deptId: e.target.value, deptAuto: undefined })}>
           <option value="">선택</option>
           {departments.map((d) => (
             <option key={d.id} value={d.id}>{d.name}</option>

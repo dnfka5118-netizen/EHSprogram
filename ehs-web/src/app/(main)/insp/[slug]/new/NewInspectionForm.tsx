@@ -8,10 +8,11 @@ import { fmtDate } from "@/lib/format";
 import { Button, FormMessage } from "@/components/ui";
 import { FindingFields, draftError, draftPayload, emptyDraft, type FindingDraft, type LocationWithSubs } from "../../FindingFields";
 import type { ActionState, Department, FindingType } from "@/lib/types";
+import type { DeptStat } from "@/lib/location-dept";
 import { ParticipantPicker, type Person } from "./ParticipantPicker";
 
 // 점검 등록 = 지적사항 1건 등록. 사업장·점검일·점검자는 고정, 점검 회차는 DB 가 자동으로 묶음
-export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector, people, locations, types, departments }: {
+export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector, people, locations, types, departments, deptStats }: {
   slug: string;
   moduleCode: string;
   siteName: string;
@@ -21,6 +22,7 @@ export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector
   locations: LocationWithSubs[];
   types: FindingType[];
   departments: Department[];
+  deptStats: DeptStat[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -79,6 +81,7 @@ export function NewInspectionForm({ slug, moduleCode, siteName, today, inspector
         locations={locations}
         types={types}
         departments={departments}
+        deptStats={deptStats}
       />
 
       <details className="rounded-md border border-gray-200 px-3 py-2">

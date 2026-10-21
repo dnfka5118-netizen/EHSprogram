@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -782,6 +782,17 @@ ok((await one("select review_example_types($1, $2, '전기') n", [[rvA], [rvB]])
 const rvRows = (await db.query("select type_name, type_checked from finding_examples where id = any($1) order by id", [[rvA, rvB]])).rows;
 ok(rvRows[0].type_name === "전기" && rvRows[1].type_name === "3정5S" && rvRows.every((r) => r.type_checked), "바꾼 사례는 새 유형, 그대로 둔 사례는 유지 · 모두 확인 표시");
 await as(null);
+
+console.log("\n[장소별 조치 부서]");
+const ldExpect = (await one("select count(*)::int c from findings where location_id=$1 and request_department_id=$2", [loc, PROD])).c;
+await as(U.I);
+const ld = (await db.query("select * from location_dept_stats($1) where location_id=$2 and department_id=$3", [site, loc, PROD])).rows;
+ok(ldExpect > 0 && ld.reduce((a, r) => a + r.n, 0) === ldExpect, "과거 기록 장소별 조치 부서 건수 (열람 권한과 무관)");
+await as(null);
+ok((await db.query("select * from location_dept_stats($1)", [site])).rows.length === 0, "로그인 안 한 상태는 건수 조회 불가");
+await db.query("update locations set default_department_id=$1 where id=$2", [QA, loc]);
+ok((await one("select default_department_id d from locations where id=$1", [loc])).d === QA, "장소 기본 조치 부서 저장");
+await db.query("update locations set default_department_id=null where id=$1", [loc]);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
