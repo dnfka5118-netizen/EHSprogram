@@ -18,7 +18,7 @@ export default async function EditSuggestionPage({ params }: PageProps<"/suggest
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <PageHeader title="의견 수정" crumbs={[{ label: "공통" }, { label: "개선 의견", href: "/suggestions" }, { label: `#${s.no} 수정` }]} />
+      <PageHeader title="의견 수정" crumbs={[{ label: "공통" }, { label: "게시판 (개선 의견)", href: "/suggestions" }, { label: `#${s.no} 수정` }]} />
       <Card>
         <SuggestionForm
           initial={{

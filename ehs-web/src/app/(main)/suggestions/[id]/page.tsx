@@ -23,7 +23,7 @@ export default async function SuggestionPage({ params }: PageProps<"/suggestions
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader
         title={`개선 의견 #${s.no}`}
-        crumbs={[{ label: "공통" }, { label: "개선 의견", href: "/suggestions" }, { label: `#${s.no}` }]}
+        crumbs={[{ label: "공통" }, { label: "게시판 (개선 의견)", href: "/suggestions" }, { label: `#${s.no}` }]}
         actions={
           <Link href="/suggestions" className="text-sm text-brand-700 underline">
             ← 목록
