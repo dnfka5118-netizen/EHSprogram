@@ -64,3 +64,24 @@ export const EVENT_LABEL: Record<string, string> = {
 
 // 사진 경로 : docs 버킷 suggestions/{의견ID}/{번호}.jpg
 export const suggestionPhotoPath = (id: string, stamp: number, i: number) => `suggestions/${id}/${stamp}-${i}.jpg`;
+
+const kstParts = (iso: string) =>
+  Object.fromEntries(
+    new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(new Date(iso))
+      .map((x) => [x.type, x.value]),
+  );
+
+// 게시판 날짜 : 올해는 10-21(화) 16:26, 지난해는 2025-12-09(화) 17:09 / 답변일은 시각 없이
+export function boardDate(iso: string, withTime: boolean) {
+  const p = kstParts(iso);
+  const thisYear = kstParts(new Date().toISOString()).year;
+  const day = `${p.year === thisYear ? "" : `${p.year}-`}${p.month}-${p.day}(${p.weekday})`;
+  return withTime ? `${day} ${p.hour}:${p.minute}` : day;
+}
+
+// 등록일 필터 묶음 (엑셀처럼 월 단위) : 2026년 10월
+export const kstMonth = (iso: string) => {
+  const p = kstParts(iso);
+  return `${p.year}년 ${p.month}월`;
+};
