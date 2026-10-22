@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { readImportFile, type ImportRow } from "@/lib/excel-import";
+import { createClient } from "@/lib/supabase/client";
 import { processPhoto } from "@/lib/image";
 import { uploadPhotos, removePhotos } from "@/lib/upload";
 import { finishImport, importFinding } from "./actions";
@@ -11,6 +12,19 @@ import type { LocationWithSubs } from "./FindingFields";
 import type { Department, FindingType } from "@/lib/types";
 
 const key = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+
+// 내려받은 엑셀의 숨은 ID 가 지금도 프로그램에 있는지 확인 (지운 지적사항이면 새 건으로 등록)
+async function keepExisting(list: ImportRow[]): Promise<ImportRow[]> {
+  const ids = [...new Set(list.map((r) => r.existingId).filter((x): x is string => !!x))];
+  const found = new Set<string>();
+  const supabase = createClient();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await supabase.from("findings").select("id").in("id", ids.slice(i, i + 200));
+    if (error) throw new Error(`기존 지적사항 확인 실패 : ${error.message}`);
+    for (const d of data ?? []) found.add(d.id as string);
+  }
+  return list.map((r) => (r.existingId && !found.has(r.existingId) ? { ...r, existingId: null } : r));
+}
 
 type Checked = ImportRow & {
   locationId?: string;
@@ -90,7 +104,7 @@ export function ExcelImportButton({ moduleCode, moduleName, locations, types, de
     setFileName(file.name);
     setBusy("엑셀 읽는 중…");
     try {
-      setRows(checkAll(await readImportFile(file)));
+      setRows(checkAll(await keepExisting(await readImportFile(file))));
     } catch (e) {
       setError((e as Error).message);
     } finally {
