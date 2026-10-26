@@ -13,12 +13,14 @@ import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, read
 import { todayKst } from "@/lib/format";
 import { MyDaily } from "./DailyStatus";
 import { DailyMine } from "./DailyMine";
+import { DailyPlaces } from "./DailyPlaces";
 import { ChemStatus } from "./ChemStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
-// 관리감독자 일일점검 : 나의 점검 현황(일지) / 나의 지적사항(내가 점검하며 지적한 것) / 사업장(부서별) 지적사항
+// 관리감독자 일일점검 : 나의 점검 현황(일지) / 장소별 점검 현황(오늘 미실시 → 대신 점검) / 나의 지적사항(내가 점검하며 지적한 것) / 사업장(부서별) 지적사항
 const DAILY_VIEWS = [
   { key: "mine", label: "나의 점검 현황" },
+  { key: "places", label: "장소별 점검 현황" },
   { key: "my-findings", label: "나의 지적사항" },
   { key: "all", label: "사업장(부서별) 지적사항" },
 ] as const;
@@ -32,6 +34,14 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const isDaily = mod.code === "insp_daily";
   const view = isDaily ? (DAILY_VIEWS.find((v) => v.key === sp.view)?.key ?? "mine") : "all";
 
+  if (view === "places") {
+    return (
+      <div className="space-y-4">
+        <DailyTabs view={view} />
+        <DailyPlaces dept={typeof sp.dept === "string" ? sp.dept : undefined} />
+      </div>
+    );
+  }
   if (view === "mine") {
     return (
       <div className="space-y-4">

@@ -28,6 +28,12 @@ export function ReportTable({ report, canApprove }: { report: TeamReport; canApp
   const [busy, start] = useTransition();
   const [msg, setMsg] = useState("");
   const t = report.totals;
+  // 부서 관리감독자 전원 : 사람(구역)별 제출 상태 — 미제출 · 반려 먼저
+  const ORDER: Record<string, number> = { draft: 0, rejected: 1, submitted: 2, in_review: 3, approved: 4 };
+  const people = report.rows
+    .flatMap((r) => (r.members.length ? r.members : ["담당자 없음"]).map((name) => ({ name, area: r.areaName, st: statusOf(r) })))
+    .sort((p, q) => ORDER[p.st] - ORDER[q.st] || p.name.localeCompare(q.name, "ko"));
+  const doneN = people.filter((p) => p.st !== "draft" && p.st !== "rejected").length;
 
   const approve = () => {
     const ids = [...picked].filter((id) => pending.some((r) => r.logId === id));
@@ -53,6 +59,23 @@ export function ReportTable({ report, canApprove }: { report: TeamReport; canApp
 
   return (
     <div className="space-y-3">
+      <div className="rounded-md border border-gray-200 bg-white p-3">
+        <p className="mb-2 text-sm">
+          부서 관리감독자 제출 현황 <b>{doneN}</b> / {people.length}명
+          {people.length - doneN > 0 && <span className="ml-1 font-semibold text-red-600">· 미제출 {people.length - doneN}명</span>}
+        </p>
+        <ul className="flex flex-wrap gap-1.5">
+          {people.map((p, i) => {
+            const [label, cls] = STATUS[p.st];
+            const bad = p.st === "draft" || p.st === "rejected";
+            return (
+              <li key={i} className={`rounded-full border px-2.5 py-1 text-xs ${bad ? "border-red-300 bg-red-50" : "border-gray-200 bg-gray-50"}`} title={p.area}>
+                <b className="font-medium text-gray-900">{p.name}</b> <span className={cls}>{label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
       {canApprove && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-brand-200 bg-brand-50/50 px-3 py-2">
           <span className="text-sm">
