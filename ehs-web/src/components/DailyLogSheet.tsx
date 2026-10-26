@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import type { ReactNode } from "react";
 import { findingStatusLabel, type DailyLogData } from "@/lib/daily-log";
 import { RESULT_HINT, ymLabel } from "@/lib/daily";
 import { fmtDate } from "@/lib/format";
@@ -9,12 +10,13 @@ const DAY_BG = { missed: "bg-red-100", backfill: "bg-violet-100", substitute: "b
 const DAY_LABEL = { missed: "미점검", backfill: "소급", substitute: "대체" } as const;
 
 // 안전보건 관리감독자 일일업무일지 (원본 양식 배치 : 1. 주요 점검 활동 1~31일 · 2. 점검 결과 기록 · 3. 세부 개선 진행사항)
-export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label: string; name: string; date: string }[] }) {
+// approvalSlot : 상신 전 일지 화면에서 오른쪽 위 결재란 자리에 [상신] + 눌러서 결재라인 지정하는 결재란을 넣음
+export function DailyLogSheet({ d, stamps, approvalSlot }: { d: DailyLogData; stamps: { label: string; name: string; date: string }[]; approvalSlot?: ReactNode }) {
   const dayCols = Array.from({ length: 31 }, (_, i) => i + 1);
   return (
     <div className="space-y-4 text-[11px] text-gray-900">
       <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-full md:basis-0">
           <h2 className="text-base font-bold break-keep">{d.form.name}</h2>
           <table className="mt-2 w-full max-w-xl border-collapse">
             <tbody>
@@ -33,28 +35,32 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
             </tbody>
           </table>
         </div>
-        <table className="border-collapse text-center">
-          <tbody>
-            <tr>
-              <th rowSpan={2} className={`${B} w-6 bg-gray-100 px-1 [writing-mode:vertical-rl]`}>
-                결 재
-              </th>
-              {stamps.map((s) => (
-                <th key={s.label} className={`${B} w-20 bg-gray-100 px-1 py-0.5`}>
-                  {s.label}
-                </th>
-              ))}
-            </tr>
-            <tr>
-              {stamps.map((s) => (
-                <td key={s.label} className={`${B} h-12 px-1 align-middle`}>
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-[9px] text-gray-500">{s.date}</div>
-                </td>
-              ))}
-            </tr>
-          </tbody>
-        </table>
+        <div className="ml-auto max-w-full">
+          {approvalSlot ?? (
+            <table className="border-collapse text-center">
+              <tbody>
+                <tr>
+                  <th rowSpan={2} className={`${B} w-6 bg-gray-100 px-1 [writing-mode:vertical-rl]`}>
+                    결 재
+                  </th>
+                  {stamps.map((s) => (
+                    <th key={s.label} className={`${B} w-20 bg-gray-100 px-1 py-0.5`}>
+                      {s.label}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  {stamps.map((s) => (
+                    <td key={s.label} className={`${B} h-12 px-1 align-middle`}>
+                      <div className="font-medium">{s.name}</div>
+                      <div className="text-[9px] text-gray-500">{s.date}</div>
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       <section>
@@ -70,7 +76,11 @@ export function DailyLogSheet({ d, stamps }: { d: DailyLogData; stamps: { label:
                 <th className={`${B} px-1`}>세부 항목</th>
                 <th className={`${B} w-9 px-1`}>주기</th>
                 {dayCols.map((n) => (
-                  <th key={n} className={`${B} w-[18px] px-0 ${n > d.days ? "bg-gray-300" : d.dayKind[n] ? DAY_BG[d.dayKind[n]] : ""}`} title={d.dayKind[n] ? DAY_LABEL[d.dayKind[n]] : undefined}>
+                  <th
+                    key={n}
+                    className={`${B} w-[18px] px-0 ${n > d.days ? "bg-gray-300" : d.dayKind[n] ? DAY_BG[d.dayKind[n]] : ""}`}
+                    title={d.dayKind[n] ? DAY_LABEL[d.dayKind[n]] : undefined}
+                  >
                     {n}
                     {d.dayKind[n] && <div className="text-[7px] leading-none font-normal">{DAY_LABEL[d.dayKind[n]]}</div>}
                   </th>

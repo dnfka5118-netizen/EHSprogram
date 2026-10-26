@@ -6,7 +6,6 @@ import { getDailyLogFor, logStamps } from "@/lib/daily-log";
 import { ymLabel } from "@/lib/daily";
 import { todayKst } from "@/lib/format";
 import { Card } from "@/components/ui";
-import { ScrollX } from "@/components/ScrollX";
 import { DailyLogSheet } from "@/components/DailyLogSheet";
 import { OpenLogButton } from "./logs/OpenLogButton";
 
@@ -21,13 +20,33 @@ export async function DailyMine({ ym: ymParam }: { ym?: string }) {
   const ym = ymParam && /^\d{4}-\d{2}$/.test(ymParam) && ymParam <= thisMonth ? ymParam : thisMonth;
   const me = await getProfile();
   const supabase = await createClient();
-  const { data: mem } = await supabase.from("daily_area_members").select("area_id, daily_areas!inner(id, name, form_code, is_active, sort_order)").eq("user_id", me?.id ?? "");
-  const areas = ((mem ?? []) as unknown as { daily_areas: { id: string; name: string; form_code: string; is_active: boolean; sort_order: number } }[])
+  const { data: mem } = await supabase
+    .from("daily_area_members")
+    .select("area_id, daily_areas!inner(id, name, form_code, is_active, sort_order)")
+    .eq("user_id", me?.id ?? "");
+  const areas = (
+    (mem ?? []) as unknown as {
+      daily_areas: {
+        id: string;
+        name: string;
+        form_code: string;
+        is_active: boolean;
+        sort_order: number;
+      };
+    }[]
+  )
     .map((m) => m.daily_areas)
     .filter((a) => a.is_active)
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "ko"));
   const { data: logs } = areas.length
-    ? await supabase.from("daily_logs").select("id, area_id").eq("ym", `${ym}-01`).in("area_id", areas.map((a) => a.id))
+    ? await supabase
+        .from("daily_logs")
+        .select("id, area_id")
+        .eq("ym", `${ym}-01`)
+        .in(
+          "area_id",
+          areas.map((a) => a.id),
+        )
     : { data: [] };
   const sheets = await Promise.all(
     areas.map(async (a) => {
@@ -86,12 +105,8 @@ export async function DailyMine({ ym: ymParam }: { ym?: string }) {
         >
           {d ? (
             <>
-              <p className="mb-2 text-xs text-gray-500 lg:hidden">원본 양식 크기 그대로입니다. 옆으로 밀어서 보세요.</p>
-              <ScrollX>
-                <div className="min-w-[1000px]">
-                  <DailyLogSheet d={d} stamps={logStamps(approval)} />
-                </div>
-              </ScrollX>
+              <p className="mb-2 text-xs text-gray-500 lg:hidden">표가 넓으면 표만 옆으로 밀어서 보세요.</p>
+              <DailyLogSheet d={d} stamps={logStamps(approval)} />
             </>
           ) : (
             <p className="text-sm text-gray-500">일지를 불러오지 못했습니다.</p>

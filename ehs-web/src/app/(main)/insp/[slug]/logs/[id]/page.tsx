@@ -9,7 +9,6 @@ import { getDailyLog, logStamps } from "@/lib/daily-log";
 import { ymLabel } from "@/lib/daily";
 import { Card } from "@/components/ui";
 import { fmtDate, todayKst } from "@/lib/format";
-import { ScrollX } from "@/components/ScrollX";
 import { ApprovalStatus } from "@/components/approval/ApprovalStatus";
 import { DailyLogSheet } from "@/components/DailyLogSheet";
 import { SubmitLog } from "./SubmitLog";
@@ -50,12 +49,27 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
       </div>
 
       <Card>
-        <p className="mb-2 text-xs text-gray-500 lg:hidden">원본 양식 크기 그대로입니다. 옆으로 밀어서 보세요.</p>
-        <ScrollX>
-          <div className="min-w-[1000px]">
-            <DailyLogSheet d={d} stamps={logStamps(approval)} />
-          </div>
-        </ScrollX>
+        <p className="mb-2 text-xs text-gray-500 lg:hidden">표가 넓으면 표만 옆으로 밀어서 보세요.</p>
+        <DailyLogSheet
+          d={d}
+          stamps={logStamps(approval)}
+          approvalSlot={
+            canSubmit ? (
+              <SubmitLog
+                id={id}
+                initialLine={resolveLine(template, {
+                  drafterId: me.id,
+                  docDepartmentId: d.area.department_id,
+                  depts,
+                })}
+                people={people}
+                meId={me.id}
+                missed={missed.map((m) => Number(m.date.slice(8)))}
+                again={approval?.status === "rejected"}
+              />
+            ) : undefined
+          }
+        />
       </Card>
 
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
@@ -71,7 +85,11 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
           {missed.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {missed.map((m) => (
-                <Link key={m.date} href={`/insp/daily/logs/${id}/backfill?day=${m.date}`} className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-800 hover:bg-red-100">
+                <Link
+                  key={m.date}
+                  href={`/insp/daily/logs/${id}/backfill?day=${m.date}`}
+                  className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-800 hover:bg-red-100"
+                >
                   {fmtDate(m.date)} 소급 입력
                 </Link>
               ))}
@@ -84,16 +102,6 @@ export default async function DailyLogPage({ params }: PageProps<"/insp/[slug]/l
             <input type="date" name="day" required min={d.ym} max={maxBackfill} className="rounded-md border border-gray-300 px-2 py-1.5" />
             <button className="rounded-md border border-gray-300 bg-white px-3 py-1.5 hover:bg-gray-50">소급 입력</button>
           </form>
-        </Card>
-      )}
-      {canSubmit && (
-        <Card title={approval?.status === "rejected" ? "다시 상신" : "상신"}>
-          {missed.length > 0 && (
-            <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm break-keep text-red-800">
-              미점검일이 {missed.length}일 있습니다 ({missed.map((m) => Number(m.date.slice(8))).join(", ")}일). 소급 입력 없이 상신하면 일지에 &apos;미점검&apos; 으로 남습니다.
-            </p>
-          )}
-          <SubmitLog id={id} initialLine={resolveLine(template, { drafterId: me.id, docDepartmentId: d.area.department_id, depts })} people={people} meId={me.id} />
         </Card>
       )}
     </div>

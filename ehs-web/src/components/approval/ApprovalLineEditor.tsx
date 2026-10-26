@@ -11,7 +11,7 @@ import type { Person } from "@/lib/approval";
 //   저장 형식은 기존과 같음 (LineStep[]). 결재 = 담당/검토/승인, 합의 = 협조, 수신참조 = 참조, 시행 = 시행
 
 type Kind = "결재" | "합의" | "참조" | "시행";
-const kindOf = (s: LineStep): Kind => (s.step_kind === "협조" ? "합의" : s.step_kind === "참조" ? "참조" : s.step_kind === "시행" ? "시행" : "결재");
+export const kindOf = (s: LineStep): Kind => (s.step_kind === "협조" ? "합의" : s.step_kind === "참조" ? "참조" : s.step_kind === "시행" ? "시행" : "결재");
 const stepKindFor = (k: Kind): StepKind => (k === "합의" ? "협조" : k === "참조" ? "참조" : k === "시행" ? "시행" : "검토");
 
 type Dept = { id: string; name: string; division: string | null; parent_id: string | null; site_id: string; sort_order: number };
@@ -105,7 +105,7 @@ export function ApprovalLineEditor({ value, onChange, people, meId }: { value: L
 }
 
 // ---------------------------------------------------------------- 결재라인 지정 창
-function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[]; people: Person[]; meId?: string; onClose: () => void; onSave: (v: LineStep[]) => void }) {
+export function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[]; people: Person[]; meId?: string; onClose: () => void; onSave: (v: LineStep[]) => void }) {
   const [items, setItems] = useState<LineStep[]>(value);
   const [tab, setTab] = useState<"결재" | "참조" | "시행">("결재");
   const [org, setOrg] = useState<{ sites: Site[]; depts: Dept[] } | null>(null);
