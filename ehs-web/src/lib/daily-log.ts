@@ -31,7 +31,18 @@ export type DailyLogData = {
   findings: LogFinding[]; // 3. 세부 개선 진행사항 (이번 달)
   dayKind: Record<number, "missed" | "backfill" | "substitute">; // 미점검 · 소급 · 대체 (1~31일)
   dayNotes: { date: string; kind: "missed" | "backfill" | "substitute"; who: string; note: string }[]; // 점검 실시 기록
-  counts: { found: number; foundYear: number; closed: number; closedYear: number };
+  counts: { found: number; foundYear: number; closed: number; closedYear: number; overdueYear: number }; // overdueYear : 올해 발굴 중 목표일 지난 미완료
+  review: LogReview | null; // 부서장 제출·승인 (0029) — 일지를 아직 열지 않았으면 null
+};
+
+export type LogReview = {
+  status: "draft" | "submitted" | "approved" | "rejected";
+  submitted_at: string | null;
+  submitted_by: string | null;
+  submitter: string | null;
+  approved_at: string | null;
+  approver: string | null;
+  reject_reason: string | null;
 };
 
 const STATUS: Record<string, string> = { assign_wait: "담당자 지정 대기", plan_wait: "계획 수립 대기", in_progress: "조치 중", approval_wait: "승인 대기", closed: "종결" };
@@ -41,13 +52,28 @@ export const findingStatusLabel = (s: string) => STATUS[s] ?? s;
 type AreaRow = DailyArea & { departments: { name: string } | null; sites: { name: string } | null };
 
 export async function getDailyLog(supabase: SupabaseClient, id: string): Promise<DailyLogData | null> {
-  const { data: log } = await supabase.from("daily_logs").select("*, daily_areas(*, departments(name), sites(name))").eq("id", id).maybeSingle();
+  const { data: log } = await supabase
+    .from("daily_logs")
+    .select("*, daily_areas(*, departments(name), sites(name)), sub:profiles!daily_logs_submitted_by_fkey(name), apv:profiles!daily_logs_approved_by_fkey(name)")
+    .eq("id", id)
+    .maybeSingle();
   if (!log) return null;
-  return buildDailyLog(supabase, log.daily_areas as AreaRow, log.ym as string, id);
+  const review: LogReview = {
+    status: log.status,
+    submitted_at: log.submitted_at,
+    submitted_by: log.submitted_by,
+    submitter: (log.sub as { name: string } | null)?.name ?? null,
+    approved_at: log.approved_at,
+    approver: (log.apv as { name: string } | null)?.name ?? null,
+    reject_reason: log.reject_reason,
+  };
+  return { ...(await buildDailyLog(supabase, log.daily_areas as AreaRow, log.ym as string, id)), review };
 }
 
-// 일지를 아직 열지 않은 달도 같은 모양으로 (나의 점검 현황 · id 는 빈 값)
+// 구역 · 달로 일지 (열려 있으면 그 일지, 아직 열지 않은 달은 같은 모양으로 · id 는 빈 값)
 export async function getDailyLogFor(supabase: SupabaseClient, areaId: string, ym: string): Promise<DailyLogData | null> {
+  const { data: log } = await supabase.from("daily_logs").select("id").eq("area_id", areaId).eq("ym", ym).maybeSingle();
+  if (log) return getDailyLog(supabase, log.id as string);
   const { data: a } = await supabase.from("daily_areas").select("*, departments(name), sites(name)").eq("id", areaId).maybeSingle();
   return a ? buildDailyLog(supabase, a as AreaRow, ym, "") : null;
 }
@@ -189,8 +215,21 @@ async function buildDailyLog(supabase: SupabaseClient, a: AreaRow, ym: string, i
       foundYear: yearIds.length,
       closed: rows.filter((f) => f.status === "closed" && inMonth(closedKst(f.closed_at))).length,
       closedYear: rows.filter((f) => f.status === "closed").length,
+      overdueYear: rows.filter((f) => f.status !== "closed" && f.finding_measures.some((m) => !m.is_done && m.target_date < today)).length,
     },
+    review: null,
   };
+}
+
+// 결재 칸 : 부서장 제출·승인 방식 (0029) — 예전 전자결재로 상신된 일지는 그 결재 칸
+export function reviewStamps(d: DailyLogData, approval: Approval | null) {
+  if (approval && approval.status !== "withdrawn") return logStamps(approval);
+  const r = d.review;
+  const day = (t: string | null) => (t ? fmtDateTime(t).slice(0, 10) : "");
+  return [
+    { label: "작성", name: r?.submitted_at ? (r.submitter ?? "") : "", date: day(r?.submitted_at ?? null) },
+    { label: "승인(부서장)", name: r?.status === "approved" ? (r.approver ?? "") : "", date: r?.status === "approved" ? day(r.approved_at) : "" },
+  ];
 }
 
 // 결재 칸 : 작성 · 검토 · 승인 (결재된 사람 이름 · 날짜)

@@ -1,87 +1,96 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { LineDialog, finalizeLine, kindOf } from "@/components/approval/ApprovalLineEditor";
 import { Button } from "@/components/ui";
-import type { LineStep } from "@/lib/approval-line";
-import type { Person } from "@/lib/approval";
-import { submitDailyLog } from "../../../daily-actions";
+import type { LogReview } from "@/lib/daily-log";
+import { cancelLogSubmit, submitLogToHead } from "../../../daily-actions";
 
 const B = "border border-gray-400";
+const day = (t: string | null) => (t ? new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date(t)) : "");
 
-// 월간 일지 상신 : 일지 오른쪽 위 결재란 자리 — [상신] 버튼 바로 아래 결재란, 결재란을 누르면 결재라인 지정
-//   (양식별 기본 결재선(환경설정)에서 시작해 바꿔서 상신)
-export function SubmitLog({ id, initialLine, people, meId, missed, again }: {
+// 월간 일지 오른쪽 위 결재란 : 작성(제출한 관리감독자) · 승인(부서장) — 위에 [부서장에게 제출] / 제출 취소
+//   부서장은 부서 레포트에서 부서 일지를 한 번에 승인 (0029)
+export function SubmitLog({ id, review, heads, canSubmit, canCancel, missed, deadline, reportHref }: {
   id: string;
-  initialLine: LineStep[];
-  people: Person[];
-  meId: string;
-  missed: number[]; // 미점검일 (상신 전 확인)
-  again?: boolean; // 반려 후 다시 상신
+  review: LogReview | null;
+  heads: string[];
+  canSubmit: boolean; // 구역 담당 관리감독자 · 관리자
+  canCancel: boolean; // 제출한 사람 · 관리자
+  missed: number[];
+  deadline: string;
+  reportHref: string;
 }) {
   const router = useRouter();
-  const [line, setLine] = useState<LineStep[]>(initialLine);
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const who = (pid: string | null) => people.find((p) => p.id === pid);
-  const boxes = line.filter((s) => kindOf(s) === "결재" || kindOf(s) === "합의");
-  const others = line.filter((s) => kindOf(s) === "참조" || kindOf(s) === "시행");
-  const missing = boxes.filter((s) => s.required && !s.approver_id);
-
-  const submit = () => {
-    setError(null);
-    const fin = finalizeLine(line, meId);
-    if (fin.error) return setError(fin.error);
-    const warn = missed.length ? `\n\n미점검일 ${missed.length}일(${missed.join(", ")}일)은 일지에 '미점검'으로 남습니다.` : "";
-    if (!confirm(`이 달 일지를 상신할까요?${warn}`)) return;
+  const status = review?.status ?? "draft";
+  const run = (fn: () => Promise<{ ok: true } | { error: string }>, ask: string) => {
+    if (!confirm(ask)) return;
     start(async () => {
-      const r = await submitDailyLog(id, fin.steps!);
-      if ("error" in r) return setError(r.error);
+      const r = await fn();
+      if ("error" in r) return alert(r.error);
       router.refresh();
     });
   };
+  const warn = missed.length ? `\n\n미점검일 ${missed.length}일(${missed.join(", ")}일)은 일지에 '미점검'으로 남습니다.` : "";
 
   return (
     <div className="flex max-w-full flex-col items-end gap-1.5">
-      <Button className="px-5 py-1.5" disabled={pending} onClick={submit}>
-        {pending ? "상신 중…" : again ? "다시 상신" : "상신"}
-      </Button>
-      <button type="button" onClick={() => setOpen(true)} title="눌러서 결재라인 지정" className="max-w-full overflow-x-auto rounded-sm text-left ring-brand-400 hover:ring-2">
-        <table className="border-collapse text-center">
-          <tbody>
-            <tr>
-              <th rowSpan={2} className={`${B} w-6 bg-gray-100 px-1 [writing-mode:vertical-rl]`}>
-                결 재
-              </th>
-              {boxes.map((s, i) => (
-                <th key={i} className={`${B} w-20 bg-gray-100 px-1 py-0.5 font-medium break-keep`}>
-                  {kindOf(s) === "합의" ? `합의(${s.label})` : s.label}
-                </th>
-              ))}
-            </tr>
-            <tr>
-              {boxes.map((s, i) => {
-                const p = who(s.approver_id);
-                return (
-                  <td key={i} className={`${B} h-12 px-1 align-middle`}>
-                    <span className={`font-medium ${p ? "" : "text-red-600"}`}>{p?.name ?? "미지정"}</span>
-                  </td>
-                );
-              })}
-            </tr>
-          </tbody>
-        </table>
-      </button>
-      <p className="text-[10px] text-gray-500">
-        결재란을 누르면 결재라인을 바꿀 수 있습니다
-        {others.length > 0 && ` · 참조·시행 ${others.length}명`}
-      </p>
-      {missing.length > 0 && <p className="text-[11px] text-red-600">결재자를 지정해 주세요 : {missing.map((s) => s.label).join(", ")}</p>}
-      {missed.length > 0 && <p className="text-[11px] break-keep text-red-700">미점검일 {missed.length}일 — 상신 전에 아래 소급 입력을 확인하세요</p>}
-      {error && <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p>}
-      {open && <LineDialog value={line} people={people} meId={meId} onClose={() => setOpen(false)} onSave={(v) => (setLine(v), setOpen(false))} />}
+      {(status === "draft" || status === "rejected") && canSubmit && (
+        <Button className="px-4 py-1.5" disabled={pending} onClick={() => run(() => submitLogToHead(id), `부서장(${heads.join(", ") || "미지정"})에게 이 달 일지를 제출할까요?${warn}`)}>
+          {pending ? "제출 중…" : status === "rejected" ? "고쳐서 다시 제출" : "부서장에게 제출"}
+        </Button>
+      )}
+      {status === "submitted" && (
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">부서장 승인 대기</span>
+          {canCancel && (
+            <Button variant="secondary" className="px-3 py-1 text-xs" disabled={pending} onClick={() => run(() => cancelLogSubmit(id), "제출을 취소할까요? (소급 입력 등 고친 뒤 다시 제출)")}>
+              제출 취소
+            </Button>
+          )}
+        </div>
+      )}
+      {status === "approved" && <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800">부서장 승인 완료</span>}
+      <table className="border-collapse text-center">
+        <tbody>
+          <tr>
+            <th rowSpan={2} className={`${B} w-6 bg-gray-100 px-1 [writing-mode:vertical-rl]`}>
+              결 재
+            </th>
+            <th className={`${B} w-24 bg-gray-100 px-1 py-0.5`}>작성</th>
+            <th className={`${B} w-24 bg-gray-100 px-1 py-0.5`}>승인(부서장)</th>
+          </tr>
+          <tr>
+            <td className={`${B} h-12 px-1 align-middle`}>
+              <div className="font-medium">{status !== "draft" ? review?.submitter : ""}</div>
+              <div className="text-[9px] text-gray-500">{status !== "draft" ? day(review?.submitted_at ?? null) : ""}</div>
+            </td>
+            <td className={`${B} h-12 px-1 align-middle`}>
+              {status === "approved" ? (
+                <>
+                  <div className="font-medium">{review?.approver}</div>
+                  <div className="text-[9px] text-gray-500">{day(review?.approved_at ?? null)}</div>
+                </>
+              ) : (
+                <div className={heads.length ? "text-gray-400" : "text-red-600"}>{heads.join(", ") || "부서장 미지정"}</div>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      {status === "rejected" && review?.reject_reason && (
+        <p className="max-w-64 rounded bg-red-50 px-2 py-1 text-[11px] break-keep text-red-700">반려 : {review.reject_reason}</p>
+      )}
+      {(status === "draft" || status === "rejected") && (
+        <p className="text-[10px] text-gray-500">제출 마감 {deadline.replaceAll("-", ".")}(금) · 다음 달 첫째 주 금요일</p>
+      )}
+      {(status === "draft" || status === "rejected") && missed.length > 0 && (
+        <p className="text-[11px] break-keep text-red-700">미점검일 {missed.length}일 — 제출 전에 아래 소급 입력을 확인하세요</p>
+      )}
+      <a href={reportHref} className="text-[11px] text-brand-700 hover:underline">
+        부서 레포트 보기 →
+      </a>
     </div>
   );
 }

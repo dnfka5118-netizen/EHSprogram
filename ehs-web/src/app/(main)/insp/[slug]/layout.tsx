@@ -20,6 +20,11 @@ export default async function InternalInspectionLayout({ params, children }: Lay
               월별 보고서
             </Link>
             {mod.code === "insp_daily" && (
+              <Link href="/insp/daily/reports" className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm hover:bg-gray-50">
+                부서 레포트
+              </Link>
+            )}
+            {mod.code === "insp_daily" && (
               <Link href="/insp/daily/logs" className="rounded-md bg-brand-800 px-3 py-2 text-sm font-medium text-white hover:bg-brand-900">
                 월간 일지
               </Link>

@@ -1,6 +1,8 @@
 import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { Card } from "@/components/ui";
+import { ymLabel } from "@/lib/daily";
 import { PageHeader } from "@/components/PageHeader";
 import { FindingTable } from "@/components/FindingTable";
 import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
@@ -11,14 +13,29 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: myDepts }, { data: myAssigned }] = await Promise.all([
+  const [{ data: myDepts }, { data: myAssigned }, { data: headOf }, { data: submittedLogs }] = await Promise.all([
     supabase.from("department_roles").select("department_id, role").eq("user_id", profile.id),
     supabase.from("finding_assignees").select("finding_id").eq("user_id", profile.id),
+    supabase.from("departments").select("id").eq("approver_id", profile.id),
+    // 관리감독자 월간 일지 : 부서장 승인 대기 (0029)
+    supabase.from("daily_logs").select("id, ym, daily_areas!inner(department_id, departments(id, name, parent_id))").eq("status", "submitted"),
   ]);
 
   const assignDeptIds = [...new Set((myDepts ?? []).map((d) => d.department_id as string))]; // 지정자·승인자 모두 담당자 지정 가능
   const approveDeptIds = (myDepts ?? []).filter((d) => d.role === "approver").map((d) => d.department_id as string);
   const assignedIds = (myAssigned ?? []).map((a) => a.finding_id);
+  const headTeams = new Set([...approveDeptIds, ...(headOf ?? []).map((d) => d.id as string)]);
+  type SubLog = { id: string; ym: string; daily_areas: { departments: { id: string; name: string; parent_id: string | null } | null } };
+  const logGroups = new Map<string, { team: string; ym: string; n: number }>();
+  for (const l of (submittedLogs ?? []) as unknown as SubLog[]) {
+    const d = l.daily_areas.departments;
+    const team = d ? (d.parent_id ?? d.id) : null;
+    if (!team || !headTeams.has(team)) continue;
+    const k = `${team}|${l.ym}`;
+    const g = logGroups.get(k) ?? { team, ym: l.ym, n: 0 };
+    g.n++;
+    logGroups.set(k, g);
+  }
 
   const q = () => supabase.from("finding_overview").select(FINDING_ROW_SELECT).order("created_at", { ascending: false });
   const none = Promise.resolve({ data: [] as FindingOverview[] });
@@ -58,6 +75,19 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           </div>
         ))}
       </div>
+      {logGroups.size > 0 && (
+        <Card title={<>관리감독자 일지 승인 필요 <span className="ml-1 text-sm font-normal text-gray-500">부서원이 제출한 월간 일지 — 부서 레포트에서 한 번에 승인</span></>}>
+          <ul className="space-y-1.5">
+            {[...logGroups.values()].map((g) => (
+              <li key={g.team + g.ym}>
+                <Link href={`/insp/daily/reports/${g.team}?ym=${g.ym.slice(0, 7)}`} className="text-sm text-brand-800 hover:underline">
+                  {ymLabel(g.ym)} 부서 레포트 — 승인 대기 <b>{g.n}</b>건 →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {sections.map((s) =>
         s.items.length ? (
           <Card key={s.title} title={<>{s.title} <span className="ml-1 text-sm font-normal text-gray-500">{s.desc}</span></>}>
@@ -65,7 +95,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           </Card>
         ) : null,
       )}
-      {sections.every((s) => s.items.length === 0) && (
+      {sections.every((s) => s.items.length === 0) && logGroups.size === 0 && (
         <Card>
           <p className="py-8 text-center text-sm text-gray-500">처리할 일이 없습니다.</p>
         </Card>

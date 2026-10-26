@@ -35,12 +35,28 @@ export async function openDailyLog(areaId: string, ym: string): Promise<{ id: st
   return { id: data as string };
 }
 
-// 월간 일지 상신 (공통 전자결재)
-export async function submitDailyLog(id: string, steps: { step_kind: string; label: string; approver_id: string }[]): Promise<{ ok: true } | { error: string }> {
+// 월간 일지 → 부서장 제출 · 제출 취소 · 일괄 승인 · 반려 (0029)
+async function runLog(fn: string, args: Record<string, unknown>): Promise<{ ok: true; n?: number } | { error: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.rpc("submit_daily_log", { p_id: id, p_steps: steps });
+  const { data, error } = await supabase.rpc(fn, args);
   if (error) return { error: toMessage(error) };
   after(() => processOutbox());
   revalidatePath("/", "layout");
-  return { ok: true };
+  return { ok: true, n: typeof data === "number" ? data : undefined };
+}
+
+export async function submitLogToHead(id: string) {
+  return runLog("submit_daily_log_to_head", { p_log: id });
+}
+
+export async function cancelLogSubmit(id: string) {
+  return runLog("cancel_daily_log_submit", { p_log: id });
+}
+
+export async function approveLogs(ids: string[]) {
+  return runLog("approve_daily_logs", { p_logs: ids });
+}
+
+export async function rejectLog(id: string, reason: string) {
+  return runLog("reject_daily_log", { p_log: id, p_reason: reason });
 }

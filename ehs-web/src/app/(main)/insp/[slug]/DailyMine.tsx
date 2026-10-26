@@ -2,7 +2,9 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { getApproval, APPROVAL_STATUS_LABEL } from "@/lib/approval";
-import { getDailyLogFor, logStamps } from "@/lib/daily-log";
+import { getDailyLogFor, reviewStamps } from "@/lib/daily-log";
+
+const REVIEW_LABEL = { draft: "작성 중", submitted: "부서장 승인 대기", approved: "승인 완료", rejected: "반려 — 다시 제출" } as const;
 import { ymLabel } from "@/lib/daily";
 import { todayKst } from "@/lib/format";
 import { Card } from "@/components/ui";
@@ -92,10 +94,10 @@ export async function DailyMine({ ym: ymParam }: { ym?: string }) {
           }
           actions={
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{approval ? APPROVAL_STATUS_LABEL[approval.status] : logId ? "작성 중" : "일지 미작성"}</span>
+              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs">{approval && approval.status !== "withdrawn" ? APPROVAL_STATUS_LABEL[approval.status] : d?.review ? REVIEW_LABEL[d.review.status] : "일지 미작성"}</span>
               {logId ? (
                 <Link href={`/insp/daily/logs/${logId}`} className="rounded-md bg-brand-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-900">
-                  일지 열기 · 상신
+                  일지 열기 · 제출
                 </Link>
               ) : (
                 <OpenLogButton areaId={a.id} ym={`${ym}-01`} />
@@ -106,7 +108,7 @@ export async function DailyMine({ ym: ymParam }: { ym?: string }) {
           {d ? (
             <>
               <p className="mb-2 text-xs text-gray-500 lg:hidden">표가 넓으면 표만 옆으로 밀어서 보세요.</p>
-              <DailyLogSheet d={d} stamps={logStamps(approval)} />
+              <DailyLogSheet d={d} stamps={reviewStamps(d, approval)} />
             </>
           ) : (
             <p className="text-sm text-gray-500">일지를 불러오지 못했습니다.</p>

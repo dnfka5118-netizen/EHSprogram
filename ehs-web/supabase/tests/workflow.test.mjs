@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -839,6 +839,49 @@ await as(U.A);
 ok(JSON.stringify((await one("select delete_suggestion($1) p", [sgId])).p) === JSON.stringify([`suggestions/${sgId}/a.jpg`]), "관리자 삭제 → 지울 사진 경로");
 await as(null);
 ok((await db.query("select * from list_suggestions(null, false)")).rows.length === 0, "로그인 안 한 상태는 목록 조회 불가");
+
+console.log("\n[관리감독자 일지 → 부서장 일괄 승인]");
+ok((await one("select daily_log_deadline('2026-10-01') d")).d.toISOString().slice(0, 10) === "2026-11-06", "마감 = 다음 달 첫째 주 금요일 (10월 → 11/6)");
+ok((await one("select daily_log_deadline('2026-04-01') d")).d.toISOString().slice(0, 10) === "2026-05-01", "다음 달 1일이 금요일이면 그날");
+await as(U.W1);
+const prevLog = (await one("select open_daily_log($1, (date_trunc('month', kst_today()) - interval '1 month')::date) id", [area.id])).id;
+const curLog = (await one("select open_daily_log($1, kst_today()) id", [area.id])).id;
+await expectError("이전 방식(전자결재)으로 상신된 일지는 새 제출 불가", "select submit_daily_log_to_head($1)", [curLog], "이전 방식");
+await as(U.Q); await expectError("담당 아닌 사람 제출 불가", "select submit_daily_log_to_head($1)", [prevLog], "담당 관리감독자만");
+await as(U.W1);
+await db.query("select submit_daily_log_to_head($1)", [prevLog]);
+ok((await one("select status from daily_logs where id=$1", [prevLog])).status === "submitted", "관리감독자 제출");
+ok((await one("select count(*)::int c from notifications where user_id=$1 and kind='daily_log' and subject like '%제출%'", [U.H])).c === 1, "제출 → 부서장 알림");
+await expectError("제출 후 소급 입력 막힘", "select _daily_backfill_check($1, (date_trunc('month', kst_today()) - interval '1 month')::date + 1)", [area.id], "상신(제출)");
+await expectError("이중 제출 차단", "select submit_daily_log_to_head($1)", [prevLog], "이미 제출");
+await as(null); await db.query("insert into department_roles (department_id, user_id, role, sort_order) values ($1,$2,'approver',99)", [PROD, U.W2]);
+ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "부서장은 그대로 생산팀장");
+await as(U.W2); await expectError("종결 승인자 역할만 있으면 일지 승인 불가 (부서장 1명만)", "select approve_daily_logs($1)", [[prevLog]], "부서장만");
+await as(null); await db.query("delete from department_roles where department_id=$1 and user_id=$2 and role='approver'", [PROD, U.W2]);
+await as(U.H);
+await expectError("반려 사유 필수", "select reject_daily_log($1, ' ')", [prevLog], "사유");
+await db.query("select reject_daily_log($1, '3일 미점검 사유 기재 필요')", [prevLog]);
+ok((await one("select status, reject_reason from daily_logs where id=$1", [prevLog])).reject_reason === "3일 미점검 사유 기재 필요", "부서장 반려 (사유)");
+ok((await one("select count(*)::int c from notifications where user_id=$1 and kind='daily_log' and subject like '%반려%'", [U.W1])).c === 1, "반려 → 제출자 알림");
+await as(U.W1);
+await db.query("select submit_daily_log_to_head($1)", [prevLog]);
+await db.query("select cancel_daily_log_submit($1)", [prevLog]);
+ok((await one("select status from daily_logs where id=$1", [prevLog])).status === "draft", "승인 전 제출 취소");
+await db.query("select submit_daily_log_to_head($1)", [prevLog]);
+await as(U.H);
+ok((await one("select approve_daily_logs($1) n", [[prevLog]])).n === 1, "부서장 일괄 승인");
+const apr = await one("select status, approved_by from daily_logs where id=$1", [prevLog]);
+ok(apr.status === "approved" && apr.approved_by === U.H, "승인 상태 · 승인자 기록");
+await expectError("승인된 일지 다시 승인 불가", "select approve_daily_logs($1)", [[prevLog]], "제출 상태가 아닙니다");
+await as(U.W1); await expectError("승인 후 제출 취소 불가", "select cancel_daily_log_submit($1)", [prevLog], "승인 대기");
+await as(null);
+const area3 = (await one("insert into daily_areas (site_id, name, form_code, department_id) values ($1,'알림 구역','C',$2) returning id", [site, PROD])).id;
+await db.query("insert into daily_area_members values ($1,$2)", [area3, U.W2]);
+const remDay = (await one("select daily_log_deadline(kst_today()) d")).d;
+const remN = (await one("select queue_daily_log_reminders($1) n", [remDay])).n;
+ok(remN >= 1 && (await one("select count(*)::int c from notifications where user_id=$1 and kind='reminder' and subject like '%일지 제출 마감%'", [U.W2])).c === 1, "마감일 미제출 관리감독자 알림");
+ok((await one("select queue_daily_log_reminders($1) n", [remDay])).n === 0, "같은 날 두 번 알리지 않음");
+ok((await one("select queue_daily_log_reminders(($1::date) - 1) n", [remDay])).n === 0, "마감 2일 전·당일이 아니면 알림 없음");
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
