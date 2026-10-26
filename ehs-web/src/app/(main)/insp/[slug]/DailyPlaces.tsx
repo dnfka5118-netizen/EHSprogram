@@ -3,81 +3,21 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/auth";
 import { Card } from "@/components/ui";
 import { fmtDateTime, todayKst } from "@/lib/format";
-
-type Area = {
-  id: string;
-  name: string;
-  form_code: string;
-  qr_token: string;
-  area_text: string | null;
-  created_at: string;
-  departments: { id: string; name: string; parent_id: string | null } | null;
-  daily_forms: { use_qr: boolean } | null;
-  daily_area_points: { daily_points: { name: string } | null }[];
-  daily_area_members: { profiles: { name: string } | null }[];
-};
-type Check = { area_id: string; check_date: string; submitted_at: string; profiles: { name: string } | null; sub: { name: string } | null };
+import { loadPlaceStatus } from "@/lib/daily-status";
 
 // 장소별 점검 현황 : 구역(장소)마다 오늘 실시 여부 · 이번 달 미점검 영업일 → 안 된 곳은 대신 점검 (C·D형 바로, A·B형은 현장 QR)
 export async function DailyPlaces({ dept: deptParam }: { dept?: string }) {
   const supabase = await createClient();
   const me = await getProfile();
   const today = todayKst();
-  const month = `${today.slice(0, 7)}-01`;
-  const [{ data: areas }, { data: checks }, { data: hol }, { data: myDept }, { data: allDepts }] = await Promise.all([
-    supabase
-      .from("daily_areas")
-      .select(
-        "id, name, form_code, qr_token, area_text, created_at, departments(id, name, parent_id), daily_forms(use_qr), daily_area_points(daily_points(name)), daily_area_members(profiles(name))",
-      )
-      .eq("is_active", true)
-      .order("sort_order")
-      .order("name"),
-    supabase
-      .from("daily_checks")
-      .select("area_id, check_date, submitted_at, profiles!daily_checks_user_id_fkey(name), sub:profiles!daily_checks_substitute_for_fkey(name)")
-      .gte("check_date", month),
-    supabase.from("holidays").select("day").gte("day", month).lte("day", today),
+  const [{ rows: all, teams }, { data: myDept }] = await Promise.all([
+    loadPlaceStatus(supabase, today),
     me?.department_id ? supabase.from("departments").select("id, parent_id").eq("id", me.department_id).maybeSingle() : Promise.resolve({ data: null }),
-    supabase.from("departments").select("id, name"),
   ]);
-  const deptName = new Map((allDepts ?? []).map((d) => [d.id as string, d.name as string]));
-  const list = (areas ?? []) as unknown as Area[];
-  const ck = (checks ?? []) as unknown as Check[];
-  const holidays = new Set((hol ?? []).map((h) => h.day as string));
-  const teamOf = (a: Area) => (a.departments ? (a.departments.parent_id ?? a.departments.id) : "");
-  const teamName = (a: Area) => (a.departments ? (deptName.get(teamOf(a)) ?? a.departments.name) : "-");
-  const teams = [...new Map(list.filter((a) => a.departments).map((a) => [teamOf(a), teamName(a)])).entries()].sort((p, q) => p[1].localeCompare(q[1], "ko"));
   const myTeam = myDept ? ((myDept.parent_id as string | null) ?? (myDept.id as string)) : "";
   const dept = deptParam === "all" ? "" : deptParam || (teams.some(([id]) => id === myTeam) ? myTeam : "");
-
-  // 이번 달 지난 영업일 (오늘 제외) 중 기록 없는 날
-  const bizDays = (since: string) => {
-    const out: string[] = [];
-    for (let d = new Date(`${month}T00:00:00Z`); d.toISOString().slice(0, 10) < today; d = new Date(d.getTime() + 86400000)) {
-      const s = d.toISOString().slice(0, 10);
-      const dow = d.getUTCDay();
-      if (s >= since && dow !== 0 && dow !== 6 && !holidays.has(s)) out.push(s);
-    }
-    return out;
-  };
-  const rows = list
-    .filter((a) => !dept || teamOf(a) === dept)
-    .map((a) => {
-      const mine = ck.filter((c) => c.area_id === a.id);
-      const days = new Set(mine.map((c) => c.check_date));
-      const since = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Seoul" }).format(new Date(a.created_at));
-      const missed = bizDays(since).filter((d) => !days.has(d));
-      return {
-        a,
-        team: teamName(a),
-        who: a.daily_area_members.map((m) => m.profiles?.name).filter(Boolean).join(", "),
-        where: a.area_text || a.daily_area_points.map((x) => x.daily_points?.name).filter(Boolean).join(", ") || a.name,
-        t: mine.find((c) => c.check_date === today),
-        done: days.size,
-        missed,
-      };
-    })
+  const rows = all
+    .filter((r) => !dept || r.teamId === dept)
     .sort((x, y) => Number(!!x.t) - Number(!!y.t) || y.missed.length - x.missed.length || x.team.localeCompare(y.team, "ko"));
   const notToday = rows.filter((r) => !r.t).length;
 

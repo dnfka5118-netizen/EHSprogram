@@ -14,6 +14,7 @@ import { todayKst } from "@/lib/format";
 import { MyDaily } from "./DailyStatus";
 import { DailyMine } from "./DailyMine";
 import { DailyPlaces } from "./DailyPlaces";
+import { DailyOverview } from "./DailyOverview";
 import { ChemStatus } from "./ChemStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
 
@@ -23,6 +24,7 @@ const DAILY_VIEWS = [
   { key: "places", label: "장소별 점검 현황" },
   { key: "my-findings", label: "나의 지적사항" },
   { key: "all", label: "사업장(부서별) 지적사항" },
+  { key: "overview", label: "전체 현황 (안전관리자)" }, // 관리자 · EHS팀만
 ] as const;
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
@@ -32,12 +34,21 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const sp = await searchParams;
   const filters = readFilters(sp);
   const isDaily = mod.code === "insp_daily";
-  const view = isDaily ? (DAILY_VIEWS.find((v) => v.key === sp.view)?.key ?? "mine") : "all";
+  const staff = isDaily ? !!(await (await createClient()).rpc("is_ehs_staff")).data : false;
+  const view = isDaily ? (DAILY_VIEWS.find((v) => v.key === sp.view && (v.key !== "overview" || staff))?.key ?? "mine") : "all";
 
+  if (view === "overview") {
+    return (
+      <div className="space-y-4">
+        <DailyTabs view={view} staff={staff} />
+        <DailyOverview />
+      </div>
+    );
+  }
   if (view === "places") {
     return (
       <div className="space-y-4">
-        <DailyTabs view={view} />
+        <DailyTabs view={view} staff={staff} />
         <DailyPlaces dept={typeof sp.dept === "string" ? sp.dept : undefined} />
       </div>
     );
@@ -45,7 +56,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   if (view === "mine") {
     return (
       <div className="space-y-4">
-        <DailyTabs view={view} />
+        <DailyTabs view={view} staff={staff} />
         <MyDaily />
         <DailyMine ym={typeof sp.ym === "string" ? sp.ym : undefined} />
       </div>
@@ -83,7 +94,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
 
   return (
     <div className="space-y-4">
-      {isDaily && <DailyTabs view={view} />}
+      {isDaily && <DailyTabs view={view} staff={staff} />}
       <Card
         title={`${title} (${rows.length}건)`}
         actions={
@@ -118,10 +129,10 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   );
 }
 
-function DailyTabs({ view }: { view: string }) {
+function DailyTabs({ view, staff }: { view: string; staff: boolean }) {
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
-      {DAILY_VIEWS.map((v) => (
+      {DAILY_VIEWS.filter((v) => v.key !== "overview" || staff).map((v) => (
         <Link
           key={v.key}
           href={`/insp/daily?view=${v.key}`}
