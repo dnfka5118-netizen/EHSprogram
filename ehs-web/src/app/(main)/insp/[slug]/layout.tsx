@@ -1,16 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canViewKpi, getInternalModules, getModuleBySlug } from "@/lib/access";
+import { getModuleBySlug } from "@/lib/access";
 import { PageHeader } from "@/components/PageHeader";
-import { TabLinks } from "@/components/TabLinks";
 
-// 내부점검 공통 머리 : 점검 › 내부점검 › {점검명} + 점검 종류 탭
+// 내부점검 공통 머리 : 점검 › {점검명} (점검 종류는 왼쪽 메뉴에 있으므로 탭은 두지 않음)
 export default async function InternalInspectionLayout({ params, children }: LayoutProps<"/insp/[slug]">) {
   const { slug } = await params;
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level === "none") notFound();
-  const tabs = (await getInternalModules()).map((m) => ({ href: `/insp/${m.slug}`, label: m.name }));
-  if (await canViewKpi()) tabs.push({ href: "/insp/kpi", label: "점검 지표" });
 
   return (
     <>
@@ -34,9 +31,7 @@ export default async function InternalInspectionLayout({ params, children }: Lay
             )}
           </>
         }
-      >
-        <TabLinks tabs={tabs} />
-      </PageHeader>
+      />
       {children}
     </>
   );

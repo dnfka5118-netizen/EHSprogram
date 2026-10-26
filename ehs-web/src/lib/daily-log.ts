@@ -38,11 +38,21 @@ const STATUS: Record<string, string> = { assign_wait: "담당자 지정 대기",
 export const findingStatusLabel = (s: string) => STATUS[s] ?? s;
 
 // 월간 일지 (안전보건 관리감독자 일일업무일지) 한 장에 들어갈 내용
+type AreaRow = DailyArea & { departments: { name: string } | null; sites: { name: string } | null };
+
 export async function getDailyLog(supabase: SupabaseClient, id: string): Promise<DailyLogData | null> {
   const { data: log } = await supabase.from("daily_logs").select("*, daily_areas(*, departments(name), sites(name))").eq("id", id).maybeSingle();
   if (!log) return null;
-  const a = log.daily_areas as DailyArea & { departments: { name: string } | null; sites: { name: string } | null };
-  const ym = log.ym as string;
+  return buildDailyLog(supabase, log.daily_areas as AreaRow, log.ym as string, id);
+}
+
+// 일지를 아직 열지 않은 달도 같은 모양으로 (나의 점검 현황 · id 는 빈 값)
+export async function getDailyLogFor(supabase: SupabaseClient, areaId: string, ym: string): Promise<DailyLogData | null> {
+  const { data: a } = await supabase.from("daily_areas").select("*, departments(name), sites(name)").eq("id", areaId).maybeSingle();
+  return a ? buildDailyLog(supabase, a as AreaRow, ym, "") : null;
+}
+
+async function buildDailyLog(supabase: SupabaseClient, a: AreaRow, ym: string, id: string): Promise<DailyLogData> {
   const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
   const days = new Date(y, m, 0).getDate();
   const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;

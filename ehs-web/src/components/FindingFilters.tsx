@@ -102,7 +102,7 @@ export function describeFilters(f: Filters, sites: Site[], depts: Department[], 
 
 const SELECT = "rounded-md border border-gray-300 bg-white px-2 py-1.5";
 
-export function FindingFilters({ filters, sites, departments, modules, locations = [], used, lockDept }: {
+export function FindingFilters({ filters, sites, departments, modules, locations = [], used, lockDept, hidden }: {
   filters: Filters;
   sites: Site[];
   departments: Department[];
@@ -110,12 +110,16 @@ export function FindingFilters({ filters, sites, departments, modules, locations
   locations?: { id: string; name: string; site_id?: string }[];
   used?: UsedPair[]; // 있으면 지적사항이 나온 장소만 (부서를 고르면 그 부서 것만)
   lockDept?: boolean;
+  hidden?: Record<string, string>; // 조회해도 유지할 값 (예: 관리감독자 일일점검 보기 view)
 }) {
   const siteName = (id: string) => sites.find((s) => s.id === id)?.name ?? "";
   const depts = departments.filter((d) => d.is_active && !d.parent_id && (!filters.site || d.site_id === filters.site));
   const locs = locations.filter((l) => !filters.site || !l.site_id || l.site_id === filters.site);
   return (
     <form className="mb-4 grid grid-cols-2 items-center gap-2 md:flex md:flex-wrap">
+      {Object.entries(hidden ?? {}).map(([k, v]) => (
+        <input key={k} type="hidden" name={k} value={v} />
+      ))}
       <select name="status" defaultValue={filters.status} className={SELECT} aria-label="상태">
         {STATUS_FILTERS.map((s) => (
           <option key={s.value} value={s.value}>{s.label}</option>

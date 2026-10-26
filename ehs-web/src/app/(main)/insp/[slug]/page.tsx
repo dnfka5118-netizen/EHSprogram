@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
@@ -11,18 +12,41 @@ import { getProfile } from "@/lib/auth";
 import { FindingFilters, applyFindingFilters, describeFilters, filterMonth, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
 import { MyDaily } from "./DailyStatus";
+import { DailyMine } from "./DailyMine";
 import { ChemStatus } from "./ChemStatus";
 import type { Department, FindingOverview, FindingType, Location, Site, SubLocation } from "@/lib/types";
+
+// 관리감독자 일일점검 : 나의 점검 현황(일지) / 나의 지적사항(내가 점검하며 지적한 것) / 사업장(부서별) 지적사항
+const DAILY_VIEWS = [
+  { key: "mine", label: "나의 점검 현황" },
+  { key: "my-findings", label: "나의 지적사항" },
+  { key: "all", label: "사업장(부서별) 지적사항" },
+] as const;
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
   const { slug } = await params;
   const mod = await getModuleBySlug(slug);
   if (!mod || mod.level === "none") notFound();
-  const filters = readFilters(await searchParams);
+  const sp = await searchParams;
+  const filters = readFilters(sp);
+  const isDaily = mod.code === "insp_daily";
+  const view = isDaily ? (DAILY_VIEWS.find((v) => v.key === sp.view)?.key ?? "mine") : "all";
+
+  if (view === "mine") {
+    return (
+      <div className="space-y-4">
+        <DailyTabs view={view} />
+        <MyDaily />
+        <DailyMine ym={typeof sp.ym === "string" ? sp.ym : undefined} />
+      </div>
+    );
+  }
 
   const supabase = await createClient();
-  const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code), filters);
   const profile = await getProfile();
+  let base = supabase.from("finding_overview").select(FINDING_ROW_SELECT).eq("module_code", mod.code);
+  if (view === "my-findings") base = base.eq("created_by", profile?.id ?? "");
+  const query = applyFindingFilters(base, filters);
   const canImport = mod.level === "write" && !!profile?.site_id && !["insp_daily", "insp_chem"].includes(mod.code); // 일일점검은 현장 QR, 유해화학물질은 점검대장으로만
   const none = Promise.resolve({ data: [] as unknown[] });
   const [{ data: sites }, { data: depts }, rows, { data: impLocs }, { data: impTypes }, { data: locRows }, { data: usedRows }] = await Promise.all([
@@ -45,11 +69,13 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const deptList = (depts ?? []) as Department[];
 
   const condition = describeFilters(filters, siteList, deptList, [], locList);
+  const title = view === "my-findings" ? "나의 지적사항" : isDaily ? "사업장(부서별) 지적사항" : "지적사항 현황";
 
   return (
     <div className="space-y-4">
+      {isDaily && <DailyTabs view={view} />}
       <Card
-        title={`지적사항 현황 (${rows.length}건)`}
+        title={`${title} (${rows.length}건)`}
         actions={
           <div className="flex gap-2">
             {canImport && (
@@ -64,20 +90,38 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
             )}
             <ExcelButton
               rows={rows}
-              loadPage={findingRowsPage.bind(null, { module: mod.code }, filters)}
-              title={`${mod.name} 현황 (${condition})`}
-              fileName={`${todayKst()}_${mod.name}_현황.xlsx`}
+              loadPage={findingRowsPage.bind(null, { module: mod.code, mine: view === "my-findings" }, filters)}
+              title={`${mod.name} ${view === "my-findings" ? "나의 지적사항" : "현황"} (${condition})`}
+              fileName={`${todayKst()}_${mod.name}_${view === "my-findings" ? "나의 지적사항" : "현황"}.xlsx`}
               currentMonth={filterMonth(filters)}
             />
           </div>
         }
       >
-        <FindingFilters filters={filters} sites={siteList} departments={deptList} locations={locList} used={usedPairs(usedRows)} />
+        {view === "my-findings" && <p className="mb-3 text-xs text-gray-500">내가 관리감독자 일일점검을 하며 지적한 건입니다.</p>}
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} locations={locList} used={usedPairs(usedRows)} hidden={isDaily ? { view } : undefined} />
         <FindingTable rows={rows} />
         {rows.length >= 500 && <p className="mt-2 text-xs text-gray-500">최근 500건까지만 표시합니다. 조건을 좁혀 조회하세요.</p>}
       </Card>
-      {mod.code === "insp_daily" && <MyDaily />}
       {mod.code === "insp_chem" && <ChemStatus />}
+    </div>
+  );
+}
+
+function DailyTabs({ view }: { view: string }) {
+  return (
+    <div className="flex gap-1 overflow-x-auto border-b border-gray-200">
+      {DAILY_VIEWS.map((v) => (
+        <Link
+          key={v.key}
+          href={`/insp/daily?view=${v.key}`}
+          className={`shrink-0 border-b-[3px] px-3 py-2.5 text-sm whitespace-nowrap ${
+            view === v.key ? "border-brand-700 font-bold text-brand-800" : "border-transparent text-gray-600 hover:text-brand-800"
+          }`}
+        >
+          {v.label}
+        </Link>
+      ))}
     </div>
   );
 }

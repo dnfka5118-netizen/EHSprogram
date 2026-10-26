@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
-import { canViewKpi, getInternalModules, getModuleAccess } from "@/lib/access";
+import { canViewKpi, getModuleAccess } from "@/lib/access";
 import { getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/PageHeader";
-import { TabLinks } from "@/components/TabLinks";
 import { Card } from "@/components/ui";
 import { ScrollX } from "@/components/ScrollX";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
@@ -32,7 +31,6 @@ export default async function KpiPage({ searchParams }: PageProps<"/insp/kpi">) 
   const { data: depts } = await supabase.from("departments").select("id, name");
   const deptName = new Map((depts ?? []).map((d) => [d.id as string, d.name as string]));
   k.people = k.people.map((p) => ({ ...p, team_name: p.team ? (deptName.get(p.team) ?? null) : null }));
-  const tabs = [...(await getInternalModules()).map((m) => ({ href: `/insp/${m.slug}`, label: m.name })), { href: "/insp/kpi", label: "점검 지표" }];
 
   const sum = (key: keyof KpiRow) => k.teams.reduce((a, t) => a + Number(t[key] ?? 0), 0);
   const totals = { found: sum("found"), closed: sum("closed"), due: sum("due"), late: sum("late"), expected: k.people.reduce((a, p) => a + p.expected, 0), missed: k.people.reduce((a, p) => a + p.missed, 0) };
@@ -42,9 +40,7 @@ export default async function KpiPage({ searchParams }: PageProps<"/insp/kpi">) 
 
   return (
     <div className="space-y-4">
-      <PageHeader title="점검 지표" crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "점검" }, { label: "점검 지표" }]}>
-        <TabLinks tabs={tabs} />
-      </PageHeader>
+      <PageHeader title="점검 지표" crumbs={[{ label: "안전", href: "/ehs/safety" }, { label: "점검" }, { label: "점검 지표" }]} />
 
       <Card>
         <form className="flex flex-wrap items-center gap-2">
