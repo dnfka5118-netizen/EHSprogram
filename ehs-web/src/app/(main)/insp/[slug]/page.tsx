@@ -24,7 +24,7 @@ const DAILY_VIEWS = [
   { key: "places", label: "장소별 점검 현황" },
   { key: "my-findings", label: "나의 지적사항" },
   { key: "all", label: "사업장(부서별) 지적사항" },
-  { key: "overview", label: "전체 현황 (안전관리자)" }, // 관리자 · EHS팀만
+  { key: "overview", label: "전체 현황" }, // 관리자 · EHS팀만
 ] as const;
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
