@@ -40,7 +40,8 @@ async function insertUser(u: NewUser): Promise<string | null> {
     user_metadata: { name: u.name },
   });
   if (error) return toMessage(error);
-  const { error: pErr } = await admin.from("profiles").insert({ id: data.user.id, ...u, must_change_password: true });
+  // 프로필은 로그인한 관리자 권한으로 넣어 감사 로그에 처리자가 남게 함 (0035)
+  const { error: pErr } = await (await createClient()).from("profiles").insert({ id: data.user.id, ...u, must_change_password: true });
   if (pErr) {
     await admin.auth.admin.deleteUser(data.user.id);
     return toMessage(pErr);
@@ -150,7 +151,10 @@ export async function resetPassword(_prev: ActionState, fd: FormData): Promise<A
   const admin = createAdminClient();
   const { error } = await admin.auth.admin.updateUserById(id, { password: initialPassword() });
   if (error) return { error: toMessage(error) };
-  await admin.from("profiles").update({ must_change_password: true }).eq("id", id);
+  const supabase = await createClient();
+  await supabase.from("profiles").update({ must_change_password: true }).eq("id", id);
+  const { data: who } = await supabase.from("profiles").select("name, email").eq("id", id).maybeSingle();
+  await supabase.rpc("audit_note", { p_category: "계정", p_action: "비밀번호 초기화", p_table: "profiles", p_id: id, p_label: who ? `${who.name} (${who.email})` : id, p_changes: null });
   return done(`비밀번호를 초기화했습니다: ${initialPassword()} (다음 로그인 시 변경 필요)`);
 }
 

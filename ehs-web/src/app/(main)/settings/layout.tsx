@@ -14,6 +14,7 @@ const TABS = [
   { href: "/settings/schedules", label: "점검 주기" },
   { href: "/settings/reminders", label: "알림" },
   { href: "/settings/mail", label: "메일 발송" },
+  { href: "/settings/audit", label: "감사 로그" },
 ];
 
 export default async function SettingsLayout({ children }: LayoutProps<"/settings">) {

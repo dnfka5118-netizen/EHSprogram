@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -932,6 +932,32 @@ await setNotify({ kinds: {}, stages: { overdue: false }, daily_deadline: false }
 ok((await db.query("select * from _reminder_targets(kst_today() + 30) where stage='overdue'")).rows.length === 0, "끈 단계(목표일 지남)는 아침 알림에서 빠짐");
 ok((await one("select queue_daily_log_reminders($1) n", [remDay])).n === 0, "일지 마감 알림 끄기");
 await setNotify({ kinds: {}, stages: {}, daily_deadline: true });
+
+console.log("\n[감사 로그]");
+const al = async (where, p = []) => (await db.query(`select * from audit_log where ${where} order by id`, p)).rows;
+ok((await al("target_table='approvals' and action='상신'")).length > 0, "결재 상신 기록");
+const apOk = await al("target_table='approval_steps' and action='승인'");
+ok(apOk.length > 0 && apOk.every((r) => r.actor_name) && apOk[0].changes.status[1] === "approved", "결재 승인 기록 (처리자 · 이전→이후)");
+ok((await al("target_table='approval_steps' and action='반려'")).length > 0, "결재 반려 기록");
+ok((await al("target_table='approval_steps' and action='결재자 변경'")).length > 0, "관리자 결재자 변경 기록");
+ok((await al("target_table='approval_steps' and action like '결재 단계%'")).length === 0, "차례 넘어가는 자동 변경은 기록 안 함");
+await as(U.A);
+await db.query("update profiles set is_admin=true where id=$1", [U.W2]);
+await db.query("update profiles set position='대리', is_admin=false where id=$1", [U.W2]);
+const auPr = await al("target_table='profiles' and target_id=$1 and actor_id=$2", [U.W2, U.A]);
+ok(auPr.some((r) => r.action === "관리자 지정") && auPr.some((r) => r.action === "관리자 해제" && r.changes.position[1] === "대리"), "계정 : 관리자 지정/해제 · 정보 수정 (처리자 = 관리자)");
+await db.query("insert into user_permissions values ($1,'insp_kpi','read') on conflict (user_id, module_code) do update set level='read'", [U.W2]);
+ok((await al("target_table='user_permissions' and category='권한' and actor_id=$1", [U.A])).length > 0, "권한 부여 기록");
+await db.query("select audit_note('계정','비밀번호 초기화','profiles',$1,'작업자2',null)", [U.W2]);
+ok((await al("action='비밀번호 초기화'")).length === 1, "화면에서 한 일(비밀번호 초기화) 기록");
+await as(U.W1); await expectError("관리자 아니면 기록 추가 불가", "select audit_note('계정','x','profiles','x','x',null)", [], "관리자만");
+await as(null);
+await expectError("감사 로그 수정 불가 (관리자·DB 직접도)", "update audit_log set action='x' where id=(select min(id) from audit_log)", [], "수정하거나 삭제할 수 없습니다");
+await expectError("감사 로그 삭제 불가", "delete from audit_log", [], "수정하거나 삭제할 수 없습니다");
+await db.exec("set role authenticated");
+await as(U.W1); ok((await db.query("select * from audit_log")).rows.length === 0, "일반 사용자는 감사 로그 조회 불가");
+await as(U.A); ok((await db.query("select * from audit_log")).rows.length > 0, "관리자는 조회");
+await db.exec("reset role"); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
