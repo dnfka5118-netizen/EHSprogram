@@ -2,7 +2,7 @@
 //
 //   1) npx next build && npx next start -p 3457      (다른 창에서 켜 둠)
 //   2) node scripts/mobile-check.mjs / /insp/ceo /permit/new#line
-//        경로 뒤 #menu = 메뉴 열기, #line = 허가서 상신 → 결재라인 지정 창 열기,
+//        경로 뒤 #menu = 메뉴 열기, #open = 접힌 칸(details) 모두 펼치기, #line = 허가서 상신 → 결재라인 지정 창 열기,
 //        #place = 점검 등록에서 장소(PLACE) 고르고 자동 선택된 조치 부서 확인, #review = 유형 정리 묶음 계산 기다림, #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
 //      W=360 node scripts/mobile-check.mjs /insp/ceo   ← 폭 바꾸기
 //
@@ -59,6 +59,7 @@ try {
   for (const p of paths) {
     const [path, action] = p.split("#");
     await page.goto(BASE + path, { waitUntil: "networkidle2", timeout: 60000 });
+    if (action === "open") await page.evaluate(() => document.querySelectorAll("details").forEach((d) => (d.open = true)));
     if (action === "menu") await page.click('button[aria-label="메뉴 열기"]');
     if (action === "line") {
       await clickText(page, "상신하기");
@@ -90,7 +91,7 @@ try {
     await new Promise((r) => setTimeout(r, 800));
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     const name = `${W}${path.replace(/[/?=&]/g, "_")}${action ? "_" + action : ""}.png`;
-    await page.screenshot({ path: fileURLToPath(new URL(name, OUT)), fullPage: !action });
+    await page.screenshot({ path: fileURLToPath(new URL(name, OUT)), fullPage: !action || action === "open" });
     if (sw > W) {
       bad++;
       // 옆으로 넘치는 가장 바깥 요소 (스크롤 상자 안쪽은 제외)

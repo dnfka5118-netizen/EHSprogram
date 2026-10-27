@@ -1,11 +1,15 @@
 import { ScrollX } from "@/components/ScrollX";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { Card, Field, Input, Select, SubmitButton, Textarea } from "@/components/ui";
+import { Card, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { UserFields } from "../UserFields";
+import { BulkUsers } from "./BulkUsers";
 import { bulkCreateUsers, createUser } from "../actions";
 import type { Department, Profile, Site } from "@/lib/types";
+
+// 일괄 등록 직위 선택지 (이미 쓰고 있는 직위도 함께)
+const POSITIONS = ["사원", "주임", "대리", "과장", "차장", "부장", "팀장", "파트장", "공장장", "이사", "상무", "전무", "부사장", "사장", "대표이사"];
 
 const str = (v: string | string[] | undefined) => (typeof v === "string" ? v : "");
 
@@ -19,11 +23,13 @@ export default async function UsersPage({ searchParams }: PageProps<"/settings/u
   if (q) query = query.or(`name.ilike.%${q}%,email.ilike.%${q}%`);
   if (dept) query = query.eq("department_id", dept);
 
-  const [{ data: users }, { data: sites }, { data: depts }] = await Promise.all([
+  const [{ data: users }, { data: sites }, { data: depts }, { data: posRows }] = await Promise.all([
     query.limit(500),
     supabase.from("sites").select("*").order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
+    supabase.from("profiles").select("position").not("position", "is", null),
   ]);
+  const positions = [...new Set([...POSITIONS, ...(posRows ?? []).map((r) => String(r.position).trim()).filter(Boolean)])];
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
   const deptName = (id: string | null) => deptList.find((d) => d.id === id)?.name ?? "-";
@@ -41,28 +47,8 @@ export default async function UsersPage({ searchParams }: PageProps<"/settings/u
       <details className="rounded-lg border border-gray-200 bg-white">
         <summary className="cursor-pointer px-4 py-3 font-semibold text-gray-900">사용자 일괄 등록</summary>
         <div className="border-t border-gray-100 p-4">
-          <ActionForm action={bulkCreateUsers} className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Field label="사업장" required>
-                <Select name="site_id">
-                  {siteList.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="구분">
-                <Select name="user_type">
-                  <option value="employee">임직원</option>
-                  <option value="contractor">협력업체</option>
-                </Select>
-              </Field>
-              <Field label="협력업체명" hint="협력업체일 때">
-                <Input name="company_name" />
-              </Field>
-            </div>
-            <Field label="사용자 목록" hint="한 줄에 한 명 · 이메일, 이름, 부서명, 직위 (엑셀에서 복사해 붙여넣기 가능)">
-              <Textarea name="rows" rows={8} placeholder={"hong@sypchem.co.kr, 홍길동, 생산팀, 과장\nkim@sypchem.co.kr, 김철수, 품질팀, 대리"} />
-            </Field>
+          <ActionForm action={bulkCreateUsers} resetOnSuccess className="space-y-3">
+            <BulkUsers sites={siteList} departments={deptList} positions={positions} />
             <SubmitButton pendingText="등록 중… (인원이 많으면 시간이 걸립니다)">일괄 등록</SubmitButton>
           </ActionForm>
         </div>

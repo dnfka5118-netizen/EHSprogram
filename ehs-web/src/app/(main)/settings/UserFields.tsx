@@ -4,6 +4,23 @@ import { useState } from "react";
 import { Field, Input, Select } from "@/components/ui";
 import type { Department, Profile, Site } from "@/lib/types";
 
+// 부서 선택지 : 부문별로 묶고, 부서 바로 아래에 그 부서의 파트 ("생산팀 › HBC-C2")
+export const deptLabel = (d: Department, depts: Department[]) =>
+  d.parent_id ? `${depts.find((t) => t.id === d.parent_id)?.name ?? ""} › ${d.name}` : d.name;
+
+export function DeptOptions({ depts }: { depts: Department[] }) {
+  return [...new Set(depts.filter((d) => !d.parent_id).map((d) => d.division ?? ""))].map((div) => (
+    <optgroup key={div || "-"} label={div || "부문 미지정"}>
+      {depts
+        .filter((d) => !d.parent_id && (d.division ?? "") === div)
+        .flatMap((t) => [t, ...depts.filter((p) => p.parent_id === t.id)])
+        .map((d) => (
+          <option key={d.id} value={d.id}>{deptLabel(d, depts)}</option>
+        ))}
+    </optgroup>
+  ));
+}
+
 // 사용자 입력 항목 (사업장 선택에 따라 부서 목록이 바뀜)
 export function UserFields({ sites, departments, user }: { sites: Site[]; departments: Department[]; user?: Profile }) {
   const [siteId, setSiteId] = useState(user?.site_id ?? sites[0]?.id ?? "");
@@ -33,19 +50,7 @@ export function UserFields({ sites, departments, user }: { sites: Site[]; depart
       <Field label="부서">
         <Select name="department_id" defaultValue={user?.department_id ?? ""} key={siteId}>
           <option value="">(없음)</option>
-          {/* 부문별로 묶고, 부서 바로 아래에 그 부서의 파트 */}
-          {[...new Set(depts.filter((d) => !d.parent_id).map((d) => d.division ?? ""))].map((div) => (
-            <optgroup key={div || "-"} label={div || "부문 미지정"}>
-              {depts
-                .filter((d) => !d.parent_id && (d.division ?? "") === div)
-                .flatMap((t) => [t, ...depts.filter((p) => p.parent_id === t.id)])
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.parent_id ? `${depts.find((t) => t.id === d.parent_id)?.name ?? ""} › ${d.name}` : d.name}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
+          <DeptOptions depts={depts} />
         </Select>
       </Field>
       <Field label="구분">

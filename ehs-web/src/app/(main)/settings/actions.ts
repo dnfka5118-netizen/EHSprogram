@@ -69,7 +69,7 @@ export async function createUser(_prev: ActionState, fd: FormData): Promise<Acti
   return done(`${name}님 계정을 만들었습니다. 초기 비밀번호: ${initialPassword()}`);
 }
 
-// 일괄 등록 : 한 줄에 "이메일, 이름, 부서명, 직위"
+// 일괄 등록 : 화면에서 사람마다 이메일·이름 입력 + 부서·직위 선택 → users = [{ email, name, department_id, position }]
 export async function bulkCreateUsers(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
   const siteId = s(fd, "site_id");
@@ -77,41 +77,48 @@ export async function bulkCreateUsers(_prev: ActionState, fd: FormData): Promise
   const company = nullable(s(fd, "company_name"));
   if (!siteId) return { error: "사업장을 선택해 주세요." };
 
-  const supabase = await createClient();
-  const { data: depts } = await supabase.from("departments").select("id, name").eq("site_id", siteId);
-  const deptId = (name: string) => depts?.find((d) => d.name === name)?.id ?? null;
+  let list: { email?: string; name?: string; department_id?: string; position?: string }[] = [];
+  try {
+    list = JSON.parse(s(fd, "users") || "[]");
+  } catch {
+    return { error: "입력 내용을 읽지 못했습니다. 화면을 새로고침해 주세요." };
+  }
+  if (list.length === 0) return { error: "등록할 사용자를 입력해 주세요." };
 
-  const lines = s(fd, "rows").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return { error: "등록할 사용자를 입력해 주세요." };
+  const supabase = await createClient();
+  const { data: depts } = await supabase.from("departments").select("id").eq("site_id", siteId);
+  const deptIds = new Set((depts ?? []).map((d) => d.id as string));
 
   const failed: string[] = [];
   let ok = 0;
-  for (const line of lines) {
-    const [email, name, dept, position] = line.split(/[,\t]/).map((x) => x?.trim() ?? "");
-    if (!email?.includes("@") || !name) {
-      failed.push(`${line} → 형식 오류`);
+  for (const [i, u] of list.entries()) {
+    const email = String(u.email ?? "").trim().toLowerCase();
+    const name = String(u.name ?? "").trim();
+    const dId = String(u.department_id ?? "");
+    const who = `${i + 1}번 줄${name ? ` (${name})` : ""}`;
+    if (!email.includes("@") || !name) {
+      failed.push(`${who} → 이메일·이름을 확인해 주세요`);
       continue;
     }
-    const dId = dept ? deptId(dept) : null;
-    if (dept && !dId) {
-      failed.push(`${email} → 부서 '${dept}' 없음`);
+    if (dId && !deptIds.has(dId)) {
+      failed.push(`${who} → 선택한 부서가 이 사업장에 없습니다`);
       continue;
     }
     const err = await insertUser({
-      email: email.toLowerCase(),
+      email,
       name,
       site_id: siteId,
-      department_id: dId,
-      position: nullable(position ?? ""),
+      department_id: dId || null,
+      position: nullable(String(u.position ?? "").trim()),
       user_type: userType,
       company_name: userType === "contractor" ? company : null,
       is_admin: false,
     });
-    if (err) failed.push(`${email} → ${err}`);
+    if (err) failed.push(`${who} ${email} → ${err}`);
     else ok++;
   }
   revalidatePath("/", "layout");
-  if (failed.length) return { error: `${ok}명 등록, ${failed.length}건 실패\n${failed.join("\n")}` };
+  if (failed.length) return { error: `${ok}명 등록, ${failed.length}건 실패 (실패한 줄만 고쳐서 다시 등록하세요)\n${failed.join("\n")}` };
   return { ok: true, message: `${ok}명 등록 완료. 초기 비밀번호: ${initialPassword()}` };
 }
 
