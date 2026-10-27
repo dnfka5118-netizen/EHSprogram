@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -916,6 +916,22 @@ await db.query("insert into notifications (user_id, kind, subject, body) values 
 ok((await db.query("select * from claim_notifications(50)")).rows.some((r) => r.subject === "[EHS] 바로"), "바로 보내기로 바꾸면 즉시 발송");
 ok((await one("select queue_event_digest($1) n", [bizMon])).n === 0, "바로 보내기일 때는 아침에 모으지 않음");
 await db.query("update app_settings set value='{\"immediate\": false}' where key='mail'");
+
+console.log("\n[알림 종류별 설정]");
+await db.query("update notifications set status='sent' where status in ('pending','failed','sending')");
+const setNotify = (v) => db.query("update app_settings set value=$1 where key='notify'", [JSON.stringify(v)]);
+await setNotify({ kinds: { request: "immediate", assigned: "off", approval_result: "immediate" }, stages: {}, daily_deadline: true });
+const nOff = (await one("insert into notifications (user_id, kind, subject, body) values ($1,'assigned','[EHS] 끔','b') returning id", [U.W2])).id;
+await db.query("insert into notifications (user_id, kind, subject, body) values ($1,'request','[EHS] 요청 바로','b'), ($1,'approval_rejected','[EHS] 결재 반려 바로','b'), ($1,'closed','[EHS] 종결 아침','b')", [U.W2]);
+const got2 = (await db.query("select subject from claim_notifications(50)")).rows.map((r) => r.subject);
+ok(got2.includes("[EHS] 요청 바로") && got2.includes("[EHS] 결재 반려 바로") && !got2.includes("[EHS] 종결 아침") && !got2.includes("[EHS] 끔"), "종류별 : 바로 보낼 종류만 즉시 (결재 결과는 한 묶음)");
+await db.query("select queue_event_digest($1)", [bizMon]);
+ok((await one("select status from notifications where id=$1", [nOff])).status === "expired", "보내지 않음으로 정한 종류는 만료");
+ok((await one("select body from notifications where user_id=$1 and kind='digest' order by created_at desc limit 1", [U.W2])).body.includes("종결 아침"), "아침 종류는 아침 메일에");
+await setNotify({ kinds: {}, stages: { overdue: false }, daily_deadline: false });
+ok((await db.query("select * from _reminder_targets(kst_today() + 30) where stage='overdue'")).rows.length === 0, "끈 단계(목표일 지남)는 아침 알림에서 빠짐");
+ok((await one("select queue_daily_log_reminders($1) n", [remDay])).n === 0, "일지 마감 알림 끄기");
+await setNotify({ kinds: {}, stages: {}, daily_deadline: true });
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

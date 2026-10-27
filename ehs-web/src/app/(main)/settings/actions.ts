@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { toMessage } from "@/lib/errors";
 import { mailConfigured, renderMail, sendMail } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
+import { NOTIFY_KINDS, NOTIFY_MODES, NOTIFY_STAGES } from "@/lib/notify-kinds";
 
 const s = (fd: FormData, key: string) => String(fd.get(key) ?? "").trim();
 const n = (fd: FormData, key: string) => Number(fd.get(key) ?? 0) || 0;
@@ -342,11 +343,19 @@ export async function saveReminderSettings(_prev: ActionState, fd: FormData): Pr
   return error ? { error: toMessage(error) } : done();
 }
 
-// 알림 메일 보내는 방식 : 매일 아침 한 번에(기본) / 일어나면 바로 (0032)
-export async function saveMailMode(_prev: ActionState, fd: FormData): Promise<ActionState> {
+// 알림 종류별 메일 (0034) : 종류마다 아침에 모아서 / 바로 / 보내지 않음 + 아침 '처리 늦어진 건' 단계 · 일지 마감 알림 켜기/끄기
+export async function saveNotifySettings(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  const kinds: Record<string, string> = {};
+  for (const k of NOTIFY_KINDS) {
+    const v = String(fd.get(`kind_${k.key}`) ?? "digest");
+    kinds[k.key] = (NOTIFY_MODES as readonly string[]).includes(v) ? v : "digest";
+  }
+  const stages: Record<string, boolean> = {};
+  for (const st of NOTIFY_STAGES) stages[st] = fd.get(`stage_${st}`) === "on";
+  const value = { kinds, stages, daily_deadline: fd.get("daily_deadline") === "on" };
   const supabase = await createClient();
-  const { error } = await supabase.from("app_settings").upsert({ key: "mail", value: { immediate: fd.get("immediate") === "1" }, updated_at: new Date().toISOString() });
+  const { error } = await supabase.from("app_settings").upsert({ key: "notify", value, updated_at: new Date().toISOString() });
   return error ? { error: toMessage(error) } : done();
 }
 

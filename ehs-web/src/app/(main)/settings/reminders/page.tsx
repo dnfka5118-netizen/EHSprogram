@@ -4,7 +4,8 @@ import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { ScrollX } from "@/components/ScrollX";
 import { fmtDate, todayKst } from "@/lib/format";
-import { saveHoliday, saveMailMode, saveReminderSettings } from "../actions";
+import { saveHoliday, saveNotifySettings, saveReminderSettings } from "../actions";
+import { NOTIFY_KINDS } from "@/lib/notify-kinds";
 
 const STAGE: Record<string, { label: string; cls: string }> = {
   assign: { label: "담당자 미지정", cls: "bg-amber-100 text-amber-800" },
@@ -33,14 +34,18 @@ type PreviewRow = { stage: string; user_id: string; user_name: string; finding_i
 export default async function RemindersPage() {
   const supabase = await createClient();
   const year = Number(todayKst().slice(0, 4));
-  const [{ data: setting }, { data: holidays }, { data: preview, error: pErr }, { data: log }, { data: mailSet }] = await Promise.all([
+  const [{ data: setting }, { data: holidays }, { data: preview, error: pErr }, { data: log }, { data: mailSet }, { data: notifySet }] = await Promise.all([
     supabase.from("app_settings").select("value").eq("key", "reminder").maybeSingle(),
     supabase.from("holidays").select("day, name").gte("day", `${year - 1}-01-01`).order("day"),
     supabase.rpc("preview_reminders"),
     supabase.from("reminder_log").select("id, sent_on, stage, target_date, finding_id, profiles(name)").order("id", { ascending: false }).limit(100),
     supabase.from("app_settings").select("value").eq("key", "mail").maybeSingle(),
+    supabase.from("app_settings").select("value").eq("key", "notify").maybeSingle(),
   ]);
-  const immediate = !!(mailSet?.value as { immediate?: boolean } | undefined)?.immediate;
+  const immediate = !!(mailSet?.value as { immediate?: boolean } | undefined)?.immediate; // 종류를 정하지 않았을 때 기본값 (0032)
+  const notify = (notifySet?.value ?? {}) as { kinds?: Record<string, string>; stages?: Record<string, boolean>; daily_deadline?: boolean };
+  const kinds = notify.kinds ?? {};
+  const stages = notify.stages ?? {};
   const v = (setting?.value ?? {}) as Record<string, number>;
   const previewRows = (preview ?? []) as PreviewRow[];
   const groups = new Map<string, PreviewRow[]>();
@@ -50,24 +55,40 @@ export default async function RemindersPage() {
 
   return (
     <div className="space-y-4">
-      <Card title="알림 메일 보내는 방식">
-        <ActionForm action={saveMailMode} className="space-y-2">
-          <label className="flex items-start gap-2 text-sm">
-            <input type="radio" name="immediate" value="0" defaultChecked={!immediate} className="mt-1" />
-            <span>
-              <b>매일 아침 8시에 한 번에 (권장)</b>
-              <span className="block text-xs break-keep text-gray-500">
-                지적사항 등록·담당자 지정·완료 보고·결재 요청·게시판·일지 제출 등 새로 온 알림을 바로 보내지 않고, 영업일 아침 8시에 아래 &apos;처리 늦어진 건&apos;과 함께 사람마다 한 통으로 보냅니다. 프로그램의 &apos;내 할 일&apos;에는 바로 보입니다.
-              </span>
-            </span>
-          </label>
-          <label className="flex items-start gap-2 text-sm">
-            <input type="radio" name="immediate" value="1" defaultChecked={immediate} className="mt-1" />
-            <span>
-              <b>일어나면 바로</b>
-              <span className="block text-xs break-keep text-gray-500">건마다 바로 메일이 갑니다 (점검 한 번에 지적사항이 많으면 메일도 많아집니다).</span>
-            </span>
-          </label>
+      <Card title="알림 종류별 메일 설정">
+        <p className="mb-3 text-sm break-keep text-gray-600">
+          일이 생겼을 때 가는 알림 메일을 종류마다 정합니다. <b>다음 영업일 아침 8시</b>는 사람마다 한 통으로 모아 보냅니다. 메일 설정과 상관없이 프로그램의
+          &apos;내 할 일&apos;에는 바로 보입니다.
+        </p>
+        <ActionForm action={saveNotifySettings} className="space-y-3">
+          <ul className="divide-y divide-gray-100">
+            {NOTIFY_KINDS.map((k) => (
+              <li key={k.key} className="flex flex-col gap-1 py-2 sm:flex-row sm:items-center sm:gap-3">
+                <span className="text-sm font-medium sm:w-48 sm:shrink-0">{k.label}</span>
+                <span className="text-xs break-keep text-gray-500 sm:flex-1">→ {k.to}</span>
+                <select name={`kind_${k.key}`} defaultValue={kinds[k.key] ?? (immediate ? "immediate" : "digest")} className="rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm sm:w-56">
+                  <option value="digest">다음 영업일 아침 8시 (모아서)</option>
+                  <option value="immediate">바로</option>
+                  <option value="off">보내지 않음</option>
+                </select>
+              </li>
+            ))}
+          </ul>
+          <div className="rounded-md bg-gray-50 p-3">
+            <p className="mb-2 text-sm font-medium">아침 8시 &apos;처리가 늦어진 건&apos; 알림 (기준 일수는 아래에서)</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {Object.entries(STAGE).map(([key, st]) => (
+                <label key={key} className="flex items-center gap-1.5 text-sm">
+                  <input type="checkbox" name={`stage_${key}`} defaultChecked={stages[key] !== false} className="h-4 w-4" />
+                  {st.label}
+                </label>
+              ))}
+              <label className="flex items-center gap-1.5 text-sm">
+                <input type="checkbox" name="daily_deadline" defaultChecked={notify.daily_deadline !== false} className="h-4 w-4" />
+                관리감독자 일지 제출 마감 (2일 전·당일)
+              </label>
+            </div>
+          </div>
           <SubmitButton>저장</SubmitButton>
         </ActionForm>
       </Card>
