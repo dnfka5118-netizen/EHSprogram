@@ -229,15 +229,10 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
         .eq("id", id)
     : await supabase.from("departments").insert({ site_id: s(fd, "site_id"), name, division, parent_id: parent, sort_order: n(fd, "sort_order") });
   if (error) return { error: toMessage(error) };
-  // 지정자·승인자 여러 명 (부서만, 순서 = 고른 순서 · 첫 번째 승인자 = 결재선 부서장)
-  if (id && !parent) {
+  // 지정자·승인자 여러 명 (순서 = 고른 순서 · 부서 첫 번째 승인자 = 결재선 부서장) · 파트는 종결 승인자(파트 리더)만 (0037)
+  if (id) {
     const ids = (k: string) => fd.getAll(k).map(String).filter(Boolean);
-    // 승인자 담당 파트 (두 번째 승인자부터, 비어 있으면 부서 전체) (0036)
-    let parts: Record<string, string[]> = {};
-    try {
-      parts = JSON.parse(s(fd, "approver_ids_parts") || "{}");
-    } catch {}
-    const r = await supabase.rpc("set_department_roles", { p_dept: id, p_assigners: ids("assigner_ids"), p_approvers: ids("approver_ids"), p_approver_parts: parts });
+    const r = await supabase.rpc("set_department_roles", { p_dept: id, p_assigners: parent ? [] : ids("assigner_ids"), p_approvers: ids("approver_ids") });
     if (r.error) return { error: toMessage(r.error) };
   }
   return done();

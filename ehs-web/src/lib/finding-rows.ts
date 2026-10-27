@@ -62,6 +62,12 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
   const rows = findings as Embedded[];
   const today = todayKst();
   const me = await getProfile();
+  // 파트 종결 승인자(파트 리더)가 승인할 건 (0037) — 승인 대기 건이 있을 때만 조회
+  const partApprove = new Set<string>();
+  if (me && !me.is_admin && rows.some((f) => f.status === "approval_wait")) {
+    const { data } = await supabase.rpc("my_approval_findings");
+    for (const x of (data ?? []) as unknown as string[]) partApprove.add(String(x));
+  }
 
   const picked = new Map<string, { thumb?: string; before: string[]; after: string[] }>();
   const wanted = new Set<string>();
@@ -90,7 +96,7 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     const canPlan = isAssignee && f.status === "plan_wait";
     const mine = (assignees ?? []).some((a) => a.user_id === me?.id);
     const canSelfAssign = !!me && !mine && (me.team_id ?? me.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
-    const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.role === "approver" && r.user_id === me.id));
+    const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || partApprove.has(f.id) || (dept?.department_roles ?? []).some((r) => r.role === "approver" && r.user_id === me.id));
     const deptMember = !!me && me.user_type === "employee" && (me.team_id ?? me.department_id) === f.request_department_id;
     const canReport = (isAssignee || deptMember) && f.status === "in_progress" && (finding_measures ?? []).length > 0;
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.user_id === me.id));

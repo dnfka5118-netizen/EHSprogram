@@ -54,7 +54,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const photos = (photoRows ?? []) as Photo[];
 
   // 부서·구성원·등록자·사진 주소를 동시에 (DB 왕복 1번)
-  const [{ data: deptRow }, { data: memberRows }, { data: creator }, signed] = await Promise.all([
+  const [{ data: deptRow }, { data: memberRows }, { data: creator }, signed, { data: approvable }] = await Promise.all([
     supabase.from("departments").select("*, department_roles(user_id, role)").eq("id", f.request_department_id).single(),
     supabase
       .from("profiles")
@@ -69,6 +69,8 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
           .createSignedUrls(photos.flatMap((p) => [p.path, thumbPathOf(p.path)]), 3600)
           .then((r) => r.data ?? [])
       : Promise.resolve([]),
+    // 파트 종결 승인자(파트 리더)도 승인 (0037)
+    f.status === "approval_wait" ? supabase.rpc("can_approve", { p_finding: f.id }) : Promise.resolve({ data: false }),
   ]);
   const assigneeIds = (assigneeRows ?? []).map((a) => a.user_id as string);
 
@@ -85,7 +87,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const isAdmin = profile.is_admin;
   const roles = ((deptRow as { department_roles?: { user_id: string; role: string }[] } | null)?.department_roles ?? []).filter((r) => r.user_id === profile.id);
   const canAssign = isAdmin || roles.length > 0;
-  const canApprove = isAdmin || roles.some((r) => r.role === "approver");
+  const canApprove = isAdmin || roles.some((r) => r.role === "approver") || approvable === true;
   const isAssignee = assigneeIds.includes(profile.id) || isAdmin;
   const canReport = isAssignee || (profile.user_type === "employee" && (profile.team_id ?? profile.department_id) === f.request_department_id); // 완료 여부 처리 : 조치 요청 부서원도 (0033)
   const canSelfAssign =

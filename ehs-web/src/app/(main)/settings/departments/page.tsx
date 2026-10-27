@@ -13,22 +13,20 @@ export default async function DepartmentsPage() {
   const supabase = await createClient();
   const [{ data: sites }, { data: depts }, { data: users }] = await Promise.all([
     supabase.from("sites").select("*").order("sort_order"),
-    supabase.from("departments").select("*, department_roles(user_id, role, sort_order, part_ids)").order("sort_order"),
+    supabase.from("departments").select("*, department_roles(user_id, role, sort_order)").order("sort_order"),
     supabase.from("profiles").select("id, name, position, site_id, department_id").eq("is_active", true).order("name"),
   ]);
   const people = (users ?? []) as Pick<Profile, "id" | "name" | "position" | "site_id" | "department_id">[];
-  type Row = Department & { department_roles?: { user_id: string; role: string; sort_order: number; part_ids: string[] }[] };
+  type Row = Department & { department_roles?: { user_id: string; role: string; sort_order: number }[] };
   const all = (depts ?? []) as Row[];
   const roleIds = (d: Row, role: string) =>
     (d.department_roles ?? []).filter((r) => r.role === role).sort((a, b) => a.sort_order - b.sort_order).map((r) => r.user_id);
-  const approverParts = (d: Row) =>
-    Object.fromEntries((d.department_roles ?? []).filter((r) => r.role === "approver").map((r) => [r.user_id, r.part_ids ?? []]));
 
   return (
     <div className="space-y-4">
       <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
         조직은 <b>사업장 › 부문 › 부서 › 파트</b> 순입니다. 조치 요청·<b>지정자</b>(조치담당자를 지정하는 사람)·<b>승인자</b>(종결 승인하는 사람)는 <b>여러 명</b> 둘 수 있고{" "}
-        <b>부서 단위</b>로 정하고, 파트 소속 직원은 상위 부서 소속으로 봅니다(지정 대상·자진 담당 가능). 파트를 만들려면 <b>상위 부서</b>를 고르세요. 승인자 중 <b>첫 번째 사람</b>이 전자결재의 &quot;해당 부서장&quot;이 됩니다. 두 번째 승인자부터는 <b>담당 파트</b>를 고를 수 있고, 고르면 그 파트 건(조치담당자·완료 보고자가 그 파트 소속)만 종결 승인 알림과 내 할 일에 나옵니다.
+        <b>부서 단위</b>로 정하고, 파트 소속 직원은 상위 부서 소속으로 봅니다(지정 대상·자진 담당 가능). 파트를 만들려면 <b>상위 부서</b>를 고르세요. 승인자 중 <b>첫 번째 사람</b>이 전자결재의 &quot;해당 부서장&quot;이 됩니다. <b>파트 줄의 종결 승인자</b>(파트 리더)는 조치담당자·완료 보고자가 그 파트 소속(환경설정 → 사용자·권한)인 건만 종결 승인 알림을 받고 승인합니다. 부서 승인자는 모든 건을 받습니다.
       </p>
       {((sites ?? []) as Site[]).map((site) => {
         const list = all.filter((d) => d.site_id === site.id);
@@ -88,19 +86,20 @@ export default async function DepartmentsPage() {
                         </select>
                         <Input name="sort_order" type="number" defaultValue={d.sort_order} />
                         {isPart ? (
-                          <span className="col-span-2 text-xs text-gray-500">상위 부서의 지정자·승인자가 맡습니다</span>
+                          <>
+                            <span className="text-xs text-gray-500">상위 부서의 지정자가 맡습니다</span>
+                            <RolePicker
+                              name="approver_ids"
+                              members={people.filter((p) => p.department_id === d.id)}
+                              others={people.filter((p) => p.site_id === site.id && p.department_id !== d.id)}
+                              initial={roleIds(d, "approver")}
+                              firstHint="파트 리더"
+                            />
+                          </>
                         ) : (
                           <>
                             <RolePicker name="assigner_ids" members={members} others={others} initial={roleIds(d, "assigner")} />
-                            <RolePicker
-                              name="approver_ids"
-                              members={members}
-                              others={others}
-                              initial={roleIds(d, "approver")}
-                              firstHint="결재선 부서장"
-                              parts={list.filter((p) => p.parent_id === d.id).map((p) => ({ id: p.id, name: p.name }))}
-                              initialParts={approverParts(d)}
-                            />
+                            <RolePicker name="approver_ids" members={members} others={others} initial={roleIds(d, "approver")} firstHint="결재선 부서장" />
                           </>
                         )}
                         <label className="flex items-center gap-1 text-sm">

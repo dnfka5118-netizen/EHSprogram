@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -959,7 +959,7 @@ await as(U.W1); ok((await db.query("select * from audit_log")).rows.length === 0
 await as(U.A); ok((await db.query("select * from audit_log")).rows.length > 0, "관리자는 조회");
 await db.exec("reset role"); await as(null);
 
-console.log("\n[종결 승인자 담당 파트]");
+console.log("\n[파트 종결 승인자]");
 const P3 = (await one(`insert into departments (site_id, name, parent_id) values ($1,'HBC-C3',$2) returning id`, [site, PROD])).id;
 for (const [k, name, d] of [["L2", "C2리더", PART.id], ["L3", "C3리더", P3], ["M2", "C2작업자", PART.id]]) {
   const id = (await one(`insert into auth.users values (gen_random_uuid()) returning id`)).id;
@@ -967,11 +967,12 @@ for (const [k, name, d] of [["L2", "C2리더", PART.id], ["L3", "C3리더", P3],
   U[k] = id;
 }
 await as(U.A);
-await expectError("첫 번째 승인자(결재선 부서장)는 파트 지정 불가", "select set_department_roles($1,$2,$3,$4)",
-  [PROD, [U.S], [U.L2, U.H], JSON.stringify({ [U.L2]: [PART.id] })], "첫 번째 승인자");
-await db.query("select set_department_roles($1,$2,$3,$4)", [PROD, [U.S], [U.H, U.L2, U.L3], JSON.stringify({ [U.L2]: [PART.id], [U.L3]: [P3, QA] })]);
+await expectError("파트에는 지정자를 둘 수 없음", "select set_department_roles($1,$2,$3)", [PART.id, [U.L2], [U.L2]], "종결 승인자만");
+await db.query("select set_department_roles($1,'{}',$2)", [PART.id, [U.L2]]);
+await db.query("select set_department_roles($1,'{}',$2)", [P3, [U.L3]]);
 await as(null);
-ok((await one("select part_ids from department_roles where department_id=$1 and user_id=$2 and role='approver'", [PROD, U.L3])).part_ids.length === 1, "다른 부서는 담당 파트로 저장 안 됨");
+ok((await one("select approver_id from departments where id=$1", [PART.id])).approver_id === null, "파트 승인자는 결재선 부서장(departments.approver_id)에 들어가지 않음");
+ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "부서 결재선 부서장은 그대로");
 const finishBy = async (who, problem) => {
   const ap = await reg("insp_plant", U.I, problem);
   const apF = (await one("select id from findings where inspection_id=$1 order by seq desc limit 1", [ap])).id;
@@ -990,10 +991,12 @@ await as(U.L3); ok((await db.query("select * from my_approval_findings() id wher
 await as(null);
 ok((await db.query("select distinct user_id from _reminder_targets(kst_today() + 30) where finding_id=$1 and stage='approve'", [c2F])).rows.length === 2, "아침 승인 대기 알림도 부서장 + C2 리더");
 const teamF = await finishBy(U.W1, "부서 직속 직원 건");
-ok(JSON.stringify(await approvalTo(teamF)) === JSON.stringify([U.H]), "파트가 없는 건 → 부서 전체 승인자(부서장)만");
-await as(U.L3); await db.query("select approve_finding($1,'')", [c2F]); await as(null);
-ok((await one("select status from findings where id=$1", [c2F])).status === "closed", "승인 권한은 그대로 (다른 파트 리더도 열면 승인 가능)");
-await as(U.A); await db.query("select set_department_roles($1,$2,$3)", [PROD, [U.S], [U.H]]); await as(null);
+ok(JSON.stringify(await approvalTo(teamF)) === JSON.stringify([U.H]), "파트가 없는 건 → 부서 승인자(부서장)만");
+ok((await one("select count(*)::int c from notifications where finding_id=$1 and kind='request' and user_id=$2", [c2F, U.L2])).c === 0, "파트 리더는 등록(조치 요청) 메일 안 받음");
+await as(U.L3); await expectError("다른 파트 리더는 승인 불가", "select approve_finding($1,'')", [c2F], "권한"); await as(null);
+await as(U.L2); await db.query("select approve_finding($1,'')", [c2F]); await as(null);
+ok((await one("select status from findings where id=$1", [c2F])).status === "closed", "C2 리더가 자기 파트 건 종결 승인");
+await as(U.A); await db.query("select set_department_roles($1,'{}','{}')", [PART.id]); await db.query("select set_department_roles($1,'{}','{}')", [P3]); await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
