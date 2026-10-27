@@ -36,7 +36,7 @@ export type FindingRow = FindingOverview & {
   assignees: { name: string; self: boolean }[]; // self = 자진 담당
   canSelfAssign: boolean; // 보는 사람이 "내가 담당하기" 를 할 수 있는지 (조치 요청 부서 소속, 아직 담당자가 아님, 조치 진행 단계)
   canApprove: boolean; // 보는 사람이 종결 승인/반려할 차례인지 (승인 대기 + 부서 승인자 또는 관리자)
-  canReport: boolean; // 보는 사람이 지금 완료/미완료를 보고할 차례인지 (조치 중 + 조치담당자 또는 관리자)
+  canReport: boolean; // 보는 사람이 지금 완료/미완료를 보고할 수 있는지 (조치 중 + 조치담당자 · 관리자 · 조치 요청 부서원, 0033)
   measureList: Measure[]; // 결과 보고 창에 넘길 조치 원본 (즉시 → 단기 → 장기)
 };
 
@@ -91,7 +91,8 @@ export async function enrichFindings(supabase: SupabaseClient, findings: Finding
     const mine = (assignees ?? []).some((a) => a.user_id === me?.id);
     const canSelfAssign = !!me && !mine && (me.team_id ?? me.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
     const canApprove = !!me && f.status === "approval_wait" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.role === "approver" && r.user_id === me.id));
-    const canReport = isAssignee && f.status === "in_progress" && (finding_measures ?? []).length > 0;
+    const deptMember = !!me && me.user_type === "employee" && (me.team_id ?? me.department_id) === f.request_department_id;
+    const canReport = (isAssignee || deptMember) && f.status === "in_progress" && (finding_measures ?? []).length > 0;
     const canAssign = !!me && f.status !== "closed" && (me.is_admin || (dept?.department_roles ?? []).some((r) => r.user_id === me.id));
     const ms: FindingRow["measures"] = {};
     for (const m of finding_measures ?? []) {

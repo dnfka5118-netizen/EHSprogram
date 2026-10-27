@@ -87,6 +87,7 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
   const canAssign = isAdmin || roles.length > 0;
   const canApprove = isAdmin || roles.some((r) => r.role === "approver");
   const isAssignee = assigneeIds.includes(profile.id) || isAdmin;
+  const canReport = isAssignee || (profile.user_type === "employee" && (profile.team_id ?? profile.department_id) === f.request_department_id); // 완료 여부 처리 : 조치 요청 부서원도 (0033)
   const canSelfAssign =
     !assigneeIds.includes(profile.id) && (profile.team_id ?? profile.department_id) === f.request_department_id && ["assign_wait", "plan_wait", "in_progress"].includes(f.status);
   const assigneeLabel =
@@ -171,12 +172,10 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
         />
       )}
       {f.status === "plan_wait" && isAssignee && <PlanForm findingId={f.id} measures={measures} mode="create" />}
-      {f.status === "in_progress" && isAssignee && (
-        <>
-          <ReportForm key={`r-${measureKey}-${after.length}`} findingId={f.id} measures={measures} today={today} hasAfterPhotos={after.length > 0} />
-          <PlanForm key={`p-${measureKey}`} findingId={f.id} measures={measures} mode="edit" />
-        </>
+      {f.status === "in_progress" && canReport && (
+        <ReportForm key={`r-${measureKey}-${after.length}`} findingId={f.id} measures={measures} today={today} hasAfterPhotos={after.length > 0} />
       )}
+      {f.status === "in_progress" && isAssignee && <PlanForm key={`p-${measureKey}`} findingId={f.id} measures={measures} mode="edit" />}
       {f.status === "approval_wait" && canApprove && <ApprovalPanel findingId={f.id} />}
 
       {/* ---- 조치 현황 ---- */}

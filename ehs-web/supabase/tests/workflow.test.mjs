@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -120,6 +120,10 @@ ok(f.is_overdue === true, "목표일 경과 → 기한 초과 표시");
 await as(U.W1);
 await expectError("기한 지난 조치 새 목표일 필수", `select report_progress($1,$2,'a','b',null)`, [fid, items({ short: [false], long: [false] })], "다시 정해야");
 await expectError("과거 날짜로 재수립 차단", `select report_progress($1,$2,'a','b',null)`, [fid, items({ long: [false, "2020-01-01"] })], "오늘 이후");
+await as(U.Q); await expectError("다른 부서원은 완료 처리 불가", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "부서원만");
+await as(U.C); await expectError("같은 부서라도 협력업체는 완료 처리 불가", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "부서원만");
+await as(U.W2); await expectError("조치 요청 부서원은 담당자가 아니어도 완료 처리 가능 (사진 검사까지 통과)", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "사진");
+await as(U.W1);
 await expectError("전부 완료인데 개선 후 사진 없음", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "사진");
 ok((await one(`select is_done from finding_measures where id=$1`, [M.short])).is_done === false, "오류 시 완료 처리 롤백");
 ok((await one(`select report_progress($1,$2,'','완료',array[$3]) r`, [fid, items({ short: [true], long: [true] }), `${fid}/after-1.jpg`])).r === "approval_wait", "완료 보고 → 승인 대기");
