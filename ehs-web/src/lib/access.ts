@@ -24,6 +24,11 @@ export async function getModuleBySlug(slug: string) {
 }
 
 // 점검 지표 탭을 볼 수 있는지 (환경설정 → 사용자 권한에서 '점검 지표' 를 준 사람 · 관리자)
+// 관리감독자 일일점검 전체 현황 탭 (0031 · 환경설정에서 사람마다 권한)
+export async function canViewDailyOverview() {
+  return (await getModuleAccess()).some((m) => m.code === "insp_daily_overview" && m.level !== "none");
+}
+
 export async function canViewKpi() {
   return (await getModuleAccess()).some((m) => m.code === "insp_kpi" && m.level !== "none");
 }

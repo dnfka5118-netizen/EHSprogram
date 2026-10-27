@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getModuleBySlug } from "@/lib/access";
+import { canViewDailyOverview, getModuleBySlug } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 import { FINDING_ROW_SELECT, enrichFindings } from "@/lib/finding-rows";
 import { Card } from "@/components/ui";
@@ -24,7 +24,7 @@ const DAILY_VIEWS = [
   { key: "places", label: "장소별 점검 현황" },
   { key: "my-findings", label: "나의 지적사항" },
   { key: "all", label: "사업장(부서별) 지적사항" },
-  { key: "overview", label: "전체 현황" }, // 관리자 · EHS팀만
+  { key: "overview", label: "전체 현황" }, // 권한 받은 사람 · 관리자만
 ] as const;
 
 export default async function InspectionModulePage({ params, searchParams }: PageProps<"/insp/[slug]">) {
@@ -34,7 +34,7 @@ export default async function InspectionModulePage({ params, searchParams }: Pag
   const sp = await searchParams;
   const filters = readFilters(sp);
   const isDaily = mod.code === "insp_daily";
-  const staff = isDaily ? !!(await (await createClient()).rpc("is_ehs_staff")).data : false;
+  const staff = isDaily ? await canViewDailyOverview() : false; // 전체 현황 탭 : 환경설정 → 사용자·권한 '관리감독자 일일점검 전체 현황'
   const view = isDaily ? (DAILY_VIEWS.find((v) => v.key === sp.view && (v.key !== "overview" || staff))?.key ?? "mine") : "all";
 
   if (view === "overview") {

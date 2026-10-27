@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -882,6 +882,13 @@ const remN = (await one("select queue_daily_log_reminders($1) n", [remDay])).n;
 ok(remN >= 1 && (await one("select count(*)::int c from notifications where user_id=$1 and kind='reminder' and subject like '%일지 제출 마감%'", [U.W2])).c === 1, "마감일 미제출 관리감독자 알림");
 ok((await one("select queue_daily_log_reminders($1) n", [remDay])).n === 0, "같은 날 두 번 알리지 않음");
 ok((await one("select queue_daily_log_reminders(($1::date) - 1) n", [remDay])).n === 0, "마감 2일 전·당일이 아니면 알림 없음");
+
+console.log("\n[관리감독자 전체 현황 권한]");
+await as(U.W1); ok((await one("select perm_level('insp_daily_overview') l")).l === 0, "임직원 기본값은 없음 (권한 받은 사람만)");
+await as(U.A); ok((await one("select perm_level('insp_daily_overview') l")).l === 2, "관리자는 항상 볼 수 있음");
+await as(null); await db.query("insert into user_permissions values ($1,'insp_daily_overview','read')", [U.W1]);
+await as(U.W1); ok((await one("select perm_level('insp_daily_overview') l")).l === 1, "환경설정에서 열람 권한 주면 볼 수 있음");
+await as(null);
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);
