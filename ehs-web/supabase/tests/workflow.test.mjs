@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -997,6 +997,25 @@ await as(U.L3); await expectError("다른 파트 리더는 승인 불가", "sele
 await as(U.L2); await db.query("select approve_finding($1,'')", [c2F]); await as(null);
 ok((await one("select status from findings where id=$1", [c2F])).status === "closed", "C2 리더가 자기 파트 건 종결 승인");
 await as(U.A); await db.query("select set_department_roles($1,'{}','{}')", [PART.id]); await db.query("select set_department_roles($1,'{}','{}')", [P3]); await as(null);
+
+console.log("\n[퇴사 전 역할 확인·빼기]");
+{
+  const rid = (await one(`insert into auth.users values (gen_random_uuid()) returning id`)).id;
+  await db.query(`insert into profiles (id,email,name,site_id,department_id,user_type) values ($1,'r@test.kr','퇴사자',$2,$3,'employee')`, [rid, site, PROD]);
+  await as(U.A); await db.query("select set_department_roles($1,$2,$3)", [PROD, [U.S], [U.H, rid]]); await db.query("select set_department_roles($1,'{}',$2)", [PART.id, [rid]]); await as(null);
+  const rf = await reg("insp_plant", U.I, "퇴사자 담당 건");
+  const rfF = (await one("select id from findings where inspection_id=$1 order by seq desc limit 1", [rf])).id;
+  await as(U.S); await db.query("select assign_finding($1,$2)", [rfF, [rid]]); await as(null);
+  await as(U.W1); await expectError("관리자 아니면 조회 불가", "select * from user_responsibilities($1)", [rid], "관리자만"); await as(null);
+  await as(U.A);
+  const before = (await db.query("select * from user_responsibilities($1)", [rid])).rows;
+  ok(before.filter((r) => r.kind === "부서·결재자").length === 2 && before.some((r) => r.kind === "진행 중인 지적사항" && r.link === `/findings/${rfF}` && !r.releasable), "부서·파트 승인자 2건 + 진행 중인 지적사항 표시");
+  ok((await one("select release_user_roles($1) n", [rid])).n === 2, "역할 지정 한 번에 빼기");
+  const after = (await db.query("select * from user_responsibilities($1)", [rid])).rows;
+  ok(after.length === 1 && after[0].kind === "진행 중인 지적사항", "지적사항은 남겨 두고 다른 사람으로 바꾸도록 안내");
+  await as(null);
+  ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "부서장(첫 번째 승인자)은 그대로");
+}
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

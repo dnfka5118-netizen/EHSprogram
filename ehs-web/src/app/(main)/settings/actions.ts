@@ -165,6 +165,15 @@ export async function resetPassword(_prev: ActionState, fd: FormData): Promise<A
   return done(`비밀번호를 초기화했습니다: ${initialPassword()} (다음 로그인 시 변경 필요)`);
 }
 
+// 퇴사·사용 중지 : 부서 지정자·승인자 · 일일점검 구역 · 유해화학물질 점검자 · 점검 주기를 한 번에 뺌 (0038)
+export async function releaseUserRoles(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("release_user_roles", { p_user: s(fd, "id") });
+  if (error) return { error: toMessage(error) };
+  return done(`역할 지정 ${data ?? 0}건을 뺐습니다.`);
+}
+
 export async function savePermissions(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
   const id = s(fd, "id");

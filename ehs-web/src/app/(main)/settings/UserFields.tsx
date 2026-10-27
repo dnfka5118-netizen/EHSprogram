@@ -22,7 +22,8 @@ export function DeptOptions({ depts }: { depts: Department[] }) {
 }
 
 // 사용자 입력 항목 (사업장 선택에 따라 부서 목록이 바뀜)
-export function UserFields({ sites, departments, user }: { sites: Site[]; departments: Department[]; user?: Profile }) {
+// deactivateWarning : 사용 체크를 풀 때 보여 줄 확인 문구 (맡은 역할·진행 중인 건이 있을 때)
+export function UserFields({ sites, departments, user, deactivateWarning }: { sites: Site[]; departments: Department[]; user?: Profile; deactivateWarning?: string }) {
   const [siteId, setSiteId] = useState(user?.site_id ?? sites[0]?.id ?? "");
   const [type, setType] = useState(user?.user_type ?? "employee");
   const depts = departments.filter((d) => d.site_id === siteId);
@@ -71,7 +72,15 @@ export function UserFields({ sites, departments, user }: { sites: Site[]; depart
         </label>
         {user && (
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="is_active" defaultChecked={user.is_active} className="h-4 w-4" />
+            <input
+              type="checkbox"
+              name="is_active"
+              defaultChecked={user.is_active}
+              onChange={(e) => {
+                if (!e.currentTarget.checked && deactivateWarning && !window.confirm(deactivateWarning)) e.currentTarget.checked = true;
+              }}
+              className="h-4 w-4"
+            />
             사용
           </label>
         )}
