@@ -13,17 +13,20 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: myDepts }, { data: myAssigned }, { data: headOf }, { data: submittedLogs }] = await Promise.all([
+  const [{ data: myDepts }, { data: myAssigned }, { data: headOf }, { data: submittedLogs }, { data: myApprovals }] = await Promise.all([
     supabase.from("department_roles").select("department_id, role").eq("user_id", profile.id),
     supabase.from("finding_assignees").select("finding_id").eq("user_id", profile.id),
     supabase.from("departments").select("id").eq("approver_id", profile.id),
     // 관리감독자 월간 일지 : 부서장 승인 대기 (0029)
     supabase.from("daily_logs").select("id, ym, daily_areas!inner(department_id, departments(id, name, parent_id))").eq("status", "submitted"),
+    // 종결 승인 대기 중 내가 맡은 건 (승인자 담당 파트 기준, 0036)
+    supabase.rpc("my_approval_findings"),
   ]);
 
   const assignDeptIds = [...new Set((myDepts ?? []).map((d) => d.department_id as string))]; // 지정자·승인자 모두 담당자 지정 가능
   const approveDeptIds = (myDepts ?? []).filter((d) => d.role === "approver").map((d) => d.department_id as string);
   const assignedIds = (myAssigned ?? []).map((a) => a.finding_id);
+  const approveIds = ((myApprovals ?? []) as unknown as string[]).map(String);
   const headTeams = new Set([...approveDeptIds, ...(headOf ?? []).map((d) => d.id as string)]);
   type SubLog = { id: string; ym: string; daily_areas: { departments: { id: string; name: string; parent_id: string | null } | null } };
   const logGroups = new Map<string, { team: string; ym: string; n: number }>();
@@ -42,7 +45,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   const [toAssign, toApprove, mine] = await Promise.all([
     assignDeptIds.length ? q().eq("status", "assign_wait").in("request_department_id", assignDeptIds) : none,
-    approveDeptIds.length ? q().eq("status", "approval_wait").in("request_department_id", approveDeptIds) : none,
+    approveIds.length ? q().eq("status", "approval_wait").in("id", approveIds) : none,
     assignedIds.length ? q().in("status", ["plan_wait", "in_progress"]).in("id", assignedIds) : none,
   ]);
 
