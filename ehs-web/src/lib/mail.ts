@@ -23,6 +23,9 @@ function getTransporter() {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
+// 받는 사람 호칭 : "김형석 사원" (직위가 없으면 이름만) + 님
+export const mailName = (name: string, position?: string | null) => (position?.trim() ? `${name} ${position.trim()}` : name);
+
 export function renderMail(name: string, body: string, link: string | null) {
   const appUrl = process.env.APP_URL ?? "";
   const html = `<div style="font-family:'Malgun Gothic',sans-serif;max-width:560px;margin:0 auto;color:#1f2937">
@@ -52,13 +55,20 @@ export async function processOutbox(limit = 30): Promise<{ sent: number; failed:
     console.error("[mail] 대기열 조회 실패", error.message);
     return { sent: 0, failed: 0 };
   }
+  const claimed = (data ?? []) as Claimed[];
+  // 인사말에 직위를 붙이려고 받는 사람 직위를 한 번에 조회
+  const positions = new Map<string, string | null>();
+  if (claimed.length) {
+    const { data: ps } = await admin.from("profiles").select("email, position").in("email", [...new Set(claimed.map((n) => n.email))]);
+    for (const x of ps ?? []) positions.set(x.email as string, x.position as string | null);
+  }
   let sent = 0;
   let failed = 0;
-  for (const n of (data ?? []) as Claimed[]) {
+  for (const n of claimed) {
     const base = process.env.APP_URL ?? "";
     const path = n.link ?? (n.finding_id ? `/findings/${n.finding_id}` : "");
     const link = base ? `${base}${path}` : null;
-    const { html, text } = renderMail(n.name, n.body, link);
+    const { html, text } = renderMail(mailName(n.name, positions.get(n.email)), n.body, link);
     try {
       await sendMail(n.email, n.subject, html, text);
       await admin.rpc("finish_notification", { p_id: n.id, p_ok: true, p_error: null });

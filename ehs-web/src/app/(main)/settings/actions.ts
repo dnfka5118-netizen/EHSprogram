@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toMessage } from "@/lib/errors";
-import { mailConfigured, renderMail, sendMail } from "@/lib/mail";
+import { mailConfigured, mailName, renderMail, sendMail } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
 import { NOTIFY_KINDS, NOTIFY_MODES, NOTIFY_STAGES } from "@/lib/notify-kinds";
 
@@ -292,7 +292,7 @@ export async function saveType(_prev: ActionState, fd: FormData): Promise<Action
 export async function sendTestMail(): Promise<ActionState> {
   const me = await requireAdmin();
   if (!mailConfigured()) return { error: "SMTP 설정이 없습니다. 환경변수를 확인해 주세요." };
-  const { html, text } = renderMail(me.name, "스마트 시스템 통합관리 메일 발송 테스트입니다.\n이 메일이 보이면 알림 설정이 정상입니다.", process.env.APP_URL ?? null);
+  const { html, text } = renderMail(mailName(me.name, me.position), "스마트 시스템 통합관리 메일 발송 테스트입니다.\n이 메일이 보이면 알림 설정이 정상입니다.", process.env.APP_URL ?? null);
   try {
     await sendMail(me.email, "[EHS] 메일 발송 테스트", html, text);
     return { ok: true, message: `${me.email} 로 테스트 메일을 보냈습니다.` };
