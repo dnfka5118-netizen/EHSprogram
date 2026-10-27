@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
 import { getModuleAccess } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ export default async function DomainHome({ params }: PageProps<"/ehs/[domain]">)
   if (!["env", "health", "safety"].includes(key)) notFound();
   const me = await requireProfile();
   const domain = filterMenu(await getModuleAccess(), me.is_admin).find((d) => d.key === (key as DomainKey))!;
+  if (domain.disabled) redirect("/ehs/safety"); // 사용 안 하는 분야
   const supabase = await createClient();
 
   const kpis: Kpi[] = [];

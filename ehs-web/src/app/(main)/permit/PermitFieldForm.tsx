@@ -7,7 +7,7 @@ import { SignaturePad } from "@/components/SignaturePad";
 import { Button, FormMessage } from "@/components/ui";
 import { SIG, rid, requiredSigs, type PermitApply, type PermitField, type SigKey } from "@/lib/permit";
 import type { ActionState } from "@/lib/types";
-import { CheckList, F, Hint, INPUT, Panel, Pill, Sub } from "./ui";
+import { CHECK_GRID, CheckList, F, Hint, INPUT, Panel, Pill, Sub } from "./ui";
 
 // 발급된 허가서의 현장 기록 : ○ 확인 · 서명 · 연장/중단 · 작업완료 · 가스측정 · 밀폐 출입 · 작업자 확인서명
 export function PermitFieldForm({ id, permit, initial, savedAt, readOnly }: { id: string; permit: PermitApply; initial: PermitField; savedAt: string | null; readOnly: boolean }) {
@@ -58,18 +58,20 @@ export function PermitFieldForm({ id, permit, initial, savedAt, readOnly }: { id
       <Panel num="02" title="작업 전 확인사항 — 현장 조치 확인" sub="필요로 표시된 항목이 현장에 적용되었는지 ○ 확인" tone="warn">
         <Sub title="확인 서류">
           <CheckList group="docs" need={need} ok={f.checks_ok} onOk={setOk} mode={edit ? "field" : "view"} />
-          {(["docs_proc", "docs_risk"] as const)
-            .filter((k) => need[k])
-            .map((k) => (
-              <div key={k} className="flex flex-wrap items-center gap-1.5">
-                <span className="min-w-44 flex-1">
-                  <Pill checked disabled>
-                    {k === "docs_proc" ? `작업절차서 (${permit.fields.proc_no || "-"})` : `위험성평가서 (${permit.fields.risk_no || "-"})`}
-                  </Pill>
-                </span>
-                <Pill checked={!!f.checks_ok[`${k}_ok`]} onChange={(v) => setOk(`${k}_ok`, v)} disabled={!edit} tone="ok">○ 확인</Pill>
-              </div>
-            ))}
+          {(need.docs_proc || need.docs_risk) && (
+            <div className={CHECK_GRID}>
+              {(["docs_proc", "docs_risk"] as const)
+                .filter((k) => need[k])
+                .map((k) => (
+                  <div key={k} className="flex items-center gap-1.5">
+                    <Pill checked disabled className="min-w-0 flex-1 self-stretch">
+                      {k === "docs_proc" ? `작업절차서 (${permit.fields.proc_no || "-"})` : `위험성평가서 (${permit.fields.risk_no || "-"})`}
+                    </Pill>
+                    <Pill checked={!!f.checks_ok[`${k}_ok`]} onChange={(v) => setOk(`${k}_ok`, v)} disabled={!edit} tone="ok" className="shrink-0">○ 확인</Pill>
+                  </div>
+                ))}
+            </div>
+          )}
         </Sub>
         <Sub title="안전보호구">
           <CheckList group="ppe" need={need} ok={f.checks_ok} onOk={setOk} mode={edit ? "field" : "view"} />

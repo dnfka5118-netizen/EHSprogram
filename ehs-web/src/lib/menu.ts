@@ -6,7 +6,7 @@ export type GroupKey = "plan" | "inspect" | "measure" | "work" | "edu" | "accide
 
 export type MenuItem = { label: string; href?: string; module?: string; match?: string[]; exclude?: string[]; adminOnly?: boolean }; // exclude : 이 경로는 다른 메뉴
 export type MenuSection = { key: GroupKey; label: string; items: MenuItem[] };
-export type Domain = { key: DomainKey; label: string; short: string; home: string; sections: MenuSection[] };
+export type Domain = { key: DomainKey; label: string; short: string; home: string; disabled?: boolean; sections: MenuSection[] }; // disabled : 상단 탭만 흐리게 보이고 들어갈 수 없음
 
 // 세 분야가 같은 이름·순서의 묶음을 쓴다
 export const GROUP_LABEL: Record<Exclude<GroupKey, "common">, string> = {
@@ -25,6 +25,7 @@ export const DOMAINS: Domain[] = [
     label: "환경",
     short: "E",
     home: "/ehs/env",
+    disabled: true, // 아직 기능 없음
     sections: [
       g("plan", [{ label: "환경 인허가 관리" }, { label: "환경법규 등록부" }, { label: "환경목표·추진계획" }]),
       g("inspect", [{ label: "배출시설 자체점검" }, { label: "유해화학물질 자체점검", href: "/insp/chem", module: "insp_chem" }, { label: "환경 순회점검" }]),
@@ -39,6 +40,7 @@ export const DOMAINS: Domain[] = [
     label: "보건",
     short: "H",
     home: "/ehs/health",
+    disabled: true, // 아직 기능 없음
     sections: [
       g("plan", [{ label: "보건관리계획" }, { label: "보건 법규 등록부" }]),
       g("inspect", [{ label: "작업환경 점검" }, { label: "보호구 지급·점검" }]),
@@ -123,6 +125,7 @@ export function matches(pathname: string, search: string, i: MenuItem): boolean 
 
 export function findDomain(domains: Domain[], pathname: string, search: string): DomainKey | null {
   for (const d of domains) {
+    if (d.disabled) continue;
     if (d.home !== "/" && (pathname === d.home || pathname.startsWith(`${d.home}/`))) return d.key;
     if (d.sections.some((s) => s.items.some((i) => matches(pathname, search, i)))) return d.key;
   }

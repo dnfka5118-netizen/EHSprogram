@@ -34,10 +34,11 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
 
   // 지금 보는 분야 : 분야 메뉴면 그 분야, 공통 화면이면 마지막으로 보던 분야 유지
   const pathDomain = findDomain(domains, pathname, search);
-  const current: DomainKey = pathDomain && pathDomain !== "common" ? pathDomain : lastDomain && FIELD_DOMAINS.includes(lastDomain) ? lastDomain : "safety";
+  const usable = useMemo(() => domains.filter((d) => !d.disabled), [domains]); // 사용 안 하는 분야(환경·보건)는 탭만 흐리게
+  const current: DomainKey = pathDomain && pathDomain !== "common" ? pathDomain : lastDomain && FIELD_DOMAINS.includes(lastDomain) && usable.some((d) => d.key === lastDomain) ? lastDomain : "safety";
   const domain = domains.find((d) => d.key === current)!;
   const common = domains.find((d) => d.key === "common")!;
-  const allItems = useMemo(() => domains.flatMap((d) => d.sections.flatMap((s) => s.items.map((i) => ({ ...i, domain: d.label })))), [domains]);
+  const allItems = useMemo(() => usable.flatMap((d) => d.sections.flatMap((s) => s.items.map((i) => ({ ...i, domain: d.label })))), [usable]);
   const activeItem = allItems.find((i) => matches(pathname, search, i));
 
   // 분야·최근 사용 기억
@@ -154,11 +155,17 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
         <div className="grid grid-cols-3 gap-1 lg:hidden">
           {domains
             .filter((d) => d.key !== "common")
-            .map((d) => (
-              <Link key={d.key} href={d.home} onClick={afterNav} className={`rounded py-1 text-center text-xs ${d.key === current ? "bg-white font-bold text-brand-900" : "bg-white/10"}`}>
-                {d.label}({d.short})
-              </Link>
-            ))}
+            .map((d) =>
+              d.disabled ? (
+                <span key={d.key} className="cursor-not-allowed rounded bg-white/5 py-1 text-center text-xs text-white/30" title="사용 안 함">
+                  {d.label}({d.short})
+                </span>
+              ) : (
+                <Link key={d.key} href={d.home} onClick={afterNav} className={`rounded py-1 text-center text-xs ${d.key === current ? "bg-white font-bold text-brand-900" : "bg-white/10"}`}>
+                  {d.label}({d.short})
+                </Link>
+              ),
+            )}
         </div>
       </div>
 
@@ -228,11 +235,17 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
       <span className="my-1 h-px w-8 shrink-0 bg-white/15" />
       {domains
         .filter((d) => d.key !== "common")
-        .map((d) => (
-          <Link key={d.key} href={d.home} className={`${railBtn} text-sm font-bold ${d.key === current ? "bg-white text-brand-900" : "text-white/70"}`} title={`${d.label}(${d.short})`}>
-            {d.short}
-          </Link>
-        ))}
+        .map((d) =>
+          d.disabled ? (
+            <span key={d.key} className={`${railBtn} cursor-not-allowed text-sm font-bold text-white/25 hover:bg-transparent`} title={`${d.label}(${d.short}) — 사용 안 함`}>
+              {d.short}
+            </span>
+          ) : (
+            <Link key={d.key} href={d.home} className={`${railBtn} text-sm font-bold ${d.key === current ? "bg-white text-brand-900" : "text-white/70"}`} title={`${d.label}(${d.short})`}>
+              {d.short}
+            </Link>
+          ),
+        )}
       <span className="my-1 h-px w-8 shrink-0 bg-white/15" />
       {domain.sections.map((s) => {
         const active = s.items.some((i) => matches(pathname, search, i));
@@ -274,6 +287,13 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
         {/* 분야 탭 */}
         <nav className="hidden h-full items-stretch lg:flex">
           {domains.map((d) => {
+            if (d.disabled)
+              return (
+                <span key={d.key} className="flex cursor-not-allowed items-center gap-1.5 border-b-[3px] border-transparent px-5 text-[15px] text-gray-300" title="사용 안 함 (기능 준비 중)">
+                  <span className="flex h-6 w-6 items-center justify-center rounded bg-gray-50 text-xs font-bold text-gray-300">{d.short}</span>
+                  {d.label}
+                </span>
+              );
             const active = d.key === (pathDomain === "common" ? "common" : current);
             return (
               <Link
@@ -322,7 +342,7 @@ export function AppShell({ user, domains, favorites: savedFavorites, approvalCou
         </div>
       )}
 
-      <MenuSearch domains={domains} open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <MenuSearch domains={usable} open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <div className="pt-16 pl-[var(--sidebar-w)] transition-[padding] duration-200">
         <main className="p-3 sm:p-4 lg:p-6">{children}</main>

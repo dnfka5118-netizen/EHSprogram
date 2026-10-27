@@ -223,33 +223,31 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
         </p>
         <Sub title="확인 서류">
           <CheckList group="docs" need={p.checks} ok={{}} onNeed={setCheck} mode="apply" />
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Pill checked={!!p.checks.docs_proc} onChange={(v) => setCheck("docs_proc", v)}>작업절차서 필요</Pill>
-              <input className={`${INPUT} font-mono`} value={p.fields.proc_no} onChange={(e) => setField("proc_no", e.target.value)} placeholder="※번호 예) WP-R201-07" />
+          <div className="grid gap-1.5 md:grid-cols-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Pill checked={!!p.checks.docs_proc} onChange={(v) => setCheck("docs_proc", v)} className="shrink-0">작업절차서 필요</Pill>
+              <input className={`${INPUT} min-w-0 flex-1 basis-40 font-mono`} value={p.fields.proc_no} onChange={(e) => setField("proc_no", e.target.value)} placeholder="※번호 예) WP-R201-07" />
             </div>
-            <div className="space-y-1.5">
-              <Pill checked={!!p.checks.docs_risk} onChange={(v) => setCheck("docs_risk", v)}>위험성평가서 필요</Pill>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Pill checked={!!p.checks.docs_risk} onChange={(v) => setCheck("docs_risk", v)} className="shrink-0">위험성평가서 필요</Pill>
               <input
-                className={`${INPUT} font-mono`}
+                className={`${INPUT} min-w-0 flex-1 basis-40 font-mono`}
                 value={linked ? linked.eval_no : p.fields.risk_no}
                 readOnly={!!linked}
                 onChange={(e) => setField("risk_no", e.target.value)}
                 placeholder="※번호 예) RA-2026-114"
               />
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" className="px-2.5 py-1 text-xs" onClick={() => setPickerOpen(true)}>
-                  🔗 위험성평가 불러오기
-                </Button>
-                {linked && (
-                  <button type="button" className="text-xs text-gray-500 hover:text-red-600" onClick={() => set({ risk_eval_id: "" })}>
-                    연동 해제
-                  </button>
-                )}
-              </div>
-              {linked && <p className="text-xs text-emerald-700">✓ 위험성평가({linked.eval_no})와 연동됨 — 허가서 인쇄 시 함께 출력됩니다.</p>}
+              <Button variant="secondary" className="shrink-0 px-2.5 py-1.5 text-xs" onClick={() => setPickerOpen(true)}>
+                🔗 불러오기
+              </Button>
+              {linked && (
+                <button type="button" className="shrink-0 text-xs text-gray-500 hover:text-red-600" onClick={() => set({ risk_eval_id: "" })}>
+                  연동 해제
+                </button>
+              )}
             </div>
           </div>
+          {linked && <p className="text-xs text-emerald-700">✓ 위험성평가({linked.eval_no})와 연동됨 — 허가서 인쇄 시 함께 출력됩니다.</p>}
           <Hint>절차서가 마련되어 있으면 위험성평가를 생략할 수 있으나, 없는 경우 반드시 작업 전 위험성평가를 실시해야 합니다(절차 6.2라).</Hint>
         </Sub>
         <Sub title="안전보호구">

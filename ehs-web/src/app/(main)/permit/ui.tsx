@@ -49,11 +49,11 @@ export function Hint({ children }: { children: ReactNode }) {
   return <p className="text-xs leading-relaxed text-gray-500">{children}</p>;
 }
 
-export function Pill({ checked, onChange, children, disabled, tone }: { checked: boolean; onChange?: (v: boolean) => void; children: ReactNode; disabled?: boolean; tone?: "ok" }) {
+export function Pill({ checked, onChange, children, disabled, tone, className = "" }: { checked: boolean; onChange?: (v: boolean) => void; children: ReactNode; disabled?: boolean; tone?: "ok"; className?: string }) {
   const on = tone === "ok" ? "border-emerald-600 bg-emerald-600 text-white" : "border-brand-600 bg-brand-50 font-semibold text-brand-800";
   const off = tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-300 bg-gray-50 text-gray-700";
   return (
-    <label className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs select-none ${checked ? on : off} ${disabled ? "cursor-default opacity-80" : "cursor-pointer"}`}>
+    <label className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs select-none ${checked ? on : off} ${disabled ? "cursor-default opacity-80" : "cursor-pointer"} ${className}`}>
       <input type="checkbox" className="h-3.5 w-3.5" checked={checked} disabled={disabled} onChange={(e) => onChange?.(e.target.checked)} />
       {children}
     </label>
@@ -61,6 +61,8 @@ export function Pill({ checked, onChange, children, disabled, tone }: { checked:
 }
 
 // 체크 항목 목록 : need = 필요 체크(신청), ok = ○ 확인(현장), 단일 체크 그룹은 ok 로만
+//   여백을 줄이려고 화면 폭에 따라 1~4칸 바둑판으로 배치 (휴대폰 1칸)
+export const CHECK_GRID = "grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3";
 export function CheckList({ group, need, ok, onNeed, onOk, mode }: {
   group: ChkGroup;
   need: Record<string, boolean>;
@@ -70,7 +72,7 @@ export function CheckList({ group, need, ok, onNeed, onOk, mode }: {
   mode: "apply" | "field" | "view" | "single";
 }) {
   return (
-    <div className={mode === "single" ? "grid grid-cols-1 gap-1.5 sm:grid-cols-2" : "flex flex-col gap-1.5"}>
+    <div className={mode === "apply" ? `${CHECK_GRID} xl:grid-cols-4` : CHECK_GRID}>
       {CHK[group].map((label, i) => {
         const key = `${group}_${i}`;
         if (mode === "single") {
@@ -81,14 +83,12 @@ export function CheckList({ group, need, ok, onNeed, onOk, mode }: {
           );
         }
         return (
-          <div key={key} className="flex flex-wrap items-center gap-1.5">
-            <span className="min-w-44 flex-1">
-              <Pill checked={!!need[key]} onChange={(v) => onNeed?.(key, v)} disabled={mode !== "apply"}>
-                {label}
-              </Pill>
-            </span>
+          <div key={key} className="flex items-center gap-1.5">
+            <Pill checked={!!need[key]} onChange={(v) => onNeed?.(key, v)} disabled={mode !== "apply"} className="min-w-0 flex-1 self-stretch">
+              {label}
+            </Pill>
             {mode !== "apply" && need[key] && (
-              <Pill checked={!!ok[`${key}_ok`]} onChange={(v) => onOk?.(`${key}_ok`, v)} disabled={mode !== "field"} tone="ok">
+              <Pill checked={!!ok[`${key}_ok`]} onChange={(v) => onOk?.(`${key}_ok`, v)} disabled={mode !== "field"} tone="ok" className="shrink-0">
                 ○ 확인
               </Pill>
             )}
