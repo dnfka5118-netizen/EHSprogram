@@ -13,6 +13,7 @@ const STATUS: Record<string, string> = {
   sent: "발송",
   failed: "실패",
   expired: "만료",
+  digested: "아침 메일에 포함",
 };
 
 export default async function MailPage() {

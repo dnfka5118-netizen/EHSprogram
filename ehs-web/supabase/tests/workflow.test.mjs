@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -180,6 +180,8 @@ ok(got("directive") === "생산팀장,작업자1", "지시사항 → 조치담�
 ok(!mails.some((m) => m.name === "관리자"), "본인 행동(지시 등록)은 본인에게 알리지 않음");
 const sample = await one(`select subject, body from notifications where kind='assigned' limit 1`);
 ok(sample.subject.includes("CEO 안전점검 #1 (26.09)") && sample.body.includes("HBC-C2 / PLP"), "메일 제목·본문 내용");
+const mailDefault = (await one("select mail_immediate() m")).m; // 0032 기본 : 아침에 모아서
+await db.query("update app_settings set value='{\"immediate\": true}' where key='mail'"); // 이 부분은 바로 보내기로 시험
 const claimed = (await db.query(`select * from claim_notifications(5)`)).rows;
 ok(claimed.length === 5 && claimed[0].email.endsWith("@test.kr"), "발송기 대기열 가져오기 (5건)");
 await db.query(`select finish_notification($1,true,null)`, [claimed[0].id]);
@@ -889,6 +891,27 @@ await as(U.A); ok((await one("select perm_level('insp_daily_overview') l")).l ==
 await as(null); await db.query("insert into user_permissions values ($1,'insp_daily_overview','read')", [U.W1]);
 await as(U.W1); ok((await one("select perm_level('insp_daily_overview') l")).l === 1, "환경설정에서 열람 권한 주면 볼 수 있음");
 await as(null);
+
+console.log("\n[알림 메일 : 매일 아침 한 번에]");
+await db.query("update notifications set status='sent' where status in ('pending','failed')");
+const evId = (await one("insert into notifications (user_id, kind, subject, body) values ($1,'assign','[EHS] 조치담당자로 지정되었습니다 : 시험','본문') returning id", [U.W2])).id;
+await db.query("insert into notifications (user_id, kind, subject, body) values ($1,'approval_request','[EHS] 결재 요청 : 시험','본문')", [U.W2]);
+ok(mailDefault === false, "기본은 바로 보내지 않음 (매일 아침 한 번에)");
+await db.query("update app_settings set value='{\"immediate\": false}' where key='mail'");
+ok((await db.query("select * from claim_notifications(50)")).rows.length === 0, "단계별 알림은 바로 꺼내 가지 않음 (대기)");
+const bizMon = "2026-11-02"; // 월요일
+ok((await one("select queue_event_digest($1) n", [bizMon])).n === 1, "아침 메일 : 사람마다 한 통");
+ok((await one("select status from notifications where id=$1", [evId])).status === "digested", "원래 알림은 아침 메일에 들어감 표시");
+const dg = await one("select subject, body from notifications where user_id=$1 and kind='digest'", [U.W2]);
+ok(dg.subject.includes("새 알림 2건") && dg.body.includes("조치담당자로 지정되었습니다 : 시험") && dg.body.includes("결재 요청 : 시험"), "아침 메일 내용 : 새 알림 목록");
+const cl = (await db.query("select * from claim_notifications(50)")).rows;
+ok(cl.length === 1 && cl[0].subject.includes("오늘의 알림"), "아침 메일만 발송 대기열에서 꺼냄");
+ok((await one("select queue_event_digest('2026-11-01') n")).n === 0, "휴일(일요일)에는 모으지 않음");
+await db.query("insert into app_settings (key, value) values ('mail','{\"immediate\": true}') on conflict (key) do update set value=excluded.value");
+await db.query("insert into notifications (user_id, kind, subject, body) values ($1,'assign','[EHS] 바로','본문')", [U.W2]);
+ok((await db.query("select * from claim_notifications(50)")).rows.some((r) => r.subject === "[EHS] 바로"), "바로 보내기로 바꾸면 즉시 발송");
+ok((await one("select queue_event_digest($1) n", [bizMon])).n === 0, "바로 보내기일 때는 아침에 모으지 않음");
+await db.query("update app_settings set value='{\"immediate\": false}' where key='mail'");
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
 process.exit(fail ? 1 : 0);

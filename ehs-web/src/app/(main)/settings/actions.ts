@@ -342,6 +342,14 @@ export async function saveReminderSettings(_prev: ActionState, fd: FormData): Pr
   return error ? { error: toMessage(error) } : done();
 }
 
+// 알림 메일 보내는 방식 : 매일 아침 한 번에(기본) / 일어나면 바로 (0032)
+export async function saveMailMode(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from("app_settings").upsert({ key: "mail", value: { immediate: fd.get("immediate") === "1" }, updated_at: new Date().toISOString() });
+  return error ? { error: toMessage(error) } : done();
+}
+
 export async function saveHoliday(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
   const supabase = await createClient();

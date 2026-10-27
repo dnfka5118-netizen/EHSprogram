@@ -4,7 +4,7 @@ import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
 import { ScrollX } from "@/components/ScrollX";
 import { fmtDate, todayKst } from "@/lib/format";
-import { saveHoliday, saveReminderSettings } from "../actions";
+import { saveHoliday, saveMailMode, saveReminderSettings } from "../actions";
 
 const STAGE: Record<string, { label: string; cls: string }> = {
   assign: { label: "담당자 미지정", cls: "bg-amber-100 text-amber-800" },
@@ -33,12 +33,14 @@ type PreviewRow = { stage: string; user_id: string; user_name: string; finding_i
 export default async function RemindersPage() {
   const supabase = await createClient();
   const year = Number(todayKst().slice(0, 4));
-  const [{ data: setting }, { data: holidays }, { data: preview, error: pErr }, { data: log }] = await Promise.all([
+  const [{ data: setting }, { data: holidays }, { data: preview, error: pErr }, { data: log }, { data: mailSet }] = await Promise.all([
     supabase.from("app_settings").select("value").eq("key", "reminder").maybeSingle(),
     supabase.from("holidays").select("day, name").gte("day", `${year - 1}-01-01`).order("day"),
     supabase.rpc("preview_reminders"),
     supabase.from("reminder_log").select("id, sent_on, stage, target_date, finding_id, profiles(name)").order("id", { ascending: false }).limit(100),
+    supabase.from("app_settings").select("value").eq("key", "mail").maybeSingle(),
   ]);
+  const immediate = !!(mailSet?.value as { immediate?: boolean } | undefined)?.immediate;
   const v = (setting?.value ?? {}) as Record<string, number>;
   const previewRows = (preview ?? []) as PreviewRow[];
   const groups = new Map<string, PreviewRow[]>();
@@ -48,6 +50,28 @@ export default async function RemindersPage() {
 
   return (
     <div className="space-y-4">
+      <Card title="알림 메일 보내는 방식">
+        <ActionForm action={saveMailMode} className="space-y-2">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="immediate" value="0" defaultChecked={!immediate} className="mt-1" />
+            <span>
+              <b>매일 아침 8시에 한 번에 (권장)</b>
+              <span className="block text-xs break-keep text-gray-500">
+                지적사항 등록·담당자 지정·완료 보고·결재 요청·게시판·일지 제출 등 새로 온 알림을 바로 보내지 않고, 영업일 아침 8시에 아래 &apos;처리 늦어진 건&apos;과 함께 사람마다 한 통으로 보냅니다. 프로그램의 &apos;내 할 일&apos;에는 바로 보입니다.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="immediate" value="1" defaultChecked={immediate} className="mt-1" />
+            <span>
+              <b>일어나면 바로</b>
+              <span className="block text-xs break-keep text-gray-500">건마다 바로 메일이 갑니다 (점검 한 번에 지적사항이 많으면 메일도 많아집니다).</span>
+            </span>
+          </label>
+          <SubmitButton>저장</SubmitButton>
+        </ActionForm>
+      </Card>
+
       <Card title="단계별 알림 기준 (영업일)">
         <p className="mb-3 text-sm break-keep text-gray-600">
           매일 아침 8시(영업일만)에 아래 기준을 넘긴 건을 <b>사람마다 한 통</b>으로 모아 이메일로 보냅니다. 토·일요일과 아래 공휴일은 영업일에서 빠집니다.
