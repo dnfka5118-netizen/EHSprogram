@@ -42,7 +42,6 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos, onDone 
       if (c.done === false && m.target_date < today && !c.newDate)
         return setState({ error: `${MEASURE_LABEL[m.kind]}의 목표일이 지났습니다. 새 목표일을 입력해 주세요.` });
     }
-    if (allDone && !hasAfterPhotos && photos.length === 0) return setState({ error: "개선 후 사진을 1장 이상 등록해 주세요." });
     if (anyIncomplete && (!reason.trim() || !progress.trim())) return setState({ error: "미완료 이유와 진행현황을 입력해 주세요." });
 
     start(async () => {
@@ -123,7 +122,7 @@ export function ReportForm({ findingId, measures, today, hasAfterPhotos, onDone 
       </ul>
 
       <div className="mt-4">
-        <Field label="개선 후 사진" required={allDone && !hasAfterPhotos} hint={hasAfterPhotos ? "이미 등록된 사진이 있습니다" : "모두 완료면 필수"}>
+        <Field label="개선 후 사진" hint={hasAfterPhotos ? "이미 등록된 사진이 있습니다" : "선택 · 사진이 필요 없는 조치는 생략"}>
           <PhotoPicker photos={photos} onChange={setPhotos} />
         </Field>
       </div>

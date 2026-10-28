@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -122,9 +122,9 @@ await expectError("기한 지난 조치 새 목표일 필수", `select report_pr
 await expectError("과거 날짜로 재수립 차단", `select report_progress($1,$2,'a','b',null)`, [fid, items({ long: [false, "2020-01-01"] })], "오늘 이후");
 await as(U.Q); await expectError("다른 부서원은 완료 처리 불가", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "부서원만");
 await as(U.C); await expectError("같은 부서라도 협력업체는 완료 처리 불가", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "부서원만");
-await as(U.W2); await expectError("조치 요청 부서원은 담당자가 아니어도 완료 처리 가능 (사진 검사까지 통과)", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "사진");
+await as(U.W2); await expectError("조치 요청 부서원은 담당자가 아니어도 완료 처리 가능 (권한 검사 통과)", `select report_progress($1,$2,'a','b',null)`, [fid, items({ long: [false] })], "다시 정해야");
 await as(U.W1);
-await expectError("전부 완료인데 개선 후 사진 없음", `select report_progress($1,$2,'','',null)`, [fid, items({ short: [true], long: [true] })], "사진");
+await expectError("일부 조치 오류", `select report_progress($1,$2,'a','b',null)`, [fid, items({ short: [true], long: [false] })], "다시 정해야");
 ok((await one(`select is_done from finding_measures where id=$1`, [M.short])).is_done === false, "오류 시 완료 처리 롤백");
 ok((await one(`select report_progress($1,$2,'','완료',array[$3]) r`, [fid, items({ short: [true], long: [true] }), `${fid}/after-1.jpg`])).r === "approval_wait", "완료 보고 → 승인 대기");
 
@@ -1015,6 +1015,17 @@ console.log("\n[퇴사 전 역할 확인·빼기]");
   ok(after.length === 1 && after[0].kind === "진행 중인 지적사항", "지적사항은 남겨 두고 다른 사람으로 바꾸도록 안내");
   await as(null);
   ok((await one("select approver_id from departments where id=$1", [PROD])).approver_id === U.H, "부서장(첫 번째 승인자)은 그대로");
+}
+
+console.log("\n[개선 후 사진 없이 완료 처리]");
+{
+  const np = await reg("insp_plant", U.I, "사진 필요 없는 조치");
+  const npF = (await one("select id from findings where inspection_id=$1 order by seq desc limit 1", [np])).id;
+  await as(U.S); await db.query("select assign_finding($1,$2)", [npF, [U.W1]]);
+  await as(U.W1); await db.query("select save_plan($1,$2)", [npF, JSON.stringify([{ kind: "immediate", content: "교육 실시", target_date: today }])]);
+  const npM = (await one("select id from finding_measures where finding_id=$1", [npF])).id;
+  ok((await one("select report_progress($1,$2,'','교육 완료',null) r", [npF, JSON.stringify([{ measure_id: npM, done: true }])])).r === "approval_wait", "개선 후 사진 없이 완료 보고 → 승인 대기");
+  await as(null);
 }
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
