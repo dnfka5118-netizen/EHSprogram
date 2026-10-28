@@ -56,7 +56,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
     .sort((a, b) => Number(b.is_overdue) - Number(a.is_overdue) || (a.next_due ?? "").localeCompare(b.next_due ?? ""));
 
   const [assignRows, planRows, doingRows, approveRows] = await Promise.all(
-    [(toAssign.data ?? []) as FindingOverview[], toPlan, doing, (toApprove.data ?? []) as FindingOverview[]].map((list) => enrichFindings(supabase, list)),
+    [(toAssign.data ?? []) as FindingOverview[], toPlan, doing, (toApprove.data ?? []) as FindingOverview[]].map((list) => enrichFindings(supabase, list, approveIds)),
   );
 
   const sections = [

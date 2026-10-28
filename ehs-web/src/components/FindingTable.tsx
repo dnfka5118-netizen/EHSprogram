@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { PAGE_SIZES, type Paging } from "@/lib/paging";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { approveFinding, approveFindings, assignFinding, getAssignOptions, rejectFinding, selfAssignFinding } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
@@ -19,15 +20,27 @@ const short = (d: string) => d.slice(2).replaceAll("-", ".");
 
 // 현황표 : 행 어디를 눌러도 상세로 이동, "미완료" → 미완료 이유 팝업, 조치 담당자 칸 "담당자 지정" → 지정 팝업, 개선 계획 칸 "조치계획 작성" → 계획 팝업
 // bulkApprove : 승인할 수 있는 행에 체크 칸 + "선택 일괄 승인" (내 할 일의 종결 승인 필요)
-export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; bulkApprove?: boolean; empty?: string }) {
+// server : 서버가 이미 한 쪽만 가져온 경우 (점검 현황 · 부서별 현황) — 쪽 이동은 주소(?page=&size=)를 바꿔 다시 조회
+export function FindingTable({ rows, showModule, bulkApprove, server, empty = "해당 항목이 없습니다." }: { rows: FindingRow[]; showModule?: boolean; bulkApprove?: boolean; server?: { total: number } & Paging; empty?: string }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const go = (patch: Record<string, string | null>) => {
+    const q = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) q.delete(k);
+      else q.set(k, v);
+    }
+    router.push(`${pathname}?${q}`, { scroll: false });
+  };
   // 페이지 나누기 : 10/20/50/100개씩 (고른 개수는 브라우저에 기억)
   const stored = Number(useStored(KEYS.pageSize));
-  const size = PAGE_SIZES.includes(stored) ? stored : 20;
+  const size = server ? server.size : PAGE_SIZES.includes(stored) ? stored : 20;
   const [pageRaw, setPage] = useState(1);
-  const pages = Math.max(1, Math.ceil(rows.length / size));
-  const page = Math.min(pageRaw, pages);
-  const view = rows.slice((page - 1) * size, page * size);
+  const total = server ? server.total : rows.length;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const page = Math.min(server ? server.page : pageRaw, pages);
+  const view = server ? rows : rows.slice((page - 1) * size, page * size);
   const approvable = bulkApprove ? rows.filter((r) => r.canApprove).map((r) => r.id) : [];
   const [picked, setPicked] = useState<string[]>([]);
   const [bulkMsg, setBulkMsg] = useState<{ ok?: boolean; text: string } | null>(null);
@@ -94,7 +107,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
     setPopup(r);
   };
 
-  if (rows.length === 0) return <p className="py-8 text-center text-sm text-gray-500">{empty}</p>;
+  if (rows.length === 0 && !(server && server.total > 0)) return <p className="py-8 text-center text-sm text-gray-500">{empty}</p>;
 
   return (
     <>
@@ -259,7 +272,14 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
         </table>
       </ScrollX>
 
-      <Pager total={rows.length} page={page} pages={pages} size={size} onPage={setPage} onSize={(n) => (write(KEYS.pageSize, String(n)), setPage(1))} />
+      <Pager
+        total={total}
+        page={page}
+        pages={pages}
+        size={size}
+        onPage={server ? (p) => go({ page: String(p) }) : setPage}
+        onSize={(n) => (write(KEYS.pageSize, String(n)), server ? go({ size: String(n), page: null }) : setPage(1))}
+      />
 
       {popup && <ReasonPopup row={popup} onClose={() => setPopup(null)} />}
       {assign && <AssignPopup row={assign} onClose={closeAssign} />}
@@ -829,7 +849,6 @@ function AssignPopup({ row, onClose }: { row: FindingRow; onClose: () => void })
   );
 }
 
-const PAGE_SIZES = [10, 20, 50, 100];
 
 function Pager({ total, page, pages, size, onPage, onSize }: { total: number; page: number; pages: number; size: number; onPage: (p: number) => void; onSize: (n: number) => void }) {
   const from = total ? (page - 1) * size + 1 : 0;

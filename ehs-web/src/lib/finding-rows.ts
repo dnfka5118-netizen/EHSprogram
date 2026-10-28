@@ -57,14 +57,16 @@ const PHOTOS_PER_KIND = 2;
 const byTime = (a: { created_at: string }, b: { created_at: string }) => a.created_at.localeCompare(b.created_at);
 
 // FINDING_ROW_SELECT 로 받은 행 → 현황 표 데이터 (추가 왕복은 사진 서명 URL 1번뿐)
-export async function enrichFindings(supabase: SupabaseClient, findings: FindingOverview[]): Promise<FindingRow[]> {
+// approveIds : 호출한 쪽이 이미 my_approval_findings 를 조회했으면 넘겨서 다시 묻지 않음 (내 할 일)
+export async function enrichFindings(supabase: SupabaseClient, findings: FindingOverview[], approveIds?: string[]): Promise<FindingRow[]> {
   if (findings.length === 0) return [];
   const rows = findings as Embedded[];
   const today = todayKst();
   const me = await getProfile();
   // 파트 종결 승인자(파트 리더)가 승인할 건 (0037) — 승인 대기 건이 있을 때만 조회
   const partApprove = new Set<string>();
-  if (me && !me.is_admin && rows.some((f) => f.status === "approval_wait")) {
+  if (approveIds) approveIds.forEach((x) => partApprove.add(x));
+  else if (me && !me.is_admin && rows.some((f) => f.status === "approval_wait")) {
     const { data } = await supabase.rpc("my_approval_findings");
     for (const x of (data ?? []) as unknown as string[]) partApprove.add(String(x));
   }

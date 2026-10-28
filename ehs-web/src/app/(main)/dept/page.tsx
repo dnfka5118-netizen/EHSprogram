@@ -10,6 +10,7 @@ import { ExcelButton } from "@/components/ExcelButton";
 import { findingRowsPage } from "../insp/excel-actions";
 import { FindingFilters, applyFindingFilters, describeFilters, filterParams, readFilters, usedPairs } from "@/components/FindingFilters";
 import { todayKst } from "@/lib/format";
+import { pageRange, readPaging } from "@/lib/paging";
 import type { Department, FindingOverview, Site } from "@/lib/types";
 
 // 부서별 현황 : 점검 종류와 관계없이 한 부서로 조치 요청된 모든 지적사항
@@ -19,25 +20,27 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
   const modules = (await getModuleAccess()).filter((m) => m.is_enabled && m.form === "finding" && m.level !== "none");
 
   // 기본 부서 = 내 부서 (없으면 부서 조건 없이 조회 후 첫 부서로 표시)
-  const filters = readFilters(await searchParams, { dept: profile.team_id ?? profile.department_id ?? "" }); // 파트 소속이면 상위 부서
+  const sp = await searchParams;
+  const paging = readPaging(sp); // 보이는 쪽만 DB 에서 (동시 접속 시 속도)
+  const filters = readFilters(sp, { dept: profile.team_id ?? profile.department_id ?? "" }); // 파트 소속이면 상위 부서
   const codes = modules.map((m) => m.code);
-  const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT), filters).in("module_code", codes);
+  const query = applyFindingFilters(supabase.from("finding_overview").select(FINDING_ROW_SELECT, { count: "exact" }), filters).in("module_code", codes);
 
-  const [{ data: sites }, { data: depts }, rows, { data: allForDept }, { data: locRows }, { data: usedRows }] = await Promise.all([
+  const [{ data: sites }, { data: depts }, { rows, total }, { data: allForDept }, { data: locRows }, { data: usedRows }] = await Promise.all([
     supabase.from("sites").select("*").eq("is_active", true).order("sort_order"),
     supabase.from("departments").select("*").order("sort_order"),
     query
       .order("inspection_date", { ascending: false })
       .order("seq")
-      .limit(500)
-      .then(({ data }) => enrichFindings(supabase, (data ?? []) as unknown as FindingOverview[])),
+      .range(...pageRange(paging))
+      .then(async ({ data, count }) => ({ rows: await enrichFindings(supabase, (data ?? []) as unknown as FindingOverview[]), total: count ?? 0 })),
     // 점검 종류별 요약 (조회 조건 중 상태를 뺀 전체 기준)
     filters.dept
       ? supabase.from("finding_overview").select("module_code, status, is_overdue").eq("request_department_id", filters.dept).in("module_code", codes)
       : Promise.resolve({ data: [] as { module_code: string; status: string; is_overdue: boolean }[] }),
     supabase.from("locations").select("id, name, site_id").eq("is_active", true).order("sort_order"),
     // 장소 조건에는 이 부서에서 지적사항이 나온 장소만
-    supabase.from("findings").select("request_department_id, location_id").in("module_code", codes).not("location_id", "is", null).range(0, 9999),
+    supabase.rpc("finding_location_pairs", { p_modules: codes }),
   ]);
   const siteList = (sites ?? []) as Site[];
   const deptList = (depts ?? []) as Department[];
@@ -109,11 +112,11 @@ export default async function DepartmentStatusPage({ searchParams }: PageProps<"
       </div>
 
       <Card
-        title={`${dept?.name ?? ""} 지적사항 (${rows.length}건)`}
+        title={`${dept?.name ?? ""} 지적사항 (${total}건)`}
         actions={<ExcelButton rows={rows} loadPage={findingRowsPage.bind(null, {}, filters)} title={title} showModule fileName={`${todayKst()}_${dept?.name ?? "부서"}_점검조치현황.xlsx`} />}
       >
-        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} used={usedPairs(usedRows)} lockDept />
-        <FindingTable rows={rows} showModule />
+        <FindingFilters filters={filters} sites={siteList} departments={deptList} modules={modules} locations={locList} used={usedPairs(usedRows)} lockDept hidden={paging.size !== 20 ? { size: String(paging.size) } : undefined} />
+        <FindingTable rows={rows} showModule server={{ total, ...paging }} />
       </Card>
     </div>
   );
