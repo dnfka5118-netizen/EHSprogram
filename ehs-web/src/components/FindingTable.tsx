@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useTransition, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type MouseEvent } from "react";
 import { approveFinding, approveFindings, assignFinding, getAssignOptions, rejectFinding, selfAssignFinding } from "@/app/(main)/findings/actions";
 import { MEASURE_KINDS, MEASURE_LABEL, STATUS_LABEL } from "@/lib/labels";
 import { fmtDate, fmtDateTime, todayKst } from "@/lib/format";
@@ -171,7 +171,7 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
               <Th rowSpan={2}>장소</Th>
               <Th rowSpan={2}>세부장소</Th>
               <Th rowSpan={2}>유형</Th>
-              <Th rowSpan={2} className="min-w-44">문제점</Th>
+              <Th rowSpan={2} className="w-56 min-w-56">문제점</Th>
               <Th rowSpan={2}>개선 전 사진</Th>
               <Th colSpan={3}>개선 계획</Th>
               <Th rowSpan={2}>개선 목표일정</Th>
@@ -180,9 +180,9 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
               <Th rowSpan={2}>완료여부</Th>
             </tr>
             <tr>
-              <Th className="min-w-40">즉시조치</Th>
-              <Th className="min-w-40">단기대책</Th>
-              <Th className="min-w-40">장기대책</Th>
+              <Th className="w-44 min-w-44">즉시조치</Th>
+              <Th className="w-44 min-w-44">단기대책</Th>
+              <Th className="w-44 min-w-44">장기대책</Th>
             </tr>
           </thead>
           <tbody>
@@ -204,9 +204,8 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                 <Td>{r.location_name ?? "-"}</Td>
                 <Td>{r.sub_location_name ?? "-"}</Td>
                 <Td className="whitespace-nowrap">{r.type_name ?? "-"}</Td>
-                <Td>
-                  <span className="line-clamp-4 whitespace-pre-wrap">{r.problem}</span>
-                  {r.canEdit && <EditFindingButton row={r} canEditDept={r.canEditDept} className="mt-1" />}
+                <Td className="relative">
+                  <FitText footer={r.canEdit && <EditFindingButton row={r} canEditDept={r.canEditDept} />}>{r.problem}</FitText>
                 </Td>
                 <Td>
                   <Thumb row={r} onOpen={showPhotos} className="h-32 w-40" />
@@ -218,12 +217,12 @@ export function FindingTable({ rows, showModule, bulkApprove, empty = "해당 �
                   </Td>
                 ) : (
                   MEASURE_KINDS.map((k) => (
-                    <Td key={k}>
+                    <Td key={k} className="relative">
                       {r.measures[k] ? (
-                        <span className={`line-clamp-4 whitespace-pre-wrap ${r.measures[k]!.done ? "text-gray-500" : ""}`}>
+                        <FitText className={r.measures[k]!.done ? "text-gray-500" : ""}>
                           {r.measures[k]!.done && <span className="mr-1 text-emerald-700">✔</span>}
                           {r.measures[k]!.content}
-                        </span>
+                        </FitText>
                       ) : (
                         <span className="text-gray-300">-</span>
                       )}
@@ -291,6 +290,35 @@ function Th({ children, className = "", ...rest }: React.ThHTMLAttributes<HTMLTa
 
 function Td({ children, className = "", colSpan }: { children: React.ReactNode; className?: string; colSpan?: number }) {
   return <td colSpan={colSpan} className={`border border-gray-200 px-2 py-2 ${className}`}>{children}</td>;
+}
+
+// 긴 글 : 행 높이(사진 등 다른 칸이 정함) 안에 들어가는 만큼 보여 주고, 넘칠 때만 끝에 "…"
+//   td 에 relative 를 주고 이 상자를 칸 안쪽에 겹쳐 놓으므로 글이 행 높이를 늘리지 않음
+function FitText({ children, className = "", footer }: { children: React.ReactNode; className?: string; footer?: React.ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [lines, setLines] = useState(4);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
+      setLines(Math.max(1, Math.floor(el.clientHeight / lh)));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div className="absolute inset-x-2 inset-y-2 flex flex-col">
+      <div ref={box} className="min-h-0 flex-1 overflow-hidden">
+        <span className={`whitespace-pre-wrap ${className}`} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: lines, overflow: "hidden" }}>
+          {children}
+        </span>
+      </div>
+      {footer && <div className="shrink-0 pt-1">{footer}</div>}
+    </div>
+  );
 }
 
 // 개선 전 사진 (누르면 확대 · 개선 후 사진이 있으면 표시)

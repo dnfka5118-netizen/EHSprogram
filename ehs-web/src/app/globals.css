@@ -26,6 +26,9 @@
 body {
   background: #eceff3;
   color: #1f2937;
+  /* 한글 단어 중간에서 줄을 바꾸지 않음 ("예/정" 방지) · 칸보다 긴 한 단어(주소 등)만 쪼갬 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* iOS 입력창 자동 확대 방지 (16px 이상) */
