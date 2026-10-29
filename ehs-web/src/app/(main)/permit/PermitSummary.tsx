@@ -32,7 +32,7 @@ export function PermitSummary({ p, permitNo, issuedAt, departmentName, riskEval 
     ["작업일시", `${p.start_dt.replace("T", " ")} ~ ${p.end_dt.slice(0, 10) === p.start_dt.slice(0, 10) ? p.end_dt.slice(11) : p.end_dt.replace("T", " ")}`],
     ["작업장소", p.work_place || "-"],
     ["설비번호", p.tags.filter((t) => t.name || t.tag).map((t) => `${t.name}${t.tag ? `(${t.tag})` : ""}`).join(", ") || "-"],
-    ["작업관리자", people(p.managers)],
+    ["작업관리자", `${p.fields.outsource ? `[${p.fields.outsource}] ` : ""}${people(p.managers)}`],
     ["입회자", people(p.witnesses)],
     ["작업절차서", p.checks.docs_proc ? p.fields.proc_no || "필요" : "-"],
     [

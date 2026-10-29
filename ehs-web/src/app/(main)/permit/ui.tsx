@@ -20,12 +20,13 @@ export function Panel({ num, title, sub, tone, locked, children }: { num: string
   );
 }
 
-export function Sub({ title, tag, children }: { title: string; tag?: string; children: ReactNode }) {
+export function Sub({ title, tag, extra, children }: { title: string; tag?: string; extra?: ReactNode; children: ReactNode }) {
   return (
     <div className="space-y-2 border-t border-gray-100 pt-3 first:border-0 first:pt-0">
       <p className="flex items-center gap-2 text-sm font-bold text-gray-800">
         {title}
         {tag && <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800">{tag}</span>}
+        {extra}
       </p>
       {children}
     </div>

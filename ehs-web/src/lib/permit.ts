@@ -94,7 +94,9 @@ export type PermitFields = {
   heavy_equip: string;
   heavy_operator: string;
   complete_time: string;
+  outsource: "" | "외주" | "내주"; // 작업관리자 옆 외주 작업 여부 (내주 = 소속 삼영순화(주) 자동)
 };
+export const OWN_COMPANY = "삼영순화(주)";
 
 // 신청 단계 입력 (상신 시 결재 대상)
 export type PermitApply = {
@@ -132,6 +134,7 @@ export type PermitField = {
 export const rid = () => Math.random().toString(36).slice(2, 10);
 export const emptyPerson = (): Person3 => ({ org: "", name: "", phone: "" });
 export const emptyFields = (): PermitFields => ({
+  outsource: "",
   proc_no: "",
   risk_no: "",
   ppe_etc: "",

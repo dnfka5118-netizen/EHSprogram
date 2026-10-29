@@ -6,7 +6,7 @@ import { savePermit, submitPermit } from "./actions";
 import { ApprovalLineEditor, finalizeLine } from "@/components/approval/ApprovalLineEditor";
 import { Button, FormMessage } from "@/components/ui";
 import { resolveLine, type DeptHead, type LineStep, type TemplateStep } from "@/lib/approval-line";
-import { GRADE_TABLE, SUPP_TYPES, WORK_TYPE_DESC, emptyPerson, outsideHours, type PermitApply, type Person3 } from "@/lib/permit";
+import { GRADE_TABLE, OWN_COMPANY, SUPP_TYPES, WORK_TYPE_DESC, emptyPerson, outsideHours, type PermitApply, type Person3 } from "@/lib/permit";
 import { riskColor, riskTextColor } from "@/lib/jsa";
 import { fmtDate } from "@/lib/format";
 import type { ActionState } from "@/lib/types";
@@ -40,6 +40,15 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   const setField = (k: keyof PermitApply["fields"], v: string) => setP((x) => ({ ...x, fields: { ...x.fields, [k]: v } }));
   const has = (s: string) => p.supp.includes(s as PermitApply["supp"][number]);
   const linked = jsaOptions.find((j) => j.id === p.risk_eval_id);
+
+  // 내주 : 작업관리자 소속을 삼영순화(주)로 채움 · 외주로 바꾸면 자동으로 채운 소속만 비움
+  function setOutsource(o: "외주" | "내주") {
+    setP((x) => ({
+      ...x,
+      fields: { ...x.fields, outsource: o },
+      managers: x.managers.map((m) => ({ ...m, org: o === "내주" ? OWN_COMPANY : m.org === OWN_COMPANY ? "" : m.org })),
+    }));
+  }
 
   function changeDept(deptId: string) {
     set({ department_id: deptId });
@@ -232,8 +241,24 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
           </p>
         )}
         <div className="grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 xl:grid-cols-2 [&>*]:border-0 [&>*]:pt-0">
-        <Sub title="작업관리자 (외주 작업 시 공사업체 관리자)">
-          <PeopleRows rows={p.managers} onChange={(managers) => set({ managers })} addLabel="+ 작업관리자 추가" />
+        <Sub
+          title="작업관리자 (외주 작업 시 공사업체 관리자)"
+          extra={
+            <span className="flex gap-1 font-normal">
+              {(["외주", "내주"] as const).map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => setOutsource(o)}
+                  className={`rounded-md border px-2.5 py-0.5 text-xs ${p.fields.outsource === o ? "border-brand-600 bg-brand-50 font-semibold text-brand-800" : "border-gray-300 bg-gray-50 text-gray-700"}`}
+                >
+                  {o}
+                </button>
+              ))}
+            </span>
+          }
+        >
+          <PeopleRows rows={p.managers} onChange={(managers) => set({ managers })} addLabel="+ 작업관리자 추가" defaultOrg={p.fields.outsource === "내주" ? OWN_COMPANY : ""} />
         </Sub>
         <Sub title="입회자" tag="A·B등급 필수">
           <PeopleRows rows={p.witnesses} onChange={(witnesses) => set({ witnesses })} addLabel="+ 입회자 추가" />
@@ -389,12 +414,12 @@ function Rows<T>({ rows, onChange, empty, addLabel, render, cols = 3 }: {
   );
 }
 
-function PeopleRows({ rows, onChange, addLabel }: { rows: Person3[]; onChange: (r: Person3[]) => void; addLabel: string }) {
+function PeopleRows({ rows, onChange, addLabel, defaultOrg = "" }: { rows: Person3[]; onChange: (r: Person3[]) => void; addLabel: string; defaultOrg?: string }) {
   return (
     <Rows
       rows={rows}
       onChange={onChange}
-      empty={emptyPerson()}
+      empty={{ ...emptyPerson(), org: defaultOrg }}
       addLabel={addLabel}
       render={(m, upd) => (
         <>
