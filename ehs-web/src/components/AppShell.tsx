@@ -367,6 +367,7 @@ const PATHS: Record<string, string> = {
   plan: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
   inspect: "M9 4h6v3H9zM7 5H5v16h14V5h-2M8 12h8M8 16h5",
   measure: "M4 20h16M6 16l4-5 3 3 5-7",
+  sop: "M6 3h9l4 4v14H6zM9 9h7M9 13h7M9 17h4",
   work: "M14 7l3-3 3 3-3 3M17 4l-9 9M4 20l4-1 9-9-3-3-9 9z",
   edu: "M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5",
   accident: "M12 3 2 20h20L12 3zM12 10v4M12 17v.01",

@@ -26,7 +26,7 @@ export default async function JsaPrintPage({ params }: PageProps<"/print/risk-ad
     <div className="paper-screen">
       <PrintBar
         title="작업 위험성평가서 인쇄 미리보기"
-        sub={`CF112-01/02 R02 · A4 가로 · 표지(갑) + 상세표(을)${status !== "approved" ? " · ⚠ 결재 완료 전 문서" : ""}`}
+        sub={`CF112-01/02 R03 · A4 가로 · 표지(갑) + 상세표(을)${status !== "approved" ? " · ⚠ 결재 완료 전 문서" : ""}`}
       />
       <JsaPaper
         form={jsaFromRow(row)}

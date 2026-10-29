@@ -2,7 +2,7 @@
 //   href 가 없으면 "준비 중" 으로 표시 · module 은 권한/사용 여부를 확인할 양식 코드(modules.code)
 //   ※ 아직 만들지 않은 메뉴는 표준 EHS 업무 예시 — 실제 목록을 받으면 교체
 export type DomainKey = "env" | "health" | "safety" | "common";
-export type GroupKey = "plan" | "inspect" | "measure" | "work" | "edu" | "accident" | "common";
+export type GroupKey = "plan" | "inspect" | "measure" | "sop" | "work" | "edu" | "accident" | "common";
 
 export type MenuItem = { label: string; href?: string; module?: string; match?: string[]; exclude?: string[]; adminOnly?: boolean }; // exclude : 이 경로는 다른 메뉴
 export type MenuSection = { key: GroupKey; label: string; items: MenuItem[] };
@@ -13,6 +13,7 @@ export const GROUP_LABEL: Record<Exclude<GroupKey, "common">, string> = {
   plan: "계획·법규",
   inspect: "점검",
   measure: "측정·평가",
+  sop: "표준운전절차서",
   work: "작업·시설관리",
   edu: "교육·건강",
   accident: "사고·실적",
@@ -55,7 +56,7 @@ export const DOMAINS: Domain[] = [
     label: "안전",
     short: "S",
     home: "/ehs/safety",
-    // 안전 : 점검 · 위험성평가 · 안전작업허가 만 사용
+    // 안전 : 점검 · 위험성평가 · 표준운전절차서 · 안전작업허가
     sections: [
       g("inspect", [
         { label: "CEO 안전점검", href: "/insp/ceo", module: "insp_ceo", match: ["/insp/ceo"] },
@@ -76,6 +77,14 @@ export const DOMAINS: Domain[] = [
           { label: "수시 작업위험성평가", href: "/risk/adhoc", module: "risk_adhoc" },
           { label: "수시 위험성평가" },
           { label: "위험성평가 감소대책" },
+        ],
+      },
+      {
+        key: "sop",
+        label: "표준운전절차서",
+        items: [
+          { label: "표준운전절차서 작성", href: "/sop/new", module: "sop" },
+          { label: "표준운전절차서 현황", href: "/sop", module: "sop", match: ["/sop"], exclude: ["/sop/new"] },
         ],
       },
       {

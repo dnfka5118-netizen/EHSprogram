@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql", "0046_sop.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -1139,6 +1139,47 @@ console.log("\n[조직 : 파트장 · 팀장 · 부문장 결재선]");
   ok((await one(`select count(*)::int c from division_heads`)).c === 1, "부문장은 누구나 조회 (결재선 계산)");
   await db.exec(`reset role`); await as(null);
   await db.query(`delete from approval_template_steps where module_code='insp_chem'`);
+}
+
+console.log("\n[표준운전절차서]");
+{
+  const sId = (await one("select gen_random_uuid() id")).id;
+  const sop = (over = {}) => JSON.stringify({
+    sop_no: "F220-SOP-과수-001", title: "원료하역(1공장)", process_name: "과산화수소", department_id: PROD, grade: "B",
+    purposes: ["정상 운전"], hazards: ["화학물질누출 위험"], contacts: "상황실 : 041)520-8054",
+    steps: [{ name: "작업 준비", photos: [`sop/${sId}/a.jpg`], hazard: "충돌", work: "보호구 착용", safety: "2인1조", standard: "" }],
+    history: [{ rev: 0, content: "제정", date: "2026-10-30" }], ...over,
+  });
+  await as(U.C); await expectError("협력업체 절차서 작성 차단", "select save_sop($1,$2)", [sId, sop()], "권한");
+  await as(U.W1);
+  await expectError("다른 문서 경로의 사진 차단", "select save_sop($1,$2)", [sId, sop({ steps: [{ name: "x", photos: ["sop/other/a.jpg"], work: "y" }] })], "사진 경로");
+  await db.query("select save_sop($1,$2)", [sId, sop({ grade: "" })]);
+  const r = await one("select title, rev, purposes, steps from sop_docs where id=$1", [sId]);
+  ok(r.title === "원료하역(1공장)" && r.rev === 0 && r.purposes[0] === "정상 운전" && r.steps.length === 1, "저장 (화면에서 만든 ID로 새 문서)");
+  ok((await one("select count(*)::int c from approval_template_steps where module_code='sop'")).c === 4, "기본 결재선 4단계 (작성·팀장·EHS팀장·부문장)");
+  await as(null); await db.query("delete from approval_template_steps where module_code='sop'"); await as(U.W1); // 여기서는 문서 흐름만 시험
+  const sLine = line([["담당", "작성", U.W1], ["검토", "검토(팀장)", U.H]]);
+  await expectError("위험등급 없이 상신 차단", "select submit_sop($1,$2)", [sId, sLine], "위험등급");
+  await db.query("select save_sop($1,$2)", [sId, sop()]);
+  await as(U.W2); await expectError("남의 절차서 수정 차단", "select save_sop($1,$2)", [sId, sop()], "작성자만");
+  await as(U.W1);
+  const sAp = (await one("select submit_sop($1,$2) id", [sId, sLine])).id;
+  await expectError("결재 중 수정 차단", "select save_sop($1,$2)", [sId, sop()], "개정");
+  await expectError("결재 전 개정 차단", "select revise_sop($1, gen_random_uuid())", [sId], "결재가 끝난");
+  await as(U.H); await db.query("select approve_step($1,null)", [sAp]);
+  const ov = await one("select approval_status, risk_no, grade, department_name from sop_overview where id=$1", [sId]);
+  ok(ov.approval_status === "approved" && ov.grade === "B" && ov.department_name === "생산팀", "결재 완료 → 현황 (작성부서·위험등급)");
+  await as(U.W2);
+  const nId = (await one("select revise_sop($1, gen_random_uuid()) id", [sId])).id;
+  const nv = await one("select rev, prev_id, steps, history from sop_docs where id=$1", [nId]);
+  ok(nv.rev === 1 && nv.prev_id === sId && nv.steps[0].photos.length === 0 && nv.history.length === 2, "개정 → Rev.1 작성 중 문서 (이력 1줄 추가)");
+  await expectError("같은 문서 두 번 개정 차단", "select revise_sop($1, gen_random_uuid())", [sId], "이미 개정 중");
+  ok((await one("select superseded from sop_overview where id=$1", [sId])).superseded === true, "이전 Rev. 은 개정됨 표시");
+  await db.query("select delete_sop($1)", [nId]);
+  ok((await one("select count(*)::int c from sop_docs where id=$1", [nId])).c === 0, "작성 중 개정본 삭제");
+  await as(U.W1); await expectError("결재 끝난 절차서 삭제 차단", "select delete_sop($1)", [sId], "삭제할 수 없습니다");
+  ok((await one("select approval_doc_path('sop', $1) p", [sId])).p === `/sop/${sId}`, "전자결재함 → 절차서 주소");
+  await as(null);
 }
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);

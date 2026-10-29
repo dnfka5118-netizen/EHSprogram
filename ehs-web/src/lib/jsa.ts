@@ -1,6 +1,6 @@
-// 수시 위험성평가(JSA) 공통 정의 — 원본 CF112-01/02 R02 도구와 같은 항목·규칙
+// 수시 위험성평가(JSA) 공통 정의 — 원본 CF112-01/02 R03 양식과 같은 항목·규칙
 export const HAZARD_GROUPS: { label: string; types: string[] }[] = [
-  { label: "기계(설비)", types: ["협착", "베임/절단", "추락", "낙하", "충돌", "넘어짐", "전도"] },
+  { label: "기계(설비)", types: ["끼임", "베임/절단", "떨어짐", "맞음", "부딪힘", "넘어짐", "깔림/뒤집힘"] },
   { label: "전기", types: ["감전", "아크", "정전기"] },
   { label: "화학", types: ["화재/폭발", "누출"] },
   { label: "작업특성", types: ["소음", "질식", "근골격계"] },
@@ -8,6 +8,9 @@ export const HAZARD_GROUPS: { label: string; types: string[] }[] = [
   { label: "기타 위험 유형", types: ["기타"] },
 ];
 export const HAZARD_TYPES = HAZARD_GROUPS.flatMap((g) => g.types);
+// R02 → R03 유형 이름 (예전 평가서·엑셀을 열 때 새 이름으로 보여 줌, 저장된 결재 문서는 고치지 않음)
+const LEGACY_TYPE: Record<string, string> = { 협착: "끼임", 추락: "떨어짐", 낙하: "맞음", 충돌: "부딪힘", 전도: "깔림/뒤집힘" };
+export const normalizeHazardType = (t: string) => LEGACY_TYPE[t] ?? t;
 export const CONTROL_OPTS = ["제거", "대체", "공학적", "관리적", "보호구"] as const;
 
 export type JsaHazard = { type: string; content: string; freq: string; sev: string };
@@ -82,7 +85,7 @@ export function jsaFromRow(row: Record<string, any>): JsaForm {
     content: s(st.content),
     safe: s(st.safe),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    hazards: ((st.hazards ?? []) as any[]).map((h) => ({ type: s(h.type), content: s(h.content), freq: s(h.freq), sev: s(h.sev) })),
+    hazards: ((st.hazards ?? []) as any[]).map((h) => ({ type: normalizeHazardType(s(h.type)), content: s(h.content), freq: s(h.freq), sev: s(h.sev) })),
     control: { ...emptyControl(), ...(st.control ?? {}), checks: Array.isArray(st.control?.checks) ? st.control.checks : [] },
   }));
   return {

@@ -1,7 +1,7 @@
 import { CONTROL_OPTS, HAZARD_GROUPS, HAZARD_TYPES, aggregate, riskColor, riskOf, riskTextColor, type JsaForm } from "@/lib/jsa";
 import { fmtDate } from "@/lib/format";
 
-// CF112-01/02 R02 인쇄 복제본 — 표지(갑) 24열 + 상세표(을) 25열 (안전작업허가서 인쇄에도 첨부)
+// CF112-01/02 R03 인쇄 복제본 — 표지(갑) 24열 + 상세표(을) 25열 (안전작업허가서 인쇄에도 첨부)
 export function JsaPaper({ form: f, evalNo, evalDate, departmentName, stamps }: {
   form: JsaForm;
   evalNo: string;
@@ -121,7 +121,7 @@ export function JsaPaper({ form: f, evalNo, evalDate, departmentName, stamps }: 
           </tbody>
         </table>
         <div className="paper-foot">
-          <span>양식 CF112-02(갑), R02</span>
+          <span>양식 CF112-02(갑), R03</span>
           <span>삼영순화주식회사</span>
           <span>A4(297×210)</span>
         </div>
@@ -200,7 +200,7 @@ export function JsaPaper({ form: f, evalNo, evalDate, departmentName, stamps }: 
           </tbody>
         </table>
         <div className="paper-foot">
-          <span>양식 CF112-02(을), R02</span>
+          <span>양식 CF112-02(을), R03</span>
           <span>삼영순화주식회사</span>
           <span>A4(297×210)</span>
         </div>

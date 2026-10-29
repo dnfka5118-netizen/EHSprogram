@@ -20,7 +20,7 @@ export default async function JsaLayout({ children }: LayoutProps<"/risk/adhoc">
           )
         }
       >
-        <p className="pb-3 text-xs text-gray-500">위험성평가업무규정(SYMC-F110) 기준 · 작업 위험성평가서 CF112-01/02 R02 · 안전작업허가서 발행 전에 실시합니다.</p>
+        <p className="pb-3 text-xs text-gray-500">위험성평가업무규정(SYMC-F110) 기준 · 작업 위험성평가서 CF112-01/02 R03 · 안전작업허가서 발행 전에 실시합니다.</p>
       </PageHeader>
       {children}
     </>

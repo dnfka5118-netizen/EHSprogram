@@ -1,13 +1,13 @@
 "use client";
 
-// CF112-01/02 R02 엑셀 불러오기 · 내보내기 (원본 도구의 셀 배치와 동일)
+// CF112-01/02 R03 엑셀 불러오기 · 내보내기 (원본 양식의 셀 배치와 동일 · R02 파일도 불러옴)
 //   갑 : 표지(부서·참여자·작업정보·위험유형 집계) / 을 : 작업단계별 상세표
 import type { Borders, Cell, Workbook, Worksheet } from "exceljs";
-import { CONTROL_OPTS, HAZARD_GROUPS, HAZARD_TYPES, aggregate, emptyControl, emptyJsa, riskOf, type JsaForm, type JsaStep } from "./jsa";
+import { CONTROL_OPTS, HAZARD_GROUPS, HAZARD_TYPES, aggregate, emptyControl, emptyJsa, normalizeHazardType, riskOf, type JsaForm, type JsaStep } from "./jsa";
 import type { DeptHead } from "./approval-line";
 
-const SHEET1 = "양식 CF112-01(갑), R02";
-const SHEET2 = "양식 CF112-01(을), R02";
+const SHEET1 = "양식 CF112-01(갑), R03";
+const SHEET2 = "양식 CF112-01(을), R03";
 const thin = { style: "thin" as const, color: { argb: "FF000000" } };
 const BOX: Partial<Borders> = { top: thin, left: thin, bottom: thin, right: thin };
 const HEAD_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFEEF2F8" } };
@@ -139,7 +139,7 @@ function buildCover(wb: Workbook, f: JsaForm, meta: { departmentName: string; st
     put(ws, c17, agg.max[t] || "", { bold: true });
     if (agg.max[t]) ws.getCell(c17.split(":")[0]).fill = { type: "pattern", pattern: "solid", fgColor: { argb: riskArgb(agg.max[t]) } };
   });
-  ws.getCell("A18").value = "양식 CF112-02(갑), R02";
+  ws.getCell("A18").value = "양식 CF112-02(갑), R03";
   ws.getCell("L18").value = "삼영순화주식회사";
   ws.getCell("U18").value = "A4(297X210)";
   for (const a of ["A18", "L18", "U18"]) ws.getCell(a).font = { ...FONT, size: 8 };
@@ -215,7 +215,7 @@ function buildDetail(wb: Workbook, f: JsaForm) {
     r += n;
   });
   r += 1;
-  ws.getCell(`A${r}`).value = "양식 CF112-02(을), R02";
+  ws.getCell(`A${r}`).value = "양식 CF112-02(을), R03";
   ws.getCell(`I${r}`).value = "삼영순화주식회사";
   ws.getCell(`X${r}`).value = "A4(297X210)";
   for (const a of [`A${r}`, `I${r}`, `X${r}`]) ws.getCell(a).font = { ...FONT, size: 8 };
@@ -295,7 +295,7 @@ export async function importJsaExcel(file: File, departments: DeptHead[]): Promi
   const steps: JsaStep[] = [];
   for (const [top, rows] of [...blocks.entries()].sort((x, y) => x[0] - y[0])) {
     const hazards = rows
-      .map((r) => ({ type: HAZARD_TYPES.includes(d("F", r)) ? d("F", r) : "", content: d("G", r), freq: num(d("L", r)), sev: num(d("M", r)) }))
+      .map((r) => ({ type: HAZARD_TYPES.includes(normalizeHazardType(d("F", r))) ? normalizeHazardType(d("F", r)) : "", content: d("G", r), freq: num(d("L", r)), sev: num(d("M", r)) }))
       .filter((h, i) => i === 0 || h.type || h.content || h.freq || h.sev);
     const checkText = d("P", top);
     const checks = CONTROL_OPTS.filter((o) => new RegExp(`[☑✓Vv■].{0,2}${o}`).test(checkText));
