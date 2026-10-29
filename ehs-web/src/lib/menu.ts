@@ -75,6 +75,7 @@ export const DOMAINS: Domain[] = [
           { label: "정기 작업위험성평가" },
           { label: "정기 공정위험성평가" },
           { label: "수시 작업위험성평가", href: "/risk/adhoc", module: "risk_adhoc" },
+          { label: "AI 위험성평가 작성", href: "/risk/ai", module: "risk_adhoc", match: ["/risk/ai"] },
           { label: "수시 위험성평가" },
           { label: "위험성평가 감소대책" },
         ],

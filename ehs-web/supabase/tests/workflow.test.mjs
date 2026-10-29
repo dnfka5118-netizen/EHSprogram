@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql", "0046_sop.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql", "0046_sop.sql", "0047_risk_refs.sql", "0048_risk_ref_df_fix.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -1179,6 +1179,37 @@ console.log("\n[표준운전절차서]");
   ok((await one("select count(*)::int c from sop_docs where id=$1", [nId])).c === 0, "작성 중 개정본 삭제");
   await as(U.W1); await expectError("결재 끝난 절차서 삭제 차단", "select delete_sop($1)", [sId], "삭제할 수 없습니다");
   ok((await one("select approval_doc_path('sop', $1) p", [sId])).p === `/sop/${sId}`, "전자결재함 → 절차서 주소");
+  await as(null);
+}
+
+console.log("\n[위험성평가 참고 자료 · 비슷한 사례 찾기]");
+{
+  const st = (content, hz) => ({ content, current: "", control: "", post: null, hazards: hz.map(([type, c]) => ({ type, content: c, freq: "2", sev: "3" })) });
+  await as(null);
+  await db.query(`insert into risk_refs (source, ref_key, title, area, year, steps) values
+    ('jsa','a','이동식 크레인 인양 작업','원료 TANK AREA',2025,$1),
+    ('jsa','b','PUMP 분해 점검','펌프실',2024,$2),
+    ('ext','c','CRANE 사용작업',null,null,$3)`,
+    [JSON.stringify([st("크레인 설치 및 아웃트리거 전개", [["깔림/뒤집힘", "지반 침하로 크레인 전도"]]), st("인양물 줄걸이", [["맞음", "인양물 낙하"]])]),
+     JSON.stringify([st("펌프 전원 차단", [["감전", "충전부 접촉"]])]),
+     JSON.stringify([st("크레인 인양", [["맞음", "와이어로프 파단"]])])]);
+  await db.query(`insert into risk_refs (source, ref_key, title, meta) values ('sif','s1','이동식크레인 인양작업', $1)`, [JSON.stringify({ overview: "이동식 크레인으로 자재 인양 중 낙하", origin: "이동식크레인" })]);
+  const g = await one("select title_grams, body_grams from risk_refs where ref_key='a'");
+  ok(g.title_grams.includes("크레") && g.title_grams.includes("인양") && g.body_grams.includes("전도"), "글자 묶음 자동 계산 (작업명·단계·위험)");
+  await as(U.W1); await expectError("일반 직원 가중치 다시 계산 차단", "select rebuild_risk_ref_df()", [], "관리자");
+  await as(U.A); ok((await one("select rebuild_risk_ref_df() n")).n > 10, "관리자 가중치 다시 계산");
+  await as(U.W1);
+  const res = (await db.query("select source, title, score from search_risk_refs('크레인 인양', null, 10)")).rows;
+  ok(res.length === 3 && res[0].title === "이동식 크레인 인양 작업" && !res.some((r) => r.title.includes("PUMP")), "크레인 검색 → 크레인 자료만, 작업명 일치가 위");
+  ok((await db.query("select title from search_risk_refs('크레인', 'sif', 10)")).rows.every((r) => r.title === "이동식크레인 인양작업"), "자료 종류 골라 검색 (SIF)");
+  ok((await db.query("select * from search_risk_refs('', null, 10)")).rows.length === 0, "빈 검색어 → 결과 없음");
+  await db.exec(`set role authenticated`);
+  ok((await db.query("select count(*)::int c from risk_refs")).rows[0].c === 4, "직원은 참고 자료 조회 가능");
+  await expectError("직원 참고 자료 직접 추가 차단", "insert into risk_refs (source, ref_key, title) values ('jsa','x','x')", [], "");
+  await as(U.C);
+  ok((await db.query("select count(*)::int c from risk_refs")).rows[0].c === 0, "권한 없는 협력업체 조회 0건");
+  await db.exec(`reset role`);
+  await expectError("권한 없는 협력업체 검색 차단", "select * from search_risk_refs('크레인', null, 10)", [], "권한");
   await as(null);
 }
 
