@@ -35,6 +35,17 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   const [lineEdited, setLineEdited] = useState(false);
   const [line, setLine] = useState<LineStep[]>(() => resolveLine(template, { drafterId: meId, docDepartmentId: initial.department_id || null, depts: departments }));
 
+  // 프로젝트(장기성 공사) 작업 : 작업명을 "[프로젝트명]작업명" 으로 저장 · 불러올 때 다시 나눔
+  const [proj, setProj] = useState(() => {
+    const m = /^\[([^\]]*)\]([\s\S]*)$/.exec(initial.work_name);
+    return { on: !!m, name: m ? m[1] : "", task: m ? m[2] : initial.work_name };
+  });
+  function changeProj(patch: Partial<typeof proj>) {
+    const n = { ...proj, ...patch };
+    setProj(n);
+    set({ work_name: n.on && n.name.trim() ? `[${n.name.trim()}]${n.task}` : n.task });
+  }
+
   const set = (patch: Partial<PermitApply>) => setP((x) => ({ ...x, ...patch }));
   const setCheck = (k: string, v: boolean) => setP((x) => ({ ...x, checks: { ...x.checks, [k]: v } }));
   const setField = (k: keyof PermitApply["fields"], v: string) => setP((x) => ({ ...x, fields: { ...x.fields, [k]: v } }));
@@ -209,9 +220,31 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
         )}
         {/* PC 에서는 한 줄에 여러 칸 (스크롤 줄이기) */}
         <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-          <F label="작업명" required>
-            <input className={INPUT} value={p.work_name} onChange={(e) => set({ work_name: e.target.value })} placeholder="예) R-201 반응기 촉매 교체를 위한 맨홀 개방 및 내부 정비" />
-          </F>
+          <div className="min-w-0">
+            <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-xs font-semibold text-gray-600">
+                작업명<span className="ml-0.5 text-red-600">*</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <label className="inline-flex cursor-pointer items-center gap-1 text-xs text-gray-700 select-none">
+                  <input type="checkbox" className="h-3.5 w-3.5" checked={proj.on} onChange={(e) => changeProj({ on: e.target.checked })} />
+                  프로젝트 해당
+                </label>
+                <HelpTip text="장기성 공사 (예시, 과산화수소 증설 PJT)" />
+              </span>
+            </div>
+            {proj.on ? (
+              <div className="grid gap-2 sm:grid-cols-[2fr_3fr]">
+                <input className={INPUT} value={proj.name} onChange={(e) => changeProj({ name: e.target.value })} placeholder="프로젝트명 예) 과산화수소 증설 PJT" aria-label="프로젝트명" />
+                <input className={INPUT} value={proj.task} onChange={(e) => changeProj({ task: e.target.value })} placeholder="작업명 예) 배관 용접 및 서포트 설치" aria-label="작업명" />
+                <p className="text-xs break-all text-gray-500 sm:col-span-2">
+                  저장되는 작업명 : <b className="text-gray-800">{p.work_name || "-"}</b>
+                </p>
+              </div>
+            ) : (
+              <input className={INPUT} value={proj.task} onChange={(e) => changeProj({ task: e.target.value })} placeholder="예) R-201 반응기 촉매 교체를 위한 맨홀 개방 및 내부 정비" aria-label="작업명" />
+            )}
+          </div>
           <F label="작업장소"><input className={INPUT} value={p.work_place} onChange={(e) => set({ work_place: e.target.value })} placeholder="예) 2공장 반응동 3층" /></F>
         </div>
         <div className="grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 xl:grid-cols-2 [&>*]:border-0 [&>*]:pt-0">
