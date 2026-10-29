@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveSop, submitSop } from "./actions";
 import { ApprovalLineEditor, finalizeLine } from "@/components/approval/ApprovalLineEditor";
@@ -38,6 +38,8 @@ export function SopEditor({ id, isNew, rev, initial, photoUrls, departments, tem
   const [state, setState] = useState<ActionState>();
   const [pending, start] = useTransition();
   const [uploading, setUploading] = useState(0);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fullUrls = useRef<Record<string, string>>({}); // 이번에 올린 사진의 원본 크기 (엑셀 내보내기용 · 화면은 썸네일)
   const [lineEdited, setLineEdited] = useState(false);
   const [line, setLine] = useState<LineStep[]>(() => resolveLine(template, { drafterId: meId, docDepartmentId: initial.department_id || null, depts: departments }));
 
@@ -73,6 +75,7 @@ export function SopEditor({ id, isNew, rev, initial, photoUrls, departments, tem
         const { error } = await supabase.storage.from("docs").upload(path, p.main, { contentType: "image/jpeg" });
         if (error) throw new Error(error.message);
         setUrls((u) => ({ ...u, [path]: p.preview }));
+        fullUrls.current[path] = URL.createObjectURL(p.main);
         setF((x) => ({ ...x, steps: x.steps.map((s, j) => (j === i ? { ...s, photos: [...s.photos, path] } : s)) }));
       }
     } catch (e) {
@@ -104,6 +107,65 @@ export function SopEditor({ id, isNew, rev, initial, photoUrls, departments, tem
       })),
     }));
     setState({ message: `위험성평가의 작업 단계 ${steps.length}개를 가져왔습니다. 내용을 확인해 주세요.` });
+  }
+
+  // 엑셀 불러오기 : 양식의 내용 · 단계 사진을 읽어 지금 작성 중인 내용을 대체 (사진은 압축해 올림)
+  async function importExcel(file: File) {
+    setState(undefined);
+    try {
+      const { importSopExcel } = await import("@/lib/sop-excel");
+      const res = await importSopExcel(file, departments);
+      const nPhotos = res.photos.flat().length;
+      if (!confirm(`엑셀 파일에서 작업 단계 ${res.form.steps!.length}개${nPhotos ? `, 사진 ${nPhotos}장` : ""}을 찾았습니다.\n불러와서 지금 작성 중인 내용을 대체할까요?`)) return;
+      const linkedJsa = res.riskNo ? jsaOptions.find((j) => j.eval_no.replace(/\s/g, "") === res.riskNo.replace(/\s/g, "")) : undefined;
+      setUploading((n) => n + nPhotos);
+      const supabase = createClient();
+      const failed: string[] = [];
+      const steps: SopStep[] = [];
+      for (const [i, s] of res.form.steps!.entries()) {
+        const photos: string[] = [];
+        for (const blob of res.photos[i]) {
+          try {
+            const p = await processPhoto(new File([blob], `sop-${i + 1}.${blob.type.split("/")[1] ?? "jpg"}`, { type: blob.type }));
+            const path = `sop/${id}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`;
+            const { error } = await supabase.storage.from("docs").upload(path, p.main, { contentType: "image/jpeg" });
+            if (error) throw new Error(error.message);
+            setUrls((u) => ({ ...u, [path]: p.preview }));
+            fullUrls.current[path] = URL.createObjectURL(p.main);
+            photos.push(path);
+          } catch {
+            failed.push(`${i + 1}단계`);
+          } finally {
+            setUploading((n) => Math.max(0, n - 1));
+          }
+        }
+        steps.push({ ...s, photos });
+      }
+      setF((x) => ({
+        ...x,
+        ...res.form,
+        steps,
+        department_id: res.form.department_id || x.department_id,
+        risk_eval_id: linkedJsa?.id ?? "",
+        risk_no: linkedJsa?.eval_no ?? res.riskNo,
+        history: res.form.history ?? x.history,
+      }));
+      if (res.form.department_id) changeDept(res.form.department_id);
+      const notes = [...res.notes, ...(failed.length ? [`사진을 올리지 못한 단계가 있습니다 (${[...new Set(failed)].join(", ")}).`] : [])];
+      setState({ message: `엑셀 파일을 불러왔습니다. ${notes.join(" ")} 내용을 확인하고 저장해 주세요.` });
+    } catch (e) {
+      setState({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function exportExcel() {
+    setState(undefined);
+    try {
+      const { exportSopExcel } = await import("@/lib/sop-excel");
+      await exportSopExcel(f, { rev, departmentName: departments.find((d) => d.id === f.department_id)?.name ?? "", riskNo: linked?.eval_no ?? f.risk_no, photoUrls: { ...urls, ...fullUrls.current } });
+    } catch (e) {
+      setState({ error: `엑셀 만들기 실패 : ${e instanceof Error ? e.message : e}` });
+    }
   }
 
   const payload = (): SopForm => ({ ...f, steps: f.steps.filter((s) => s.name || s.work || s.photos.length || s.hazard || s.safety || s.standard) });
@@ -144,6 +206,30 @@ export function SopEditor({ id, isNew, rev, initial, photoUrls, departments, tem
           <b>반려됨</b> · {rejectedNote} — 내용을 수정한 뒤 다시 상신해 주세요.
         </p>
       )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" disabled={pending || uploading > 0} onClick={() => fileRef.current?.click()}>
+          📥 엑셀 불러오기
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".xlsx,.xlsm"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) importExcel(file);
+            e.target.value = "";
+          }}
+        />
+        <Button variant="secondary" disabled={uploading > 0} onClick={exportExcel}>
+          📤 엑셀로 내보내기
+        </Button>
+        <span className="flex items-center gap-1 text-xs text-gray-500">
+          안전운전 절차서 양식(CF410-01 R02) · 사진 포함
+          <HelpTip text="불러오기 : 엑셀로 작성한 절차서를 고르면 표준명·공정명·유해위험 체크·작업 단계·사진(단계마다 4장까지)을 채웁니다. 내보내기 : 지금 내용을 같은 양식의 엑셀로 내려받습니다." />
+        </span>
+      </div>
 
       {/* 00 */}
       <Panel num="00" title="표준 정보">

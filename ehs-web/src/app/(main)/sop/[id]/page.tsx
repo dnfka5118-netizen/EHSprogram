@@ -4,7 +4,7 @@ import { requireProfile } from "@/lib/auth";
 import { getModuleAccess } from "@/lib/access";
 import { createClient } from "@/lib/supabase/server";
 import { getApproval, getDeptHeads, getPeople, getTemplate } from "@/lib/approval";
-import { SOP_STATUS, sopFromRow } from "@/lib/sop";
+import { SOP_STATUS, sopFromRow, sopStamps } from "@/lib/sop";
 import { fmtDateTime } from "@/lib/format";
 import { Card } from "@/components/ui";
 import { ApprovalStatus } from "@/components/approval/ApprovalStatus";
@@ -64,7 +64,12 @@ export default async function SopDetailPage({ params, searchParams }: PageProps<
           작성 {(row.profiles as unknown as { name: string } | null)?.name ?? "-"} · 수정 {fmtDateTime(row.updated_at)}
         </span>
         <span className="flex-1" />
-        <SopToolbar id={id} canDelete={editable} canRevise={canRevise} />
+        <SopToolbar
+          id={id}
+          canDelete={editable}
+          canRevise={canRevise}
+          excel={{ form, meta: { rev: row.rev, departmentName: deptName, riskNo: jsa?.eval_no ?? form.risk_no, photoUrls, stamps: sopStamps(approval, fmtDateTime) } }}
+        />
       </div>
       {approval && (approval.status !== "withdrawn" || approval.history.length > 0) && (
         <Card title="결재">

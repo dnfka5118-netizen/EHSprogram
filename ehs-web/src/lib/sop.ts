@@ -111,6 +111,17 @@ export function sopFromRow(row: Record<string, any>): SopForm {
   };
 }
 
+// 제개정 이력의 작성 · 검토 · 검토 · 승인 칸 : 결재 단계 순서대로 "이름\n일시" (승인은 결재가 끝났을 때 마지막 칸)
+export function sopStamps(
+  approval: { status: string; steps: { status: string; approver_name?: string | null; acted_at?: string | null }[] } | null,
+  fmt: (v: string | null | undefined) => string,
+): [string, string, string, string] {
+  const done = (approval?.steps ?? []).filter((s) => s.status === "approved").map((s) => `${s.approver_name ?? ""}\n${fmt(s.acted_at)}`);
+  const approved = approval?.status === "approved";
+  const mid = approved ? done.slice(1, -1) : done.slice(1);
+  return [done[0] ?? "", mid[0] ?? "", mid[1] ?? "", approved && done.length > 1 ? done[done.length - 1] : ""];
+}
+
 export const SOP_STATUS = {
   draft: { label: "작성중", style: "bg-gray-100 text-gray-700" },
   in_review: { label: "결재중", style: "bg-amber-100 text-amber-800" },
