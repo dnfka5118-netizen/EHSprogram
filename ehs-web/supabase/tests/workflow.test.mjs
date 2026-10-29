@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -1080,6 +1080,22 @@ console.log("\n[이미 처리한 건은 메일로 보내지 않음]");
   const got = (await db.query("select subject from claim_notifications(50)")).rows.map((r) => r.subject);
   ok(!got.includes("[EHS] 바로 : 이미 종결") && (await st(imm)).status === "expired", "바로 보내기에서도 처리된 건은 빼기");
   await db.query(`update app_settings set value='{"immediate": false}' where key='mail'`);
+}
+
+console.log("\n['보내지 않음' 은 생기는 순간 만료]");
+{
+  await as(null);
+  const setKinds = (kinds) => db.query("update app_settings set value=$1 where key='notify'", [JSON.stringify({ kinds, stages: {}, daily_deadline: true })]);
+  await setKinds({ closed: "off" });
+  const offId = (await one("insert into notifications (user_id, finding_id, kind, subject, body) values ($1,$2,'closed','[EHS] 종결 : 끔','b') returning id", [U.W2, fid])).id;
+  const r = await one("select status, last_error from notifications where id=$1", [offId]);
+  ok(r.status === "expired" && r.last_error === "환경설정에서 보내지 않음", "보내지 않음 종류는 들어오자마자 만료");
+  await setKinds({});
+  const waitId = (await one("insert into notifications (user_id, finding_id, kind, subject, body) values ($1,$2,'directive','[EHS] 지시 : 대기','b') returning id", [U.W2, fid])).id;
+  ok((await one("select status from notifications where id=$1", [waitId])).status === "pending", "아침에 모아서 종류는 대기");
+  await setKinds({ directive: "off" });
+  ok((await one("select status from notifications where id=$1", [waitId])).status === "expired", "설정을 보내지 않음으로 바꾸면 대기 중인 것도 바로 만료");
+  await setKinds({});
 }
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
