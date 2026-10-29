@@ -6,6 +6,7 @@
 // scripts/build-examples.mjs 와 모델·전처리가 같아야 한다.
 
 import { createClient } from "@/lib/supabase/client";
+import { sameMeaning, wordCount } from "@/lib/example-text";
 
 const ORT_VERSION = "1.30.0";
 const ORT_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
@@ -126,15 +127,19 @@ export async function findSimilar(photo: Blob, opts: { limit?: number; location?
     scores[i] = dot / len / 127 + (sameLoc ? 0.02 : 0);
   }
   const order = [...scores.keys()].sort((a, b) => scores[b] - scores[a]);
-  const picked: Suggestion[] = [];
-  const seen = new Set<string>();
-  for (const i of order) {
+  // 같은 뜻 문장은 한 묶음으로 (사진이 비슷한 위 60건 안에서) → 묶음마다 한 줄만
+  const limit = opts.limit ?? 5;
+  const groups: { score: number; items: Example[] }[] = [];
+  for (const i of order.slice(0, 60)) {
     const e = ex.list[i];
-    const key = e.problem.replace(/\s/g, "");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    picked.push({ ...e, score: scores[i] });
-    if (picked.length >= (opts.limit ?? 5)) break;
+    const g = groups.find((x) => x.items.some((y) => sameMeaning(y.problem, e.problem)));
+    if (g) g.items.push(e);
+    else if (groups.length < limit) groups.push({ score: scores[i], items: [e] });
   }
-  return picked;
+  return groups.map(({ score, items }) => {
+    // 대표 문장 : 핵심 낱말이 충분한(3개 또는 묶음 최대) 문장 중 가장 짧은 것 · 유형이 비면 묶음의 다른 유형
+    const need = Math.min(3, Math.max(...items.map((x) => wordCount(x.problem))));
+    const rep = items.filter((x) => wordCount(x.problem) >= need).sort((a, b) => a.problem.length - b.problem.length)[0] ?? items[0];
+    return { ...rep, type_name: rep.type_name ?? items.find((x) => x.type_name)?.type_name ?? null, score };
+  });
 }

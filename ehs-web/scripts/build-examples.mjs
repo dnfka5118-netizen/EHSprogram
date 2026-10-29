@@ -15,6 +15,7 @@ import ExcelJS from "exceljs";
 import sharp from "sharp";
 import * as ort from "onnxruntime-web";
 import { createClient } from "@supabase/supabase-js";
+import { cleanProblem } from "../src/lib/example-text.ts";
 
 const args = process.argv.slice(2);
 // 폴더를 여러 개 줄 수 있음 (예: 원본 폴더 + 암호를 푼 사본 폴더 .cache/decrypted)
@@ -166,15 +167,16 @@ function scrub(s) {
   return out.replace(/(담당자[\s,]*){2,}/g, "담당자 ").replace(/\s{2,}/g, " ").trim();
 }
 
-// ------------------------------------------------------------------ 중복 제거
+// ------------------------------------------------------------------ 글 다듬기 (앞 번호·"1. … 2. …" 나누기, lib/example-text.ts) · 중복 제거
 const seen = new Set();
 const examples = [];
 for (const r of records) {
-  const problem = scrub(r.problem);
-  const key = `${norm(r.location)}|${norm(problem)}`;
-  if (seen.has(key)) continue;
-  seen.add(key);
-  examples.push({ ...r, problem });
+  for (const problem of cleanProblem(scrub(r.problem))) {
+    const key = `${norm(r.location)}|${norm(problem)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    examples.push({ ...r, problem });
+  }
 }
 if (AUDIT) {
   writeFileSync(new URL("../.cache/scrub-audit.json", import.meta.url), JSON.stringify(hits, null, 1));
