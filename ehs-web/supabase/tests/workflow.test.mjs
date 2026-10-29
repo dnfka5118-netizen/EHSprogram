@@ -311,12 +311,12 @@ await expectError("현장 기록은 발급 전 불가", `select save_permit_fiel
 const pLineCc = JSON.stringify([...JSON.parse(pLine), { step_kind: "참조", label: "수신참조", approver_id: U.Q }, { step_kind: "시행", label: "시행", approver_id: U.W1 }]);
 const pAp = (await one(`select submit_permit($1,$2) id`, [pId, pLineCc])).id;
 {
-  // 허가번호 : 년도-신청자 부서/파트-순번 (0044)
-  const yr = (await one(`select to_char(kst_today(), 'YYYY') y`)).y;
-  ok((await one(`select permit_no from permits where id=$1`, [pId])).permit_no === `${yr}-EHS부서-001`, `상신 → 허가번호 ${yr}-EHS부서-001`);
+  // 허가번호 : 신청자 부서/파트-상신일(YYMMDD)-순번 (0044)
+  const yr = (await one(`select to_char(kst_today(), 'YYMMDD') y`)).y;
+  ok((await one(`select permit_no from permits where id=$1`, [pId])).permit_no === `EHS부서-${yr}-01`, `상신 → 허가번호 EHS부서-${yr}-01`);
   const n1 = (await one(`select _next_permit_no($1) n`, [U.I])).n;
   const n2 = (await one(`select _next_permit_no($1) n`, [U.W1])).n;
-  ok(n1 === `${yr}-EHS부서-002` && n2 === `${yr}-생산팀-001`, "같은 부서는 이어서 002 · 다른 부서는 001 부터");
+  ok(n1 === `EHS부서-${yr}-02` && n2 === `생산팀-${yr}-01`, "같은 부서·같은 날은 이어서 02 · 다른 부서는 01 부터");
 }
 const cc = await one(`select cc_ids, exec_ids, (select count(*)::int from approval_steps where approval_id=$1) n from approvals where id=$1`, [pAp]);
 ok(cc.cc_ids.length === 1 && cc.exec_ids.length === 1 && cc.n === 3, "수신참조·시행자는 결재 단계가 아니라 목록으로 저장");

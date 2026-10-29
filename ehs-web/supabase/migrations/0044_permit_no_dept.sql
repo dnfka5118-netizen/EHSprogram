@@ -1,6 +1,6 @@
 -- =====================================================================
--- 안전작업허가서 허가번호 : 년도-신청자 부서/파트-순번 (예: 2026-생산1파트-001)
---   신청자(작성자)가 파트 소속이면 파트명, 아니면 부서명 · 년도·부서/파트마다 001 부터
+-- 안전작업허가서 허가번호 : 신청자 부서/파트-상신일(YYMMDD)-순번 (예: 생산기술-261029-01)
+--   신청자(작성자)가 파트 소속이면 파트명, 아니면 부서명 · 같은 부서/파트·같은 날마다 01 부터
 --   번호는 처음 결재 상신할 때 붙임 (임시 저장만 하고 버린 허가서 때문에 번호가 비지 않도록)
 --   이미 번호가 있는 허가서(예전 CF430-YYYYMMDD-NNN)는 그대로
 -- =====================================================================
@@ -15,12 +15,12 @@ declare
   v_n int;
 begin
   select d.name into v_label from profiles p join departments d on d.id = p.department_id where p.id = p_user;
-  v_prefix := to_char(kst_today(), 'YYYY') || '-' || coalesce(nullif(trim(v_label), ''), '부서없음') || '-';
+  v_prefix := coalesce(nullif(trim(v_label), ''), '부서없음') || '-' || to_char(kst_today(), 'YYMMDD') || '-';
   perform pg_advisory_xact_lock(hashtext('permit_no:' || v_prefix));
   select coalesce(max(substr(permit_no, length(v_prefix) + 1)::int), 0) + 1 into v_n
     from permits
    where left(permit_no, length(v_prefix)) = v_prefix and substr(permit_no, length(v_prefix) + 1) ~ '^[0-9]+$';
-  return v_prefix || lpad(v_n::text, 3, '0');
+  return v_prefix || lpad(v_n::text, 2, '0');
 end $$;
 revoke execute on function public._next_permit_no(uuid) from public, anon, authenticated;
 
