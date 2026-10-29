@@ -7,11 +7,13 @@
 //     - 공장·팀별 폴더의 작업위험성평가서(JSA) 엑셀  → source 'jsa'  (우리 사업장)
 //     - 참고자료/ 의 타사 작업표준·JSA 엑셀          → source 'ext'  (타사 참고 — 회사 이름은 넣지 않음)
 //     - 한국산업안전보건공단 고위험요인(SIF) 아카이브 엑셀 → source 'sif'
+//     - KOSHA/ 의 KOSHA GUIDE PDF (pdftotext 필요 · Git for Windows 에 들어 있음) → source 'kosha' (장·절 조각)
 //   개인정보 : 평가 참여자 · 담당자 · 결재자 이름은 읽지 않음 (작업명 · 장소 · 단계 · 위험 · 대책만)
 //   여러 양식(R01 · R02 · R03 · 타사 JRA)은 머리글 글자(작업 내용/단계, 유해위험요인, 현재안전조치, 빈도, 강도, 감소대책)로 칸을 찾음
 import ExcelJS from "exceljs";
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
 
 const APPLY = process.argv.includes("--apply");
@@ -331,10 +333,155 @@ async function readSif() {
   return rows;
 }
 
+// ---------------------------------------------------------------- KOSHA GUIDE (PDF → 장·절 조각)
+// 앞 개요 쪽(작성자 · 제정 경과)과 목적 · 적용범위 · 용어 정의는 빼고, 본문을 큰 장(1. 2. …) 단위로 · 길면 절(4.1 …) · 그래도 길면 문단으로 나눔
+const SKIP_SECTION = /^(목적|적용범위|용어|정의|기타$|관련법규|참고문헌)/;
+const OCR_DIR = decodeURIComponent(new URL("../.cache/kosha-ocr/", import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, "$1");
+const ocrNeeded = [];
+const MAX_CHUNK = 2500;
+function pdfText(f) {
+  try {
+    return execFileSync("pdftotext", ["-enc", "UTF-8", f, "-"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  } catch {
+    return "";
+  }
+}
+// 줄바꿈으로 끊긴 문장 잇기 : 목록 기호((1) (가) ① ㉮ - · 1.)로 시작하는 줄만 새 줄
+const joinLines = (lines) =>
+  lines
+    .reduce((out, l) => {
+      if (!out.length || /^(\(\d+\)|\([가-힣]\)|[①-⑳㉮-㉻]|[-·•ㅇo]\s|\d+(\.\d+)*\.?\s|[가-힣]\.\s|<|\[|붙임)/.test(l)) out.push(l);
+      else out[out.length - 1] += (/[가-힣]$/.test(out[out.length - 1]) && /^[가-힣]/.test(l) ? " " : " ") + l;
+      return out;
+    }, [])
+    .join("\n");
+const lawsOf = (s) => [
+  ...new Set(
+    [...s.matchAll(/(산업안전보건기준에\s*관한\s*규칙|안전보건규칙|산업안전보건법(?:\s*시행규칙|\s*시행령)?)\s*(?:\([^)]*\)\s*)?제\s*(\d+)\s*조(의\s*\d+)?/g)].map(
+      (m) => `${/기준|안전보건규칙/.test(m[1]) ? "안전보건규칙" : m[1].replace(/\s+/g, " ")} 제${m[2]}조${m[3] ? m[3].replace(/\s+/g, "") : ""}`,
+    ),
+  ),
+];
+function readKosha() {
+  const dir = join(ROOT_PATH, "KOSHA");
+  let names = [];
+  try {
+    names = readdirSync(dir).filter((n) => /\.pdf$/i.test(n));
+  } catch {
+    return { rows: [], failed: [], files: 0 };
+  }
+  const rows = [];
+  const failed = [];
+  const seen = new Set();
+  for (const n of names) {
+    const m = n.match(/^([A-Z](?:-[A-Z])?(?:-\d+)?)-\s*(\d+)-?\s*(20\d{2})?[_\s]*(.*?)(\s*\(\d+\))?\.pdf$/i);
+    const code = m ? `${m[1]}-${m[2]}${m[3] ? "-" + m[3] : ""}`.replace(/-(\d+)-(\d+)$/, "-$1-$2") : n.replace(/\.pdf$/i, "");
+    const guide = (m?.[4] ?? n.replace(/\.pdf$/i, "")).trim();
+    if (seen.has(code)) continue; // 같은 지침 파일이 두 번 있는 경우
+    seen.add(code);
+    let raw = pdfText(join(dir, n));
+    // 본문이 그림(스캔)인 지침 : 쪽당 글자가 적으면 OCR 결과(scripts/ocr-kosha.ps1 → .cache/kosha-ocr/)를 씀
+    const pages = Math.max(1, (raw.match(/\f/g) ?? []).length);
+    if (raw.replace(/\s/g, "").length / pages < 300) {
+      const ocr = join(OCR_DIR, n.replace(/\.pdf$/i, ".txt"));
+      if (existsSync(ocr)) raw = readFileSync(ocr, "utf8");
+      else {
+        ocrNeeded.push(n);
+        failed.push(`KOSHA/${n} : 본문이 그림(스캔) → OCR 필요 (powershell -ExecutionPolicy Bypass -File scripts/ocr-kosha.ps1)`);
+        continue;
+      }
+    }
+    const lines = raw
+      .replace(/\f/g, "\n")
+      .split(/\r?\n/)
+      .map((l) =>
+        l
+          .replace(/\d*\s*KOSHA\s*GUIDE/gi, "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      )
+      .filter(
+        (l) =>
+          l &&
+          !/^[A-Z](\s*[–-]\s*[A-Z])?\s*[–-]\s*\d+\s*[–-]\s*\d{4}$/.test(l) &&
+          !/^-\s*\d+\s*-$/.test(l) &&
+          !/[·…․]{4,}/.test(l) &&
+          l.replace(/\s/g, "") !== guide.replace(/\s/g, ""),
+      );
+    // 본문 시작 = "1. 목적" (그 앞 개요 쪽에는 작성자 이름이 있음)
+    //   목차에도 "1. 목 적" 이 있음 → 바로 다음 줄이 "2. 적용범위" 인 것(목차)은 건너뜀
+    const starts = lines.map((l, i) => (/^1\.\s*목\s*적/.test(l) ? i : -1)).filter((i) => i >= 0);
+    const start = starts.find((i) => !/^2\.\s*적\s*용/.test(lines[i + 1] ?? "")) ?? starts.at(-1) ?? -1;
+    // 끝의 "개정 이력"(작성 기관·작성자)부터는 버림
+    const all = start >= 0 ? lines.slice(start) : lines;
+    const end = all.findIndex((l) => /개정\s*이력|^□\s*(개정일|재공표|제정일)/.test(l));
+    const body = end > 0 ? all.slice(0, end) : all;
+    // 큰 장 나누기 : "4. 제목" (제목 뒤에 본문이 같은 줄에 붙은 예전 지침도) · 번호는 1씩(가끔 하나 건너뜀) 늘어남
+    const sections = [];
+    for (const l of body) {
+      const h = l.match(/^(\d{1,2})\.\s*(?!\d)(.+)$/);
+      const no = h ? Number(h[1]) : 0;
+      const prev = sections.length ? Number(sections.at(-1).no) : 0;
+      // 큰 장 제목 없이 "4.3 …" 절부터 시작하는 지침 : 절 번호의 앞자리로 새 장
+      const sub = !h && sections.length ? l.match(/^(\d{1,2})\.\d{1,2}\.?\s+(.{1,40})$/) : null;
+      // 지침 안에 인용한 법 조문 목록("5. 폭은 30센티미터 이상으로 할 것")은 장 제목이 아님
+      const sentence = h && h[1] !== "1" && (/할\s*것|생략\s*\)$/.test(h[2]) || (/(것|다|함|음|됨)\s*[.)]?$/.test(h[2]) && h[2].length <= 40));
+      if (h && !sentence && (sections.length ? no === prev + 1 || no === prev + 2 : no === 1)) {
+        const short = h[2].length <= 40;
+        sections.push({ no: h[1], head: (short ? h[2] : h[2].split(/\s+/).slice(0, 3).join(" ")).trim().slice(0, 40), lines: short ? [] : [h[2]] });
+      } else if (sub && (Number(sub[1]) === prev + 1 || Number(sub[1]) === prev + 2)) sections.push({ no: sub[1], head: sub[2].trim(), lines: [l] });
+      else if (sections.length) sections.at(-1).lines.push(l);
+    }
+    let k = 0;
+    for (const s of sections) {
+      if (SKIP_SECTION.test(s.head.replace(/\s+/g, ""))) continue;
+      // 길면 절(4.1 …) 단위로
+      const parts = [];
+      for (const l of s.lines) {
+        // 절 번호 앞자리가 장 번호와 같아야 함 (표 안의 "0.05 미만" 같은 숫자는 제외)
+        const m2 = l.match(/^(\d{1,2})\.(\d{1,2})\.?\s+(\D.{0,39})$/);
+        const h = m2 && m2[1] === s.no ? [l, `${m2[1]}.${m2[2]}`, m2[3]] : null;
+        if (h || !parts.length) parts.push({ head: h ? `${h[1]} ${h[2]}` : "", lines: h ? [] : [l] });
+        else parts.at(-1).lines.push(l);
+      }
+      const merged = joinLines(s.lines).length <= MAX_CHUNK ? [{ head: "", lines: s.lines }] : parts;
+      for (const p of merged) {
+        let text = joinLines(p.lines).trim();
+        if (text.replace(/\s/g, "").length < 40) continue;
+        // 그래도 길면 문단으로 잘라 여러 조각
+        const pieces = [];
+        while (text.length > MAX_CHUNK) {
+          const cut = text.lastIndexOf("\n", MAX_CHUNK);
+          pieces.push(text.slice(0, cut > 500 ? cut : MAX_CHUNK));
+          text = text.slice(cut > 500 ? cut : MAX_CHUNK).trim();
+        }
+        pieces.push(text);
+        pieces.forEach((piece, i) => {
+          const section = [`${s.no}. ${s.head}`, p.head].filter(Boolean).join(" › ") + (pieces.length > 1 ? ` (${i + 1})` : "");
+          rows.push({
+            source: "kosha",
+            ref_key: `kosha:${code}:${k++}`,
+            title: `${code} ${guide} › ${section}`.slice(0, 200),
+            area: null,
+            group_name: code.split("-").slice(0, -2).join("-") || code.split("-")[0],
+            year: Number(m?.[3]) || null,
+            meta: { code, guide, section, text: piece, laws: lawsOf(piece) },
+            steps: [],
+          });
+        });
+      }
+    }
+    if (!k) failed.push(`KOSHA/${n} : 본문 장을 찾지 못함`);
+  }
+  return { rows, failed, files: names.length };
+}
+
 // ---------------------------------------------------------------- 실행
-const own = await readJsaFiles(ROOT_PATH, "jsa", ["참고자료"]);
+const own = await readJsaFiles(ROOT_PATH, "jsa", ["참고자료", "KOSHA"]);
 const ext = await readJsaFiles(join(ROOT_PATH, "참고자료"), "ext", []);
 const sif = await readSif();
+const kosha = readKosha();
+writeFileSync(new URL("../.cache/kosha-ocr-list.txt", import.meta.url), ocrNeeded.join("\n"));
 
 // 같은 작업(작업명 + 단계 내용)이 여러 해 반복된 우리 JSA 는 최근 것 하나만, 반복 횟수는 meta.repeat
 const byKey = new Map();
@@ -349,14 +496,15 @@ for (const r of own.rows) {
   }
 }
 const ownRows = [...byKey.values()];
-const all = [...ownRows, ...ext.rows, ...sif];
+const all = [...ownRows, ...ext.rows, ...sif, ...kosha.rows];
 
 console.log(`우리 JSA : 파일 ${own.files}개 → 표 ${own.rows.length}개 → 같은 작업 묶어 ${ownRows.length}건 · 못 읽은 파일 ${own.failed.length}개`);
 console.log(`타사 참고 : 파일 ${ext.files}개 → ${ext.rows.length}건 · 못 읽은 파일 ${ext.failed.length}개`);
 console.log(`공단 SIF : ${sif.length}건`);
+console.log(`KOSHA 지침 : 파일 ${kosha.files}개 → 조각 ${kosha.rows.length}개 · 못 읽은 파일 ${kosha.failed.length}개`);
 const sample = ownRows.find((r) => r.steps.length >= 3);
 console.log("\n예시 :", JSON.stringify({ title: sample?.title, area: sample?.area, steps: sample?.steps.slice(0, 2) }, null, 1).slice(0, 1200));
-writeFileSync(new URL("../.cache/risk-refs-failed.txt", import.meta.url), [...own.failed, ...ext.failed].join("\n"));
+writeFileSync(new URL("../.cache/risk-refs-failed.txt", import.meta.url), [...own.failed, ...ext.failed, ...kosha.failed].join("\n"));
 console.log("\n못 읽은 파일 목록 : ehs-web/.cache/risk-refs-failed.txt");
 
 if (APPLY) {

@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql", "0046_sop.sql", "0047_risk_refs.sql", "0048_risk_ref_df_fix.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql", "0046_sop.sql", "0047_risk_refs.sql", "0048_risk_ref_df_fix.sql", "0049_risk_refs_kosha.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -1203,6 +1203,15 @@ console.log("\n[위험성평가 참고 자료 · 비슷한 사례 찾기]");
   ok(res.length === 3 && res[0].title === "이동식 크레인 인양 작업" && !res.some((r) => r.title.includes("PUMP")), "크레인 검색 → 크레인 자료만, 작업명 일치가 위");
   ok((await db.query("select title from search_risk_refs('크레인', 'sif', 10)")).rows.every((r) => r.title === "이동식크레인 인양작업"), "자료 종류 골라 검색 (SIF)");
   ok((await db.query("select * from search_risk_refs('', null, 10)")).rows.length === 0, "빈 검색어 → 결과 없음");
+  // 0049 : KOSHA 지침 조각 (본문 글은 meta.text)
+  await as(null);
+  await db.query(`insert into risk_refs (source, ref_key, title, meta) values ('kosha','k1','B-M-25-2026 에너지 차단장치의 잠금·표지 › 6. 위험에너지 관리의 실행', $1)`,
+    [JSON.stringify({ code: "B-M-25-2026", text: "기기 등의 운전정지 준비, 에너지 차단장치 잠금 및 표지 부착", laws: ["안전보건규칙 제92조"] })]);
+  ok((await one("select body_grams from risk_refs where ref_key='k1'")).body_grams.includes("잠금"), "KOSHA 조각 : 본문 글자 묶음 계산");
+  await expectError("알 수 없는 자료 종류 차단", "insert into risk_refs (source, ref_key, title) values ('etc','e1','x')", [], "risk_refs_source_check");
+  await as(U.A); await db.query("select rebuild_risk_ref_df()"); await as(U.W1);
+  ok((await db.query("select title from search_risk_refs('잠금 표지', 'kosha', 5)")).rows[0]?.title.startsWith("B-M-25"), "KOSHA 지침 검색");
+  await db.query("delete from risk_refs where ref_key='k1'");
   await db.exec(`set role authenticated`);
   ok((await db.query("select count(*)::int c from risk_refs")).rows[0].c === 4, "직원은 참고 자료 조회 가능");
   await expectError("직원 참고 자료 직접 추가 차단", "insert into risk_refs (source, ref_key, title) values ('jsa','x','x')", [], "");
