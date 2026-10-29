@@ -238,8 +238,11 @@ function text(cell: Cell | undefined): string {
 }
 const num = (s: string) => s.match(/[\d.]+/)?.[0] ?? "";
 const date = (s: string) => {
-  const m = s.match(/(20\d{2})[.\-/\s]+(\d{1,2})[.\-/\s]+(\d{1,2})/);
-  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
+  // 2026.02.03 · 2026-2-3 · 26.02.03 (R02 양식은 두 자리 년도가 많음)
+  const m = s.match(/(20\d{2}|\b\d{2})[.\-/\s]+(\d{1,2})[.\-/\s]+(\d{1,2})/);
+  if (!m) return "";
+  const y = m[1].length === 2 ? `20${m[1]}` : m[1];
+  return `${y}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
 };
 
 export async function importJsaExcel(file: File, departments: DeptHead[]): Promise<{ form: JsaForm; note?: string }> {
@@ -257,7 +260,10 @@ export async function importJsaExcel(file: File, departments: DeptHead[]): Promi
   const g = (a: string) => text(cover.getCell(a));
   const form = emptyJsa(date(g("P4")) || new Date().toISOString().slice(0, 10));
   const deptText = g("D4");
-  const dept = departments.find((d) => d.name === deptText) ?? departments.find((d) => deptText && (deptText.includes(d.name) || d.name.includes(deptText)));
+  // 양식에 "생 산 팀" 처럼 띄어 쓴 경우도 찾음
+  const squash = (v: string) => v.replace(/\s+/g, "");
+  const key = squash(deptText);
+  const dept = departments.find((d) => squash(d.name) === key) ?? departments.find((d) => key && (key.includes(squash(d.name)) || squash(d.name).includes(key)));
   let note: string | undefined;
   if (deptText && !dept) note = `부서 '${deptText}'를 찾지 못해 부서명은 직접 선택해 주세요.`;
   const nameNo = g("P8").match(/^(.*?)\s*\(([^()]*)\)\s*$/);
