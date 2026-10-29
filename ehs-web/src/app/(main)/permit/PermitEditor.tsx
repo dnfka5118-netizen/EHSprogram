@@ -110,8 +110,10 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
           </div>
           {/* 결재선 : 처음부터 보이고, 아래 "결재 상신" 을 누르면 이 결재선으로 바로 상신 */}
           <div className="min-w-0 space-y-2">
-            <p className="text-xs font-semibold text-gray-700">
-              결재선 <span className="font-normal text-gray-500">· 기본 결재선이 채워져 있습니다. 칸을 누르면 바꿀 수 있습니다</span>
+            <p className="flex items-center gap-1 text-xs font-semibold text-gray-700">
+              결재선
+              <HelpTip text="담당(발급) → 검토(EHS부서장) → 협조(관련부서, 필요 시) → 승인(해당부서장) 순으로 결재합니다. 최종 승인되면 허가서가 발급됩니다." />
+              <span className="font-normal text-gray-500">· 기본 결재선이 채워져 있습니다. 칸을 누르면 바꿀 수 있습니다</span>
             </p>
             <ApprovalLineEditor
               meId={meId}
@@ -121,8 +123,9 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
                 setLineEdited(true);
               }}
               people={people}
+              noExec
+              noButton
             />
-            <Hint>담당(발급) → 검토(EHS부서장) → 협조(관련부서, 필요 시) → 승인(해당부서장) · 최종 승인되면 허가서가 발급됩니다.</Hint>
           </div>
         </div>
       </Panel>

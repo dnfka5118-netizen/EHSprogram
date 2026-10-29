@@ -17,7 +17,8 @@ const stepKindFor = (k: Kind): StepKind => (k === "합의" ? "협조" : k === "�
 type Dept = { id: string; name: string; division: string | null; parent_id: string | null; site_id: string; sort_order: number };
 type Site = { id: string; name: string };
 
-export function ApprovalLineEditor({ value, onChange, people, meId }: { value: LineStep[]; onChange: (v: LineStep[]) => void; people: Person[]; meId?: string }) {
+// noExec : 시행자 칸·버튼 숨김 (허가서) · noButton : "결재라인 지정" 버튼 없이 표를 눌러 지정
+export function ApprovalLineEditor({ value, onChange, people, meId, noExec, noButton }: { value: LineStep[]; onChange: (v: LineStep[]) => void; people: Person[]; meId?: string; noExec?: boolean; noButton?: boolean }) {
   const [open, setOpen] = useState(false);
   const who = (id: string | null) => people.find((p) => p.id === id);
   const line = value.filter((s) => kindOf(s) === "결재" || kindOf(s) === "합의");
@@ -87,25 +88,29 @@ export function ApprovalLineEditor({ value, onChange, people, meId }: { value: L
             <th className="w-24 border border-gray-300 bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700">수신및참조</th>
             <td className="border border-gray-300 px-2 py-1.5">{chips(cc)}</td>
           </tr>
-          <tr>
-            <th className="w-24 border border-gray-300 bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700">시행자</th>
-            <td className="border border-gray-300 px-2 py-1.5">{chips(exec)}</td>
-          </tr>
+          {!noExec && (
+            <tr>
+              <th className="w-24 border border-gray-300 bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700">시행자</th>
+              <td className="border border-gray-300 px-2 py-1.5">{chips(exec)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setOpen(true)} className="rounded-md border border-brand-700 bg-white px-3 py-1.5 text-sm font-medium text-brand-800 hover:bg-brand-50">
-          결재라인 지정
-        </button>
+        {!noButton && (
+          <button type="button" onClick={() => setOpen(true)} className="rounded-md border border-brand-700 bg-white px-3 py-1.5 text-sm font-medium text-brand-800 hover:bg-brand-50">
+            결재라인 지정
+          </button>
+        )}
         {missing.length > 0 && <span className="text-xs text-red-600">결재자를 지정해 주세요 : {missing.map((s) => s.label).join(", ")}</span>}
       </div>
-      {open && <LineDialog value={value} people={people} meId={meId} onClose={() => setOpen(false)} onSave={(v) => (onChange(v), setOpen(false))} />}
+      {open && <LineDialog value={value} people={people} meId={meId} noExec={noExec} onClose={() => setOpen(false)} onSave={(v) => (onChange(v), setOpen(false))} />}
     </div>
   );
 }
 
 // ---------------------------------------------------------------- 결재라인 지정 창
-export function LineDialog({ value, people, meId, onClose, onSave }: { value: LineStep[]; people: Person[]; meId?: string; onClose: () => void; onSave: (v: LineStep[]) => void }) {
+export function LineDialog({ value, people, meId, noExec, onClose, onSave }: { value: LineStep[]; people: Person[]; meId?: string; noExec?: boolean; onClose: () => void; onSave: (v: LineStep[]) => void }) {
   const [items, setItems] = useState<LineStep[]>(value);
   const [tab, setTab] = useState<"결재" | "참조" | "시행">("결재");
   const [org, setOrg] = useState<{ sites: Site[]; depts: Dept[] } | null>(null);
@@ -250,7 +255,7 @@ export function LineDialog({ value, people, meId, onClose, onSave }: { value: Li
                 {q ? `검색 결과 ${list.length}명` : deptSel ? `${deptOf(deptSel)?.name ?? ""} ${list.length}명` : "조직도에서 부서를 고르거나 이름을 검색하세요"}
               </p>
               <div className="flex gap-1">
-                {(["결재", "합의", "참조", "시행"] as Kind[]).map((k) => (
+                {(["결재", "합의", "참조", "시행"] as Kind[]).filter((k) => !(noExec && k === "시행")).map((k) => (
                   <button key={k} type="button" onClick={() => add(k)} className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium hover:border-brand-700 hover:text-brand-800">
                     {k === "참조" ? "수신참조" : k}
                   </button>
@@ -304,7 +309,7 @@ export function LineDialog({ value, people, meId, onClose, onSave }: { value: Li
                     ["참조", "수신참조"],
                     ["시행", "시행"],
                   ] as const
-                ).map(([k, l]) => (
+                ).filter(([k]) => !(noExec && k === "시행")).map(([k, l]) => (
                   <button
                     key={k}
                     type="button"

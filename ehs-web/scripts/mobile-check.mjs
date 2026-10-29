@@ -70,8 +70,8 @@ try {
       await new Promise((r) => setTimeout(r, 200));
     }
     if (action === "line") {
-      // 허가서 : 결재선이 처음부터 보임 (00 칸 오른쪽) → 바로 결재라인 지정 창
-      await clickText(page, "결재라인 지정");
+      // 허가서 : 결재선이 처음부터 보임 (00 칸 오른쪽) → 결재란을 눌러 결재라인 지정 창
+      await page.click('button[title="눌러서 결재라인 지정"]');
     }
     if (action === "review") {
       await page.waitForFunction(() => /정리할 묶음|불러오지 못했/.test(document.body.innerText), { timeout: 60000 }).catch(() => {});
