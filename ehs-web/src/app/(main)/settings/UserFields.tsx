@@ -21,12 +21,21 @@ export function DeptOptions({ depts }: { depts: Department[] }) {
   ));
 }
 
-// 사용자 입력 항목 (사업장 선택에 따라 부서 목록이 바뀜)
+// 사용자 입력 항목 : 사업장 › 부문 › 팀 › 파트 차례로 고름 (윗단계를 고르면 아랫단계 목록이 바뀜) · 저장은 파트, 없으면 팀
 // deactivateWarning : 사용 체크를 풀 때 보여 줄 확인 문구 (맡은 역할·진행 중인 건이 있을 때)
 export function UserFields({ sites, departments, user, deactivateWarning }: { sites: Site[]; departments: Department[]; user?: Profile; deactivateWarning?: string }) {
   const [siteId, setSiteId] = useState(user?.site_id ?? sites[0]?.id ?? "");
   const [type, setType] = useState(user?.user_type ?? "employee");
   const depts = departments.filter((d) => d.site_id === siteId);
+  const mine = departments.find((d) => d.id === user?.department_id);
+  const myTeam = mine?.parent_id ? departments.find((d) => d.id === mine.parent_id) : mine;
+  const [div, setDiv] = useState(myTeam?.division ?? "");
+  const [teamId, setTeamId] = useState(myTeam?.id ?? "");
+  const [partId, setPartId] = useState(mine?.parent_id ? mine.id : "");
+  const teamsAll = depts.filter((d) => !d.parent_id);
+  const divisions = [...new Set(teamsAll.map((d) => d.division ?? ""))].filter(Boolean);
+  const teams = div ? teamsAll.filter((d) => d.division === div) : teamsAll; // 부문을 안 고르면 팀 전체
+  const parts = depts.filter((d) => d.parent_id === teamId);
 
   return (
     <div className="grid gap-3 md:grid-cols-3">
@@ -42,16 +51,57 @@ export function UserFields({ sites, departments, user, deactivateWarning }: { si
         <Input name="position" defaultValue={user?.position ?? ""} />
       </Field>
       <Field label="사업장">
-        <Select name="site_id" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+        <Select
+          name="site_id"
+          value={siteId}
+          onChange={(e) => {
+            setSiteId(e.target.value);
+            setDiv("");
+            setTeamId("");
+            setPartId("");
+          }}
+        >
           {sites.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </Select>
       </Field>
-      <Field label="부서">
-        <Select name="department_id" defaultValue={user?.department_id ?? ""} key={siteId}>
+      <input type="hidden" name="department_id" value={partId || teamId} />
+      <Field label="부문">
+        <Select
+          value={div}
+          onChange={(e) => {
+            setDiv(e.target.value);
+            setTeamId("");
+            setPartId("");
+          }}
+        >
+          <option value="">(전체)</option>
+          {divisions.map((v) => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="팀">
+        <Select
+          value={teamId}
+          onChange={(e) => {
+            setTeamId(e.target.value);
+            setPartId("");
+          }}
+        >
           <option value="">(없음)</option>
-          <DeptOptions depts={depts} />
+          {teams.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="파트">
+        <Select value={partId} onChange={(e) => setPartId(e.target.value)} disabled={parts.length === 0}>
+          <option value="">{parts.length ? "(파트 없음 · 팀 직속)" : "(파트 없음)"}</option>
+          {parts.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
         </Select>
       </Field>
       <Field label="구분">

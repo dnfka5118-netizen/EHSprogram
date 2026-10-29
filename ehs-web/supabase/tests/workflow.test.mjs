@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql", "0045_org_heads.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -1105,6 +1105,40 @@ console.log("\n['보내지 않음' 은 생기는 순간 만료]");
   await setKinds({ directive: "off" });
   ok((await one("select status from notifications where id=$1", [waitId])).status === "expired", "설정을 보내지 않음으로 바꾸면 대기 중인 것도 바로 만료");
   await setKinds({});
+}
+
+console.log("\n[조직 : 파트장 · 팀장 · 부문장 결재선]");
+{
+  await as(null);
+  const part = (await one(`insert into departments (site_id, name, parent_id, sort_order) values ($1,'시험파트',$2,99) returning id`, [site, PROD])).id;
+  await db.query(`update profiles set department_id=$1 where id=$2`, [part, U.W2]);
+  await db.query(`update departments set head_id=$1 where id=$2`, [U.W1, part]);
+  await db.query(`update departments set head_id=$1, division='천안공장' where id=$2`, [U.H, PROD]);
+  await db.query(`insert into division_heads (site_id, division, user_id) values ($1,'천안공장',$2)`, [site, U.A]);
+  const h = async (r, u, d = null) => (await one(`select _org_head($1,$2,$3) v`, [r, u, d])).v;
+  ok((await h("drafter_part_head", U.W2)) === U.W1, "작성자의 파트장 = 그 파트의 장");
+  ok((await h("drafter_team_head", U.W2)) === U.H && (await h("drafter_team_head", U.S)) === U.H, "작성자의 팀장 = 상위 팀의 장 (파트원·팀 직속 모두)");
+  ok((await h("drafter_division_head", U.W2)) === U.A, "작성자의 부문장 = 팀이 속한 부문의 장");
+  ok((await h("drafter_part_head", U.S)) === null, "팀 직속이면 파트장 없음");
+  ok((await h("doc_division_head", U.Q, PROD)) === U.A, "해당 부서의 부문장 = 문서 부서 기준");
+  ok(JSON.stringify((await one(`select daily_team_heads($1) v`, [PROD])).v) === JSON.stringify([U.H]), "일지 승인자(부서장 1명) = 팀장 우선");
+  // 필수 단계 검사 : 작성자의 팀장을 결재선에서 빼면 상신 불가
+  await db.query(`delete from approval_template_steps where module_code='insp_chem'`);
+  await db.query(`insert into approval_template_steps (module_code, step_order, step_kind, label, resolver, required) values ('insp_chem',1,'검토','팀장','drafter_team_head',true), ('insp_chem',2,'검토','파트장','drafter_part_head',true)`);
+  await as(U.W2);
+  const steps = (ids) => JSON.stringify(ids.map((id) => ({ step_kind: "검토", label: "x", approver_id: id })));
+  await expectError("필수 팀장 단계 누락 차단", `select _check_approval_line('insp_chem', $1, $2)`, [PROD, steps([U.W1])], "필수 결재자");
+  await db.query(`select _check_approval_line('insp_chem', $1, $2)`, [PROD, steps([U.W1, U.H])]);
+  ok(true, "파트장 → 팀장이 있으면 통과");
+  await as(U.S); await db.query(`select _check_approval_line('insp_chem', $1, $2)`, [PROD, steps([U.H])]);
+  ok(true, "팀 직속 작성자는 파트장 단계가 없어도 통과");
+  await as(U.H); await db.query(`select _check_approval_line('insp_chem', $1, $2)`, [PROD, steps([U.A])]);
+  ok(true, "팀장이 쓰면 팀장 단계 없이 통과");
+  await db.exec(`set role authenticated`); await as(U.W1);
+  await expectError("일반 사용자 부문장 지정 차단", `insert into division_heads (site_id, division, user_id) values ($1,'시험부문',$2)`, [site, U.W1], "");
+  ok((await one(`select count(*)::int c from division_heads`)).c === 1, "부문장은 누구나 조회 (결재선 계산)");
+  await db.exec(`reset role`); await as(null);
+  await db.query(`delete from approval_template_steps where module_code='insp_chem'`);
 }
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);

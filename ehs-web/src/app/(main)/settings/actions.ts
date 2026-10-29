@@ -232,6 +232,8 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
   // 부문은 부서에만 적고 파트는 상위 부서를 따름 (DB 가 맞춤), 파트의 지정자·승인자는 비움
   const parent = nullable(s(fd, "parent_id"));
   const division = parent ? null : nullable(s(fd, "division"));
+  const head = fd.has("head_id") ? { head_id: nullable(s(fd, "head_id")) } : {}; // 팀장 · 파트장 (0045)
+  const { data: before } = id ? await supabase.from("departments").select("site_id, division, parent_id").eq("id", id).maybeSingle() : { data: null };
   const { error } = id
     ? await supabase
         .from("departments")
@@ -241,10 +243,16 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
           parent_id: parent,
           sort_order: n(fd, "sort_order"),
           is_active: fd.get("is_active") === "on",
+          ...head,
         })
         .eq("id", id)
     : await supabase.from("departments").insert({ site_id: s(fd, "site_id"), name, division, parent_id: parent, sort_order: n(fd, "sort_order") });
   if (error) return { error: toMessage(error) };
+  // 부문 이름을 바꿨고 옛 이름의 팀이 더는 없으면 부문장도 새 이름으로 옮김
+  if (before && !before.parent_id && !parent && before.division && division && before.division !== division) {
+    const { count } = await supabase.from("departments").select("id", { count: "exact", head: true }).eq("site_id", before.site_id).eq("division", before.division).is("parent_id", null);
+    if (!count) await supabase.from("division_heads").update({ division, updated_at: new Date().toISOString() }).eq("site_id", before.site_id).eq("division", before.division);
+  }
   // 지정자·승인자 여러 명 (순서 = 고른 순서 · 부서 첫 번째 승인자 = 결재선 부서장) · 파트는 종결 승인자(파트 리더)만 (0037)
   if (id) {
     const ids = (k: string) => fd.getAll(k).map(String).filter(Boolean);
@@ -252,6 +260,20 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
     if (r.error) return { error: toMessage(r.error) };
   }
   return done();
+}
+
+// 부문장 (사업장 + 부문 이름마다 1명 · 비우면 지움, 0045)
+export async function saveDivisionHead(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  await requireAdmin();
+  const supabase = await createClient();
+  const site_id = s(fd, "site_id");
+  const division = s(fd, "division");
+  const user_id = nullable(s(fd, "user_id"));
+  if (!site_id || !division) return { error: "부문을 찾을 수 없습니다." };
+  const { error } = user_id
+    ? await supabase.from("division_heads").upsert({ site_id, division, user_id, updated_at: new Date().toISOString() })
+    : await supabase.from("division_heads").delete().eq("site_id", site_id).eq("division", division);
+  return error ? { error: toMessage(error) } : done();
 }
 
 // ---------------------------------------------------------------- 장소 / 유형

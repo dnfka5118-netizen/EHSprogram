@@ -19,7 +19,7 @@ export default async function NewPermitPage({ searchParams }: PageProps<"/permit
 
   const [depts, template, people, jsaOptions, { data: src }] = await Promise.all([
     getDeptHeads(supabase),
-    getTemplate(supabase, "permit"),
+    getTemplate(supabase, "permit", me.id),
     getPeople(supabase),
     getJsaOptions(supabase),
     typeof from === "string" ? supabase.from("permits").select("*").eq("id", from).maybeSingle() : Promise.resolve({ data: null }),

@@ -18,7 +18,7 @@ export default async function NewJsaPage({ searchParams }: PageProps<"/risk/adho
 
   const [depts, template, people, { data: src }] = await Promise.all([
     getDeptHeads(supabase),
-    getTemplate(supabase, "risk_adhoc"),
+    getTemplate(supabase, "risk_adhoc", me.id),
     getPeople(supabase),
     typeof from === "string" ? supabase.from("jsa_evals").select("*").eq("id", from).maybeSingle() : Promise.resolve({ data: null }),
   ]);

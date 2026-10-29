@@ -60,7 +60,7 @@ export default async function PermitDetailPage({ params, searchParams }: PagePro
           permitNo={row.permit_no}
           initial={permit}
           departments={await getDeptHeads(supabase)}
-          template={await getTemplate(supabase, "permit")}
+          template={await getTemplate(supabase, "permit", me.id)}
           people={await getPeople(supabase)}
           meId={me.id}
           jsaOptions={await getJsaOptions(supabase)}

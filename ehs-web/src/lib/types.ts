@@ -30,6 +30,7 @@ export type Department = {
   approver_id: string | null;
   division?: string | null; // 부문
   parent_id?: string | null; // 파트의 상위 부서 (부서면 null)
+  head_id?: string | null; // 팀 줄 = 팀장, 파트 줄 = 파트장 (결재선, 0045)
 };
 
 export type Module = {

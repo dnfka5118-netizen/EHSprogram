@@ -9,8 +9,12 @@ import type { Person } from "@/lib/approval";
 const KINDS = ["담당", "검토", "협조", "승인", "확인"];
 const RESOLVERS = [
   { value: "drafter", label: "작성자 본인" },
-  { value: "dept_head", label: "지정 부서의 부서장" },
-  { value: "doc_dept_head", label: "해당 부서의 부서장" },
+  { value: "drafter_part_head", label: "작성자의 파트장" },
+  { value: "drafter_team_head", label: "작성자의 팀장" },
+  { value: "drafter_division_head", label: "작성자의 부문장" },
+  { value: "dept_head", label: "지정 부서의 팀장" },
+  { value: "doc_dept_head", label: "해당 부서의 팀장" },
+  { value: "doc_division_head", label: "해당 부서의 부문장" },
   { value: "user", label: "지정 사용자" },
   { value: "pick", label: "상신할 때 지정" },
 ];
@@ -79,7 +83,11 @@ export function TemplateEditor({ moduleCode, initial, departments, people }: {
                 ))}
               </select>
             )}
-            {s.resolver === "doc_dept_head" && <span className="text-xs text-gray-500">문서에 지정된 해당 부서의 부서장(승인자)</span>}
+            {s.resolver === "doc_dept_head" && <span className="text-xs text-gray-500">문서에 지정된 해당 부서의 팀장 (없으면 첫 번째 종결 승인자)</span>}
+            {s.resolver === "doc_division_head" && <span className="text-xs text-gray-500">문서에 지정된 해당 부서가 속한 부문의 부문장</span>}
+            {s.resolver === "drafter_part_head" && <span className="text-xs text-gray-500">상신하는 사람의 파트장 (파트 소속이 아니면 이 단계는 빠짐)</span>}
+            {s.resolver === "drafter_team_head" && <span className="text-xs text-gray-500">상신하는 사람의 팀장 (본인이 팀장이면 빠짐)</span>}
+            {s.resolver === "drafter_division_head" && <span className="text-xs text-gray-500">상신하는 사람의 부문장 (본인이거나 앞 단계와 같으면 빠짐)</span>}
             {s.resolver === "drafter" && <span className="text-xs text-gray-500">상신하는 사람 (상신 시 자동 결재)</span>}
             {s.resolver === "pick" && <span className="text-xs text-gray-500">상신하는 사람이 선택</span>}
           </div>

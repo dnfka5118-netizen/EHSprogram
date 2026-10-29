@@ -30,7 +30,7 @@ export default async function ChemCheckPage({ params }: PageProps<"/insp/[slug]/
   const editable = (isMember || me.is_admin || !!subRow) && !locked;
   const d = editable ? first : await getChemCheck(supabase, id, false);
   if (!d) notFound();
-  const [template, depts, people] = editable ? await Promise.all([getTemplate(supabase, "insp_chem"), getDeptHeads(supabase), getPeople(supabase)]) : [[], [], []];
+  const [template, depts, people] = editable ? await Promise.all([getTemplate(supabase, "insp_chem", me.id), getDeptHeads(supabase), getPeople(supabase)]) : [[], [], []];
   const findings = Object.values(d.notes).filter((n) => n.finding_id);
 
   return (

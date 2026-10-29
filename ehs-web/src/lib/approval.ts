@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { resolveLine, type LineStep, type StepKind, type TemplateStep } from "./approval-line";
+import { DRAFTER_ORG, resolveLine, type DeptHead, type LineStep, type StepKind, type TemplateStep } from "./approval-line";
 export type { LineStep, StepKind, TemplateStep, Resolver } from "./approval-line";
 export const STEP_KINDS: StepKind[] = ["담당", "검토", "협조", "승인", "확인"];
 
@@ -39,9 +39,41 @@ export type Approval = {
 
 export type Person = { id: string; name: string; position: string | null; department: string | null; department_id: string | null };
 
-export async function getTemplate(supabase: SupabaseClient, moduleCode: string): Promise<TemplateStep[]> {
+// drafterId 를 주면 "작성자의 파트장·팀장·부문장" 단계를 그 사람 조직으로 풀어 user_id 에 넣음 (0045)
+//   파트 소속이 아니면 파트장 단계는 빠지고, 작성자 본인이거나 앞 단계와 같은 사람이면 빠짐 (예: 팀장이 쓰면 팀장 단계 없음)
+export async function getTemplate(supabase: SupabaseClient, moduleCode: string, drafterId?: string): Promise<TemplateStep[]> {
   const { data } = await supabase.from("approval_template_steps").select("*").eq("module_code", moduleCode).order("step_order");
-  return (data ?? []) as TemplateStep[];
+  const tpl = (data ?? []) as TemplateStep[];
+  if (!drafterId || !tpl.some((t) => DRAFTER_ORG[t.resolver])) return tpl;
+  const heads = await getDrafterHeads(supabase, drafterId);
+  const seen = new Set<string>([drafterId]);
+  return tpl.flatMap((t) => {
+    if (!DRAFTER_ORG[t.resolver]) return [t];
+    if (t.resolver === "drafter_part_head" && !heads.inPart) return [];
+    const id = t.resolver === "drafter_part_head" ? heads.part : t.resolver === "drafter_team_head" ? heads.team : heads.division;
+    if (id && seen.has(id)) return [];
+    if (id) seen.add(id);
+    return [{ ...t, user_id: id }];
+  });
+}
+
+// 작성자의 파트장 · 팀장 · 부문장
+export async function getDrafterHeads(supabase: SupabaseClient, userId: string) {
+  const { data: me } = await supabase.from("profiles").select("department_id").eq("id", userId).maybeSingle();
+  const { data: mine } = me?.department_id
+    ? await supabase.from("departments").select("id, parent_id, head_id").eq("id", me.department_id).maybeSingle()
+    : { data: null };
+  const teamId = mine ? (mine.parent_id ?? mine.id) : null;
+  const { data: team } = teamId ? await supabase.from("departments").select("head_id, site_id, division").eq("id", teamId).maybeSingle() : { data: null };
+  const { data: div } = team?.division
+    ? await supabase.from("division_heads").select("user_id").eq("site_id", team.site_id).eq("division", team.division).maybeSingle()
+    : { data: null };
+  return {
+    inPart: !!mine?.parent_id,
+    part: mine?.parent_id ? ((mine.head_id as string | null) ?? null) : null,
+    team: (team?.head_id as string | null) ?? null,
+    division: (div?.user_id as string | null) ?? null,
+  };
 }
 
 // 양식 기본 결재선 → 실제 결재자로 풀어서 상신 화면 기본값 만들기
@@ -50,13 +82,22 @@ export async function resolveDefaultLine(
   moduleCode: string,
   ctx: { drafterId: string; docDepartmentId: string | null },
 ): Promise<LineStep[]> {
-  const [tpl, depts] = await Promise.all([getTemplate(supabase, moduleCode), getDeptHeads(supabase)]);
+  const [tpl, depts] = await Promise.all([getTemplate(supabase, moduleCode, ctx.drafterId), getDeptHeads(supabase)]);
   return resolveLine(tpl, { ...ctx, depts });
 }
 
-export async function getDeptHeads(supabase: SupabaseClient) {
-  const { data } = await supabase.from("departments").select("id, name, approver_id").eq("is_active", true).is("parent_id", null).order("sort_order"); // 부서(팀)만
-  return (data ?? []) as { id: string; name: string; approver_id: string | null }[];
+// 부서(팀)만 · approver_id = 결재선의 "해당 부서의 팀장" (팀장이 없으면 첫 번째 종결 승인자) · division_head_id = 그 팀의 부문장
+export async function getDeptHeads(supabase: SupabaseClient): Promise<DeptHead[]> {
+  const [{ data }, { data: divs }] = await Promise.all([
+    supabase.from("departments").select("*").eq("is_active", true).is("parent_id", null).order("sort_order"),
+    supabase.from("division_heads").select("site_id, division, user_id"),
+  ]);
+  return (data ?? []).map((d) => ({
+    id: d.id as string,
+    name: d.name as string,
+    approver_id: ((d.head_id ?? d.approver_id) as string | null) ?? null,
+    division_head_id: (divs ?? []).find((x) => x.site_id === d.site_id && x.division === d.division)?.user_id ?? null,
+  }));
 }
 
 export async function getPeople(supabase: SupabaseClient): Promise<Person[]> {

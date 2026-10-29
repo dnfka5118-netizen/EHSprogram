@@ -57,7 +57,7 @@ export default async function JsaDetailPage({ params, searchParams }: PageProps<
           evalNo={row.eval_no}
           initial={form}
           departments={depts}
-          template={await getTemplate(supabase, "risk_adhoc")}
+          template={await getTemplate(supabase, "risk_adhoc", me.id)}
           people={await getPeople(supabase)}
           meId={me.id}
           today={todayKst()}
