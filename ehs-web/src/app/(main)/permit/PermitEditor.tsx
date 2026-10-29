@@ -76,7 +76,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   }
 
   return (
-    <div className="max-w-6xl space-y-4 pb-24">
+    <div className="space-y-4 pb-24">
       {rejectedNote && (
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <b>반려됨</b> · {rejectedNote} — 내용을 수정한 뒤 다시 상신해 주세요.
@@ -195,14 +195,14 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
             ! 위험등급 <b>{p.grade}</b>등급은 입회자 선임이 필수이며, 화기작업 시 등급과 무관하게 화재감시자를 지정·배치해야 합니다.
           </p>
         )}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <F label="작업명" required>
-              <input className={INPUT} value={p.work_name} onChange={(e) => set({ work_name: e.target.value })} placeholder="예) R-201 반응기 촉매 교체를 위한 맨홀 개방 및 내부 정비" />
-            </F>
-          </div>
+        {/* PC 에서는 한 줄에 여러 칸 (스크롤 줄이기) */}
+        <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+          <F label="작업명" required>
+            <input className={INPUT} value={p.work_name} onChange={(e) => set({ work_name: e.target.value })} placeholder="예) R-201 반응기 촉매 교체를 위한 맨홀 개방 및 내부 정비" />
+          </F>
           <F label="작업장소"><input className={INPUT} value={p.work_place} onChange={(e) => set({ work_place: e.target.value })} placeholder="예) 2공장 반응동 3층" /></F>
         </div>
+        <div className="grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 xl:grid-cols-2 [&>*]:border-0 [&>*]:pt-0">
         <Sub title="설비번호 (Tag No.)">
           <Rows
             rows={p.tags}
@@ -218,15 +218,17 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
             )}
           />
         </Sub>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid content-start gap-3 md:grid-cols-2">
           <F label="작업 시작일시" required><input type="datetime-local" className={INPUT} value={p.start_dt} onChange={(e) => set({ start_dt: e.target.value })} /></F>
           <F label="작업 종료일시" required><input type="datetime-local" className={INPUT} value={p.end_dt} onChange={(e) => set({ end_dt: e.target.value })} /></F>
+        </div>
         </div>
         {outsideHours(p.start_dt, p.end_dt) && (
           <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             ! 허가 효력은 정상근무시간(08:30~17:30) 내로 제한됩니다. 익일까지 이어지거나 시간 연장이 필요하면 발급 후 현장 기록의 <b>연장 기록</b>에 추가하고 재발급·재확인 서명을 받으세요.
           </p>
         )}
+        <div className="grid gap-x-6 gap-y-3 border-t border-gray-100 pt-3 xl:grid-cols-2 [&>*]:border-0 [&>*]:pt-0">
         <Sub title="작업관리자 (외주 작업 시 공사업체 관리자)">
           <PeopleRows rows={p.managers} onChange={(managers) => set({ managers })} addLabel="+ 작업관리자 추가" />
         </Sub>
@@ -234,6 +236,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
           <PeopleRows rows={p.witnesses} onChange={(witnesses) => set({ witnesses })} addLabel="+ 입회자 추가" />
           <Hint>화기작업 입회자는 화재감시자 역할을 겸하며, 밀폐공간작업 입회자는 관리감독자로 지정합니다.</Hint>
         </Sub>
+        </div>
       </Panel>
 
       {/* 02 */}
@@ -333,7 +336,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur left-[var(--sidebar-w)]">
-        <div className="flex max-w-6xl flex-wrap items-center gap-2">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1"><FormMessage state={state} /></div>
           <Button variant="secondary" disabled={pending} onClick={save}>{pending ? "저장 중…" : "💾 임시 저장"}</Button>
           <Button disabled={pending} onClick={submit}>{pending ? "처리 중…" : "결재 상신"}</Button>
