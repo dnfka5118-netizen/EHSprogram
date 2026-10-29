@@ -82,6 +82,7 @@ export default async function MailPage() {
                     <td className={`px-2 py-2 text-xs whitespace-nowrap ${n.status === "failed" ? "text-red-600" : "text-gray-600"}`} title={n.last_error ?? ""}>
                       {STATUS[n.status] ?? n.status}
                       {n.status === "failed" && ` (${n.attempts}회)`}
+                      {n.status === "expired" && n.last_error && ` (${n.last_error})`}
                     </td>
                   </tr>
                 );

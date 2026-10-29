@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -196,10 +196,12 @@ const sample = await one(`select subject, body from notifications where kind='as
 ok(sample.subject.includes("CEO 안전점검 #1 (26.09)") && sample.body.includes("HBC-C2 / PLP"), "메일 제목·본문 내용");
 const mailDefault = (await one("select mail_immediate() m")).m; // 0032 기본 : 아침에 모아서
 await db.query("update app_settings set value='{\"immediate\": true}' where key='mail'"); // 이 부분은 바로 보내기로 시험
+// 이 시점에 종결된 건의 지정·승인 요청은 '이미 처리됨'으로 빠짐 (0042) → 남은 것만 꺼냄
+const avail = (await one(`select count(*)::int c from notifications n where status='pending' and not _notification_done(n)`)).c;
 const claimed = (await db.query(`select * from claim_notifications(5)`)).rows;
-ok(claimed.length === 5 && claimed[0].email.endsWith("@test.kr"), "발송기 대기열 가져오기 (5건)");
+ok(avail > 0 && claimed.length === Math.min(5, avail) && claimed[0].email.endsWith("@test.kr"), "발송기 대기열 가져오기 (처리 안 된 것 최대 5건)");
 await db.query(`select finish_notification($1,true,null)`, [claimed[0].id]);
-ok((await one(`select count(*)::int c from notifications where status='sending'`)).c === 4, "발송 상태 갱신");
+ok((await one(`select count(*)::int c from notifications where status='sending'`)).c === claimed.length - 1, "발송 상태 갱신");
 await db.exec(`set role authenticated`); await as(U.W1);
 await expectError("일반 사용자는 발송 대기열 조작 불가", `select * from claim_notifications(5)`, [], "permission");
 await db.exec(`reset role`); await as(null);
@@ -1045,6 +1047,39 @@ console.log("\n[속도 개선 : 장소 조건 목록]");
   const raw = (await db.query("select distinct request_department_id, location_id from findings where module_code=$1 and location_id is not null", ["insp_plant"])).rows;
   ok(pairs.length > 0 && pairs.length === raw.length, "장소 조건 (부서, 장소) 쌍을 중복 없이 한 번에");
   await as(null);
+}
+
+console.log("\n[이미 처리한 건은 메일로 보내지 않음]");
+{
+  await as(null);
+  await db.query("update notifications set status='sent' where status in ('pending','failed','sending')");
+  const waitF = (await one("select id from findings where status='approval_wait' limit 1")).id;
+  const add = async (kind, f, subject, link = null) =>
+    (await one("insert into notifications (user_id, finding_id, kind, subject, body, link) values ($1,$2,$3,$4,'b',$5) returning id", [U.W2, f, kind, subject, link])).id;
+  const done = {
+    request: await add("request", fid, "[EHS] 조치담당자 지정 요청 : 종결 건"),
+    assigned: await add("assigned", fid, "[EHS] 조치담당자로 지정 : 종결 건"),
+    approval: await add("approval", fid, "[EHS] 종결 승인 요청 : 종결 건"),
+    rejected: await add("rejected", fid, "[EHS] 반려 : 종결 건"),
+    suggestion: await add("suggestion", null, "[EHS] 새 개선 의견 #1 : 지워진 의견", "/suggestions/" + sgId),
+  };
+  const keepApproval = await add("approval", waitF, "[EHS] 종결 승인 요청 : 승인 대기 건");
+  const keepClosed = await add("closed", fid, "[EHS] 종결되었습니다 : 종결 건");
+  await db.query("select queue_event_digest($1)", ["2026-11-02"]);
+  const st = async (id) => one("select status, last_error from notifications where id=$1", [id]);
+  for (const [k, id] of Object.entries(done)) {
+    const r = await st(id);
+    ok(r.status === "expired" && r.last_error === "이미 처리됨", `처리 끝난 알림은 빼기 : ${k}`);
+  }
+  ok((await st(keepApproval)).status === "digested", "아직 승인 대기인 건의 승인 요청은 아침 메일에 들어감");
+  ok((await st(keepClosed)).status === "digested", "종결 소식은 그대로 보냄");
+  const body = (await one("select body from notifications where user_id=$1 and kind='digest' order by created_at desc limit 1", [U.W2])).body;
+  ok(body.includes("승인 대기 건") && !body.includes("종결 승인 요청 : 종결 건"), "아침 메일 내용에 처리된 건이 없음");
+  await db.query(`insert into app_settings (key, value) values ('mail','{"immediate": true}') on conflict (key) do update set value=excluded.value`);
+  const imm = await add("approval", fid, "[EHS] 바로 : 이미 종결");
+  const got = (await db.query("select subject from claim_notifications(50)")).rows.map((r) => r.subject);
+  ok(!got.includes("[EHS] 바로 : 이미 종결") && (await st(imm)).status === "expired", "바로 보내기에서도 처리된 건은 빼기");
+  await db.query(`update app_settings set value='{"immediate": false}' where key='mail'`);
 }
 
 console.log(`\n결과: ${pass} 통과 / ${fail} 실패`);
