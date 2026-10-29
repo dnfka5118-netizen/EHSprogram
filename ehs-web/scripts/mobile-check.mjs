@@ -2,7 +2,7 @@
 //
 //   1) npx next build && npx next start -p 3457      (다른 창에서 켜 둠)
 //   2) node scripts/mobile-check.mjs / /insp/ceo /permit/new#line
-//        경로 뒤 #menu = 메뉴 열기, #open = 접힌 칸(details) 모두 펼치기, #line = 허가서 결재라인 지정 창 열기, #inner = 허가서 작업관리자 내주 선택, #tip = 허가서 작업 종류 ? 설명 누르기 (TIP=번호),
+//        경로 뒤 #menu = 메뉴 열기, #open = 접힌 칸(details) 모두 펼치기, #line = 허가서 결재라인 지정 창 열기, #pdf = 인쇄 화면을 PDF 로 저장·쪽수, #inner = 허가서 작업관리자 내주 선택, #tip = 허가서 작업 종류 ? 설명 누르기 (TIP=번호),
 //        #place = 점검 등록에서 장소(PLACE) 고르고 자동 선택된 조치 부서 확인, #review = 유형 정리 묶음 계산 기다림, #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
 //      W=360 node scripts/mobile-check.mjs /insp/ceo   ← 폭 바꾸기
 //
@@ -61,6 +61,11 @@ try {
     await page.goto(BASE + path, { waitUntil: "networkidle2", timeout: 60000 });
     if (action === "open") await page.evaluate(() => document.querySelectorAll("details").forEach((d) => (d.open = true)));
     if (action === "menu") await page.click('button[aria-label="메뉴 열기"]');
+    if (action === "pdf") {
+      // 인쇄 화면 → A4 PDF (.cache/mobile/print.pdf) · 쪽수 확인
+      const pdf = await page.pdf({ path: fileURLToPath(new URL("print.pdf", OUT)), preferCSSPageSize: true, printBackground: true });
+      console.log("  PDF 쪽수 :", (Buffer.from(pdf).toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length);
+    }
     if (action === "inner") {
       // 허가서 작업관리자 옆 "내주" → 소속 자동 입력
       await clickText(page, "내주");

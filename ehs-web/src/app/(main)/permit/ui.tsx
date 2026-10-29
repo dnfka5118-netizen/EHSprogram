@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CHK, type ChkGroup } from "@/lib/permit";
+import { chkItems, type ChkGroup } from "@/lib/permit";
 
 export const INPUT = "w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none disabled:bg-gray-50 disabled:text-gray-600";
 
@@ -122,7 +122,7 @@ export function CheckList({ group, need, ok, onNeed, onOk, mode }: {
 }) {
   return (
     <div className={mode === "apply" ? `${CHECK_GRID} xl:grid-cols-4` : CHECK_GRID}>
-      {CHK[group].map((label, i) => {
+      {chkItems(group).map(({ i, label }) => {
         const key = `${group}_${i}`;
         if (mode === "single") {
           return (

@@ -10,7 +10,7 @@ import { JsaPaper } from "@/components/print/JsaPaper";
 import { PrintBar } from "../../PrintButton";
 import "../../paper.css";
 
-// CF430-01 R04 (A4 가로 2p · 양면 인쇄 시 1p 앞면 / 2p 뒷면) + 연결된 위험성평가 CF112
+// CF430-01 R05 (A4 가로 2p · 양면 인쇄 시 1p 앞면 / 2p 뒷면) + 연결된 위험성평가 CF112
 export default async function PermitPrintPage({ params }: PageProps<"/print/permit/[id]">) {
   const { id } = await params;
   if (!(await getProfile())) redirect("/login");
@@ -42,7 +42,7 @@ export default async function PermitPrintPage({ params }: PageProps<"/print/perm
     <div className="paper-screen">
       <PrintBar
         title="안전작업허가서 인쇄 미리보기"
-        sub={`CF430-01 R04 · A4 가로 2p · 양면 인쇄 시 1p 앞면 / 2p 뒷면${jsa ? " · 위험성평가(CF112) 첨부" : ""}${row.phase === "draft" ? " · ⚠ 발급 전 문서" : ""}`}
+        sub={`CF430-01 R05 · A4 가로 2p · 양면 인쇄 시 1p 앞면 / 2p 뒷면${jsa ? " · 위험성평가(CF112) 첨부" : ""}${row.phase === "draft" ? " · ⚠ 발급 전 문서" : ""}`}
       />
       <div className="paper-sheets">
         <PermitPaper p={p} f={fieldFromRow(row)} permitNo={row.permit_no} issuedAt={row.issued_at ? fmtDateTime(row.issued_at) : ""} stamps={stamps} />
