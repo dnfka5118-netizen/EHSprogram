@@ -262,18 +262,75 @@ export async function saveDepartment(_prev: ActionState, fd: FormData): Promise<
   return done();
 }
 
-// 부문장 (사업장 + 부문 이름마다 1명 · 비우면 지움, 0045)
-export async function saveDivisionHead(_prev: ActionState, fd: FormData): Promise<ActionState> {
+// 부서·결재자 화면 한 사업장 전체 저장 : 칸 이름 = "항목:부서ID" · 바뀐 줄만 고침 · 삭제 버튼은 delete_id
+export async function saveDepartmentsAll(_prev: ActionState, fd: FormData): Promise<ActionState> {
   await requireAdmin();
+  const del = s(fd, "delete_id");
+  if (del) return removeRow("departments", del, "부서");
   const supabase = await createClient();
-  const site_id = s(fd, "site_id");
-  const division = s(fd, "division");
-  const user_id = nullable(s(fd, "user_id"));
-  if (!site_id || !division) return { error: "부문을 찾을 수 없습니다." };
-  const { error } = user_id
-    ? await supabase.from("division_heads").upsert({ site_id, division, user_id, updated_at: new Date().toISOString() })
-    : await supabase.from("division_heads").delete().eq("site_id", site_id).eq("division", division);
-  return error ? { error: toMessage(error) } : done();
+  const ids = fd.getAll("dept_id").map(String).filter(Boolean);
+  const [{ data: rows }, { data: roles }] = await Promise.all([
+    supabase.from("departments").select("id, site_id, name, division, parent_id, sort_order, is_active, head_id").in("id", ids),
+    supabase.from("department_roles").select("department_id, user_id, role, sort_order").in("department_id", ids),
+  ]);
+  const errors: string[] = [];
+  const renamed: { site_id: string; from: string; to: string }[] = [];
+  const list = (k: string) => fd.getAll(k).map(String).filter(Boolean);
+  const curRoles = (id: string, role: string) =>
+    (roles ?? []).filter((r) => r.department_id === id && r.role === role).sort((a, b) => a.sort_order - b.sort_order).map((r) => r.user_id as string);
+  for (const id of ids) {
+    const old = (rows ?? []).find((r) => r.id === id);
+    if (!old) continue;
+    const name = s(fd, `name:${id}`);
+    if (!name) {
+      errors.push(`${old.name} : 이름을 입력해 주세요.`);
+      continue;
+    }
+    const parent = nullable(s(fd, `parent_id:${id}`));
+    const next = {
+      name,
+      division: parent ? null : nullable(s(fd, `division:${id}`)),
+      parent_id: parent,
+      sort_order: n(fd, `sort_order:${id}`),
+      is_active: fd.get(`is_active:${id}`) === "on",
+      head_id: nullable(s(fd, `head_id:${id}`)),
+    };
+    const changed = (Object.keys(next) as (keyof typeof next)[]).some((k) => (next[k] ?? null) !== ((old as Record<string, unknown>)[k] ?? null));
+    if (changed) {
+      const { error } = await supabase.from("departments").update(next).eq("id", id);
+      if (error) {
+        errors.push(`${old.name} : ${toMessage(error)}`);
+        continue;
+      }
+      if (!old.parent_id && !parent && old.division && next.division && old.division !== next.division) renamed.push({ site_id: old.site_id, from: old.division, to: next.division });
+    }
+    const assigners = parent ? [] : list(`assigner_ids:${id}`);
+    const approvers = list(`approver_ids:${id}`);
+    if (assigners.join() !== curRoles(id, "assigner").join() || approvers.join() !== curRoles(id, "approver").join()) {
+      const r = await supabase.rpc("set_department_roles", { p_dept: id, p_assigners: assigners, p_approvers: approvers });
+      if (r.error) errors.push(`${name} : ${toMessage(r.error)}`);
+    }
+  }
+  // 부문 이름을 바꿨고 옛 이름의 팀이 더는 없으면 부문장도 새 이름으로 옮김
+  for (const r of renamed) {
+    const { count } = await supabase.from("departments").select("id", { count: "exact", head: true }).eq("site_id", r.site_id).eq("division", r.from).is("parent_id", null);
+    if (!count) await supabase.from("division_heads").update({ division: r.to, updated_at: new Date().toISOString() }).eq("site_id", r.site_id).eq("division", r.from);
+  }
+  // 부문장
+  const { data: heads } = await supabase.from("division_heads").select("site_id, division, user_id");
+  for (const key of fd.getAll("div_key").map(String)) {
+    const [site_id, ...rest] = key.split("|");
+    const division = rest.join("|");
+    if (renamed.some((r) => r.site_id === site_id && r.from === division)) continue;
+    const user_id = nullable(s(fd, `div_head:${key}`));
+    const cur = (heads ?? []).find((h) => h.site_id === site_id && h.division === division)?.user_id ?? null;
+    if (user_id === cur) continue;
+    const { error } = user_id
+      ? await supabase.from("division_heads").upsert({ site_id, division, user_id, updated_at: new Date().toISOString() })
+      : await supabase.from("division_heads").delete().eq("site_id", site_id).eq("division", division);
+    if (error) errors.push(`${division} 부문장 : ${toMessage(error)}`);
+  }
+  return errors.length ? { error: errors.join("\n") } : done();
 }
 
 // ---------------------------------------------------------------- 장소 / 유형

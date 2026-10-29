@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { Card, DeleteSubmit, Input, SubmitButton } from "@/components/ui";
+import { Card, Input, SubmitButton } from "@/components/ui";
 import { ActionForm } from "@/components/ActionForm";
-import { saveDepartment, saveDivisionHead } from "../actions";
+import { saveDepartment, saveDepartmentsAll } from "../actions";
 import { RolePicker } from "./RolePicker";
 import type { Department, Profile, Site } from "@/lib/types";
 
 const SELECT = "w-full rounded-md border border-gray-300 bg-white px-2 py-1.5";
-const COLS = "md:grid-cols-[120px_1fr_130px_60px_150px_1fr_1fr_52px_60px_52px]";
+const COLS = "md:grid-cols-[120px_1fr_130px_60px_150px_1fr_1fr_52px_52px]";
 
 type P = { id: string; name: string; position: string | null };
 // 장(부문장·팀장·파트장) 고르기 : 소속 직원을 먼저, 그 외 전체
@@ -65,6 +65,8 @@ export default async function DepartmentsPage() {
               ))}
             </datalist>
             <div className="space-y-4">
+              {/* 한 사업장의 부문장·팀·파트를 한 번에 저장 (각 칸 이름 뒤에 :부서ID) */}
+              <ActionForm action={saveDepartmentsAll} className="space-y-4">
               <div className={`hidden gap-2 px-1 text-xs text-gray-500 md:grid ${COLS}`}>
                 <span>부문</span>
                 <span>팀 / 파트</span>
@@ -75,26 +77,23 @@ export default async function DepartmentsPage() {
                 <span>종결 승인자 (여러 명)</span>
                 <span>사용</span>
                 <span />
-                <span />
               </div>
               {divisions.map((div) => (
                 <div key={div || "-"} className="rounded-md border border-gray-100">
                   {div ? (
-                    <ActionForm action={saveDivisionHead} className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50 px-2 py-1.5">
-                      <input type="hidden" name="site_id" value={site.id} />
-                      <input type="hidden" name="division" value={div} />
+                    <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 bg-gray-50 px-2 py-1.5">
+                      <input type="hidden" name="div_key" value={`${site.id}|${div}`} />
                       <span className="text-sm font-semibold text-gray-800">{div}</span>
                       <span className="text-xs text-gray-500">부문장</span>
                       <div className="w-48">
                         <HeadSelect
-                          name="user_id"
+                          name={`div_head:${site.id}|${div}`}
                           value={(divHeads ?? []).find((h) => h.site_id === site.id && h.division === div)?.user_id}
                           members={people.filter((p) => list.some((x) => x.id === p.department_id && (x.division ?? "") === div))}
                           all={people}
                         />
                       </div>
-                      <SubmitButton variant="secondary" className="px-2 py-1">저장</SubmitButton>
-                    </ActionForm>
+                    </div>
                   ) : (
                     <p className="border-b border-gray-100 bg-gray-50 px-2 py-1.5 text-sm font-semibold text-gray-800">부문 미지정</p>
                   )}
@@ -103,23 +102,20 @@ export default async function DepartmentsPage() {
                     const members = people.filter((p) => p.department_id === team || list.some((x) => x.id === p.department_id && x.parent_id === team));
                     const others = people.filter((p) => p.site_id === site.id && !members.includes(p));
                     const isPart = !!d.parent_id;
+                    const k = (f: string) => `${f}:${d.id}`;
                     return (
-                      <ActionForm
-                        key={d.id}
-                        action={saveDepartment}
-                        className={`grid grid-cols-2 items-center gap-2 border-b border-gray-50 p-2 last:border-0 ${COLS} ${isPart ? "bg-gray-50/60" : ""}`}
-                      >
-                        <input type="hidden" name="id" value={d.id} />
+                      <div key={d.id} className={`grid grid-cols-2 items-center gap-2 border-b border-gray-50 p-2 last:border-0 ${COLS} ${isPart ? "bg-gray-50/60" : ""}`}>
+                        <input type="hidden" name="dept_id" value={d.id} />
                         {isPart ? (
                           <span className="text-xs text-gray-400">{d.division ?? ""}</span>
                         ) : (
-                          <Input name="division" defaultValue={d.division ?? ""} list={`div-${site.id}`} placeholder="부문" />
+                          <Input name={k("division")} defaultValue={d.division ?? ""} list={`div-${site.id}`} placeholder="부문" />
                         )}
                         <div className="flex items-center gap-1">
                           {isPart && <span className="text-gray-400">└</span>}
-                          <Input name="name" defaultValue={d.name} />
+                          <Input name={k("name")} defaultValue={d.name} />
                         </div>
-                        <select name="parent_id" defaultValue={d.parent_id ?? ""} className={SELECT}>
+                        <select name={k("parent_id")} defaultValue={d.parent_id ?? ""} className={SELECT}>
                           <option value="">(팀)</option>
                           {teams
                             .filter((t) => t.id !== d.id)
@@ -127,13 +123,13 @@ export default async function DepartmentsPage() {
                               <option key={t.id} value={t.id}>{t.name}의 파트</option>
                             ))}
                         </select>
-                        <Input name="sort_order" type="number" defaultValue={d.sort_order} />
-                        <HeadSelect name="head_id" value={d.head_id} members={isPart ? people.filter((p) => p.department_id === d.id) : members} all={people} />
+                        <Input name={k("sort_order")} type="number" defaultValue={d.sort_order} />
+                        <HeadSelect name={k("head_id")} value={d.head_id} members={isPart ? people.filter((p) => p.department_id === d.id) : members} all={people} />
                         {isPart ? (
                           <>
-                            <span className="text-xs text-gray-500">상위 부서의 지정자가 맡습니다</span>
+                            <span className="text-xs text-gray-500">상위 팀의 지정자가 맡습니다</span>
                             <RolePicker
-                              name="approver_ids"
+                              name={k("approver_ids")}
                               members={people.filter((p) => p.department_id === d.id)}
                               others={people.filter((p) => p.site_id === site.id && p.department_id !== d.id)}
                               initial={roleIds(d, "approver")}
@@ -142,20 +138,33 @@ export default async function DepartmentsPage() {
                           </>
                         ) : (
                           <>
-                            <RolePicker name="assigner_ids" members={members} others={others} initial={roleIds(d, "assigner")} />
-                            <RolePicker name="approver_ids" members={members} others={others} initial={roleIds(d, "approver")} />
+                            <RolePicker name={k("assigner_ids")} members={members} others={others} initial={roleIds(d, "assigner")} />
+                            <RolePicker name={k("approver_ids")} members={members} others={others} initial={roleIds(d, "approver")} />
                           </>
                         )}
                         <label className="flex items-center gap-1 text-sm">
-                          <input type="checkbox" name="is_active" defaultChecked={d.is_active} className="h-4 w-4" /> 사용
+                          <input type="checkbox" name={k("is_active")} defaultChecked={d.is_active} className="h-4 w-4" /> 사용
                         </label>
-                        <SubmitButton variant="secondary" className="px-2 py-1.5">저장</SubmitButton>
-                        <DeleteSubmit what={d.name} warning="소속 사용자는 부서 없음으로 바뀝니다. 지적사항이 있거나 파트가 있는 부서는 삭제되지 않습니다." />
-                      </ActionForm>
+                        <SubmitButton
+                          name="delete_id"
+                          value={d.id}
+                          variant="ghost"
+                          pendingText="…"
+                          className="px-2 py-1.5 text-red-600 hover:bg-red-50"
+                          confirmText={`'${d.name}'을(를) 삭제할까요?\n소속 사용자는 부서 없음으로 바뀝니다. 지적사항이 있거나 파트가 있는 부서는 삭제되지 않습니다.`}
+                        >
+                          삭제
+                        </SubmitButton>
+                      </div>
                     );
                   })}
                 </div>
               ))}
+              <div className="sticky bottom-0 z-10 -mx-1 flex items-center justify-end gap-3 border-t border-gray-200 bg-white/95 px-1 py-2 backdrop-blur">
+                <span className="text-xs text-gray-500">부문장 · 팀 · 파트를 고친 뒤 한 번에 저장합니다</span>
+                <SubmitButton pendingText="저장 중…">{site.name} 전체 저장</SubmitButton>
+              </div>
+              </ActionForm>
               <ActionForm action={saveDepartment} resetOnSuccess className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                 <input type="hidden" name="site_id" value={site.id} />
                 <Input name="division" list={`div-${site.id}`} placeholder="부문 (예: 천안공장)" className="w-40" />
