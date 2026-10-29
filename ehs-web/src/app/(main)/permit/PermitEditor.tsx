@@ -31,7 +31,6 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   const [p, setP] = useState<PermitApply>(initial);
   const [state, setState] = useState<ActionState>();
   const [pending, start] = useTransition();
-  const [submitOpen, setSubmitOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [lineEdited, setLineEdited] = useState(false);
   const [line, setLine] = useState<LineStep[]>(() => resolveLine(template, { drafterId: meId, docDepartmentId: initial.department_id || null, depts: departments }));
@@ -77,7 +76,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   }
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="max-w-6xl space-y-4 pb-24">
       {rejectedNote && (
         <p className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <b>반려됨</b> · {rejectedNote} — 내용을 수정한 뒤 다시 상신해 주세요.
@@ -86,27 +85,46 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
 
       {/* 00 */}
       <Panel num="00" title="허가서 발급 정보">
-        <div className="grid gap-3 md:grid-cols-3">
-          <F label="허가번호">
-            <input className={`${INPUT} bg-gray-50 font-mono`} value={permitNo ?? "저장 시 자동 발급"} readOnly />
-          </F>
-          <F label="해당부서" required hint="(승인 부서장)">
-            <select className={INPUT} value={p.department_id} onChange={(e) => changeDept(e.target.value)}>
-              <option value="">선택</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </F>
-          <div />
-          <F label="PSM 변경관리 대상">
-            <Radio value={p.psm} options={["해당", "미해당"]} onChange={(v) => set({ psm: v as PermitApply["psm"] })} />
-          </F>
-          <F label="가동전점검 실시대상">
-            <Radio value={p.preop} options={["해당", "미해당"]} onChange={(v) => set({ preop: v as PermitApply["preop"] })} />
-          </F>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_440px]">
+          <div className="min-w-0 space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <F label="허가번호">
+                <input className={`${INPUT} bg-gray-50 font-mono`} value={permitNo ?? "저장 시 자동 발급"} readOnly />
+              </F>
+              <F label="해당부서" required hint="(승인 부서장)">
+                <select className={INPUT} value={p.department_id} onChange={(e) => changeDept(e.target.value)}>
+                  <option value="">선택</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </F>
+              <F label="PSM 변경관리 대상">
+                <Radio value={p.psm} options={["해당", "미해당"]} onChange={(v) => set({ psm: v as PermitApply["psm"] })} />
+              </F>
+              <F label="가동전점검 실시대상">
+                <Radio value={p.preop} options={["해당", "미해당"]} onChange={(v) => set({ preop: v as PermitApply["preop"] })} />
+              </F>
+            </div>
+            <Hint>절차 6.1가: 해당 작업의 PSM 변경관리 대상 여부 및 가동전점검(안전인증대상 기계·기구 등) 실시대상 여부를 확인하고 해당·미해당을 표기합니다. 허가일시는 최종 승인(발급) 시각으로 자동 기록됩니다.</Hint>
+          </div>
+          {/* 결재선 : 처음부터 보이고, 아래 "결재 상신" 을 누르면 이 결재선으로 바로 상신 */}
+          <div className="min-w-0 space-y-2">
+            <p className="text-xs font-semibold text-gray-700">
+              결재선 <span className="font-normal text-gray-500">· 기본 결재선이 채워져 있습니다. 칸을 누르면 바꿀 수 있습니다</span>
+            </p>
+            <ApprovalLineEditor
+              meId={meId}
+              value={line}
+              onChange={(v) => {
+                setLine(v);
+                setLineEdited(true);
+              }}
+              people={people}
+            />
+            <Hint>담당(발급) → 검토(EHS부서장) → 협조(관련부서, 필요 시) → 승인(해당부서장) · 최종 승인되면 허가서가 발급됩니다.</Hint>
+          </div>
         </div>
-        <Hint>절차 6.1가: 해당 작업의 PSM 변경관리 대상 여부 및 가동전점검(안전인증대상 기계·기구 등) 실시대상 여부를 확인하고 해당·미해당을 표기합니다. 허가일시는 최종 승인(발급) 시각으로 자동 기록됩니다.</Hint>
       </Panel>
 
       {/* 01 */}
@@ -184,7 +202,6 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
             </F>
           </div>
           <F label="작업장소"><input className={INPUT} value={p.work_place} onChange={(e) => set({ work_place: e.target.value })} placeholder="예) 2공장 반응동 3층" /></F>
-          <F label="시공업체명 (회사명)"><input className={INPUT} value={p.company_name} onChange={(e) => set({ company_name: e.target.value })} placeholder="예) (주)삼영순화 / 외주업체명" /></F>
         </div>
         <Sub title="설비번호 (Tag No.)">
           <Rows
@@ -303,25 +320,6 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
         )}
       </Panel>
 
-      {submitOpen && (
-        <Panel num="✓" title="결재 상신" sub="기본 결재선이 채워져 있습니다 · 협조(관련부서)가 필요하면 결재자를 지정하세요">
-          <ApprovalLineEditor
-            meId={meId}
-            value={line}
-            onChange={(v) => {
-              setLine(v);
-              setLineEdited(true);
-            }}
-            people={people}
-          />
-          <Hint>담당(발급) → 검토(EHS부서장) → 협조(관련부서, 필요 시) → 승인(해당부서장) 순으로 결재합니다. 최종 승인되면 허가서가 발급됩니다.</Hint>
-          <div className="flex gap-2">
-            <Button disabled={pending} onClick={submit}>{pending ? "상신 중…" : "결재 상신"}</Button>
-            <Button variant="ghost" onClick={() => setSubmitOpen(false)}>닫기</Button>
-          </div>
-        </Panel>
-      )}
-
       {pickerOpen && (
         <RiskPicker
           options={jsaOptions}
@@ -335,10 +333,10 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
       )}
 
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur left-[var(--sidebar-w)]">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2">
+        <div className="flex max-w-6xl flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1"><FormMessage state={state} /></div>
           <Button variant="secondary" disabled={pending} onClick={save}>{pending ? "저장 중…" : "💾 임시 저장"}</Button>
-          <Button disabled={pending} onClick={() => (submitOpen ? submit() : setSubmitOpen(true))}>{submitOpen ? "결재 상신" : "상신하기 →"}</Button>
+          <Button disabled={pending} onClick={submit}>{pending ? "처리 중…" : "결재 상신"}</Button>
         </div>
       </div>
     </div>

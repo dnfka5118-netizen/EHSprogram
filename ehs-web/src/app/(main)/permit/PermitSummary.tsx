@@ -31,7 +31,6 @@ export function PermitSummary({ p, permitNo, issuedAt, departmentName, riskEval 
     ],
     ["작업일시", `${p.start_dt.replace("T", " ")} ~ ${p.end_dt.slice(0, 10) === p.start_dt.slice(0, 10) ? p.end_dt.slice(11) : p.end_dt.replace("T", " ")}`],
     ["작업장소", p.work_place || "-"],
-    ["시공업체명", p.company_name || "-"],
     ["설비번호", p.tags.filter((t) => t.name || t.tag).map((t) => `${t.name}${t.tag ? `(${t.tag})` : ""}`).join(", ") || "-"],
     ["작업관리자", people(p.managers)],
     ["입회자", people(p.witnesses)],

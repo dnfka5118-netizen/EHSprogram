@@ -11,6 +11,8 @@ import type { PermitApply, PermitField } from "@/lib/permit";
 type Result = { error?: string; id?: string; message?: string };
 
 export async function savePermit(id: string | null, data: PermitApply): Promise<Result> {
+  // 허가서 양식에 회사명 칸은 없음 → 작업 현황 표·검색용으로 첫 작업관리자 소속을 저장
+  data = { ...data, company_name: data.managers.find((m) => m.org.trim())?.org.trim() ?? "" };
   const supabase = await createClient();
   const { data: newId, error } = await supabase.rpc("save_permit", { p_id: id, p_data: data });
   if (error) return { error: toMessage(error) };
