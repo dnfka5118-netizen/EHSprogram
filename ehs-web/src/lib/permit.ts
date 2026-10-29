@@ -11,7 +11,7 @@ export const SUPP_TYPES: { key: SuppKey; value: string; label: string; desc: str
   { key: "heavy", value: "중장비", label: "중장비사용작업", desc: "중장비를 사용하는 작업" },
 ];
 export const WORK_TYPE_DESC: Record<"일반위험" | "화기", string> = {
-  일반위험: "화기작업에 해당하지 않는 위험작업",
+  일반위험: "위험·유해화학물질 취급 및 내재 설비 해체 등의 작업",
   화기: "화염, 스파크 등을 발생시키는 작업",
 };
 // EHS 확인이 필요한 보충작업
