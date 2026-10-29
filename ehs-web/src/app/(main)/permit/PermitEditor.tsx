@@ -105,9 +105,9 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
 
       {/* 00 */}
       <Panel num="00" title="허가서 발급 정보">
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_440px]">
+        <div className="space-y-4">
           <div className="min-w-0 space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <F label="허가번호">
                 <input className={`${INPUT} bg-gray-50 font-mono`} value={permitNo ?? "상신 시 자동 발급"} readOnly />
               </F>
@@ -129,8 +129,8 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
             <Hint>절차 6.1가: 해당 작업의 PSM 변경관리 대상 여부 및 가동전점검(안전인증대상 기계·기구 등) 실시대상 여부를 확인하고 해당·미해당을 표기합니다. 허가일시는 최종 승인(발급) 시각으로 자동 기록됩니다.</Hint>
           </div>
           {/* 결재선 : 처음부터 보이고, 아래 "결재 상신" 을 누르면 이 결재선으로 바로 상신 */}
-          <div className="min-w-0 space-y-2">
-            <p className="flex items-center gap-1 text-xs font-semibold text-gray-700">
+          <div className="min-w-0 space-y-2 border-t border-gray-100 pt-3">
+            <p className="flex flex-wrap items-center gap-1 text-xs font-semibold text-gray-700">
               결재선
               <HelpTip text="담당(발급) → 검토(EHS부서장) → 협조(관련부서, 필요 시) → 승인(해당부서장) 순으로 결재합니다. 최종 승인되면 허가서가 발급됩니다." />
               <span className="font-normal text-gray-500">· 기본 결재선이 채워져 있습니다. 칸을 누르면 바꿀 수 있습니다</span>
