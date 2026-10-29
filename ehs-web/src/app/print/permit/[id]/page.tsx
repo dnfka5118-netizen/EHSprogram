@@ -45,7 +45,7 @@ export default async function PermitPrintPage({ params }: PageProps<"/print/perm
         sub={`CF430-01 R05 · A4 가로 2p · 양면 인쇄 시 1p 앞면 / 2p 뒷면${jsa ? " · 위험성평가(CF112) 첨부" : ""}${row.phase === "draft" ? " · ⚠ 발급 전 문서" : ""}`}
       />
       <div className="paper-sheets">
-        <PermitPaper p={p} f={fieldFromRow(row)} permitNo={row.permit_no} issuedAt={row.issued_at ? fmtDateTime(row.issued_at) : ""} stamps={stamps} />
+        <PermitPaper p={p} f={fieldFromRow(row)} permitNo={row.permit_no ?? ""} issuedAt={row.issued_at ? fmtDateTime(row.issued_at) : ""} stamps={stamps} />
       </div>
       {jsa && <JsaPaper form={jsa.form} evalNo={jsa.evalNo} evalDate={jsa.evalDate} departmentName={jsa.dept} stamps={jsa.stamps} />}
     </div>

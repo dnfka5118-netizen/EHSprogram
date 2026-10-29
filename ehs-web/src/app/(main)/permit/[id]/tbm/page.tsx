@@ -28,7 +28,7 @@ export default async function TbmPage({ params }: PageProps<"/permit/[id]/tbm">)
   return (
     <div className="mx-auto max-w-3xl space-y-3">
       <Link href={`/permit/${id}`} className="text-sm text-gray-600 hover:underline">
-        ← {p.permit_no} · {p.work_name}
+        ← {p.permit_no ?? "(상신 전)"} · {p.work_name}
       </Link>
       {p.phase === "draft" ? (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">허가서가 발급된 뒤에 TBM을 기록할 수 있습니다.</p>

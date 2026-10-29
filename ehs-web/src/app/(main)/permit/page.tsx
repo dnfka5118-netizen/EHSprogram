@@ -7,7 +7,7 @@ import { todayKst } from "@/lib/format";
 
 type Row = {
   id: string;
-  permit_no: string;
+  permit_no: string | null; // 상신 전에는 없음 (0044)
   work_type: string | null;
   supp: string[];
   grade: string | null;
@@ -86,7 +86,7 @@ export default async function PermitListPage({ searchParams }: PageProps<"/permi
                       {d(r.start_dt)} <span className="text-gray-400">{t(r.start_dt)}~{t(r.end_dt)}</span>
                     </td>
                     <td className="border border-gray-200 px-1.5 py-1.5 font-mono whitespace-nowrap">
-                      <Link href={`/permit/${r.id}`} className="text-brand-800 hover:underline">{r.permit_no}</Link>
+                      <Link href={`/permit/${r.id}`} className="text-brand-800 hover:underline">{r.permit_no ?? "(상신 전)"}</Link>
                     </td>
                     <td className="border border-gray-200 px-1.5 py-1.5">{r.work_place ?? "-"}</td>
                     <td className="border border-gray-200 px-1.5 py-1.5">{r.company_name ?? "-"}</td>

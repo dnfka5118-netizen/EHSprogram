@@ -41,7 +41,7 @@ export default async function PermitDetailPage({ params, searchParams }: PagePro
       </Link>
       {submitted && status === "in_review" && <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">상신했습니다. 최종 승인되면 허가서가 발급되고 메일로 알려 드립니다.</p>}
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-mono font-bold text-brand-900">{row.permit_no}</span>
+        <span className="font-mono font-bold text-brand-900">{row.permit_no ?? "(상신 전)"}</span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${PERMIT_STATUS[status].style}`}>{PERMIT_STATUS[status].label}</span>
         {row.field_saved_at && <span className="text-xs text-gray-500">현장 기록 {fmtDateTime(row.field_saved_at)}</span>}
         <span className="flex-1" />
@@ -68,7 +68,7 @@ export default async function PermitDetailPage({ params, searchParams }: PagePro
         />
       ) : (
         <>
-          <PermitSummary p={permit} permitNo={row.permit_no} issuedAt={row.issued_at} departmentName={deptName} riskEval={riskEval} />
+          <PermitSummary p={permit} permitNo={row.permit_no ?? "(상신 전)"} issuedAt={row.issued_at} departmentName={deptName} riskEval={riskEval} />
           {status === "issued" || status === "completed" ? (
             <div id="field" className="scroll-mt-20 space-y-2">
               <h2 className="text-lg font-bold text-brand-950">

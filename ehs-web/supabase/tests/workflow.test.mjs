@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql", "0042_skip_resolved_mail.sql", "0043_mail_off_expire_now.sql", "0044_permit_no_dept.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -291,11 +291,12 @@ await as(U.C); await expectError("협력업체 허가서 작성 차단", `select
 await as(U.I);
 const pId = (await one(`select save_permit(null,$1) id`, [pData()])).id;
 const pr = await one(`select permit_no, supp, checks from permits where id=$1`, [pId]);
-ok(/^CF430-\d{8}-001$/.test(pr.permit_no) && pr.supp.join() === "confined" && pr.checks.docs_0_ok === undefined, `저장 → ${pr.permit_no}, 잘못된 보충작업·○확인 키 제거`);
+ok(pr.permit_no === null && pr.supp.join() === "confined" && pr.checks.docs_0_ok === undefined, "저장 → 번호는 아직 없음(상신 때), 잘못된 보충작업·○확인 키 제거");
 const pLine = line([["담당", "담당", U.I], ["검토", "검토(EHS부서장)", U.A], ["승인", "승인(해당부서장)", U.H]]);
 await expectError("B등급 입회자 누락 차단", `select submit_permit($1,$2)`, [pId, pLine], "입회자");
 await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ org: "EHS부서", name: "관리자", phone: "" }] })]);
 await expectError("위험성평가 미연결·번호 없음 차단", `select submit_permit($1,$2)`, [pId, pLine], "위험성평가서를 불러오거나");
+ok((await one(`select permit_no from permits where id=$1`, [pId])).permit_no === null, "상신이 막히면 번호도 붙지 않음");
 // 결재 완료 전 JSA 연결 차단
 const draftJsa = (await one(`select save_jsa(null,$1) id`, [jsaData()])).id;
 await db.query(`select save_permit($1,$2)`, [pId, pData({ witnesses: [{ name: "관리자" }], risk_eval_id: draftJsa })]);
@@ -309,6 +310,14 @@ await expectError("현장 기록은 발급 전 불가", `select save_permit_fiel
 // 수신참조(품질직원) · 시행자(작업자1) 를 함께 넘김
 const pLineCc = JSON.stringify([...JSON.parse(pLine), { step_kind: "참조", label: "수신참조", approver_id: U.Q }, { step_kind: "시행", label: "시행", approver_id: U.W1 }]);
 const pAp = (await one(`select submit_permit($1,$2) id`, [pId, pLineCc])).id;
+{
+  // 허가번호 : 년도-신청자 부서/파트-순번 (0044)
+  const yr = (await one(`select to_char(kst_today(), 'YYYY') y`)).y;
+  ok((await one(`select permit_no from permits where id=$1`, [pId])).permit_no === `${yr}-EHS부서-001`, `상신 → 허가번호 ${yr}-EHS부서-001`);
+  const n1 = (await one(`select _next_permit_no($1) n`, [U.I])).n;
+  const n2 = (await one(`select _next_permit_no($1) n`, [U.W1])).n;
+  ok(n1 === `${yr}-EHS부서-002` && n2 === `${yr}-생산팀-001`, "같은 부서는 이어서 002 · 다른 부서는 001 부터");
+}
 const cc = await one(`select cc_ids, exec_ids, (select count(*)::int from approval_steps where approval_id=$1) n from approvals where id=$1`, [pAp]);
 ok(cc.cc_ids.length === 1 && cc.exec_ids.length === 1 && cc.n === 3, "수신참조·시행자는 결재 단계가 아니라 목록으로 저장");
 await expectError("결재 중 신청 내용 수정 차단", `select save_permit($1,$2)`, [pId, pData()], "수정할 수 없습니다");

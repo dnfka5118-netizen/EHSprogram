@@ -98,7 +98,7 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
           <div className="min-w-0 space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
               <F label="허가번호">
-                <input className={`${INPUT} bg-gray-50 font-mono`} value={permitNo ?? "저장 시 자동 발급"} readOnly />
+                <input className={`${INPUT} bg-gray-50 font-mono`} value={permitNo ?? "상신 시 자동 발급"} readOnly />
               </F>
               <F label="해당부서" required hint="(승인 부서장)">
                 <select className={INPUT} value={p.department_id} onChange={(e) => changeDept(e.target.value)}>
