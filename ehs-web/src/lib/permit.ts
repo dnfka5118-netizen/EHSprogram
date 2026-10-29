@@ -1,14 +1,19 @@
 // 안전작업허가서 (SYMC-F430 R12 · CF430-01 R04) 공통 정의 — 원본 디지털 양식과 같은 항목·문구
 export type SuppKey = "confined" | "power" | "excavation" | "radiation" | "height" | "heavy";
 
-export const SUPP_TYPES: { key: SuppKey; value: string; label: string }[] = [
-  { key: "confined", value: "밀폐공간", label: "밀폐공간 출입작업" },
-  { key: "power", value: "정전", label: "정전작업" },
-  { key: "excavation", value: "굴착", label: "굴착작업" },
-  { key: "radiation", value: "방사선", label: "방사선사용작업" },
-  { key: "height", value: "고소", label: "고소작업" },
-  { key: "heavy", value: "중장비", label: "중장비사용작업" },
+// desc : 안전작업허가규정 상 정의 (작업명 옆 ? 에 표시)
+export const SUPP_TYPES: { key: SuppKey; value: string; label: string; desc: string }[] = [
+  { key: "confined", value: "밀폐공간", label: "밀폐공간 출입작업", desc: "질식, 중독 등 위험 우려 장소에서의 작업" },
+  { key: "power", value: "정전", label: "정전작업", desc: "감전의 위험이 있다고 판단되는 작업" },
+  { key: "excavation", value: "굴착", label: "굴착작업", desc: "깊이 30cm 이상 지반을 파는 작업" },
+  { key: "radiation", value: "방사선", label: "방사선사용작업", desc: "방사선을 사용하는 작업" },
+  { key: "height", value: "고소", label: "고소작업", desc: "2m 이상의 높이에서 하는 작업, 2m 미만이라도 위험물의 상부에서 하는 작업" },
+  { key: "heavy", value: "중장비", label: "중장비사용작업", desc: "중장비를 사용하는 작업" },
 ];
+export const WORK_TYPE_DESC: Record<"일반위험" | "화기", string> = {
+  일반위험: "화기작업에 해당하지 않는 위험작업",
+  화기: "화염, 스파크 등을 발생시키는 작업",
+};
 // EHS 확인이 필요한 보충작업
 export const EHS_SUPP: SuppKey[] = ["power", "excavation", "radiation", "height", "heavy"];
 

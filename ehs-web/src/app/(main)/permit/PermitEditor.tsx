@@ -6,12 +6,12 @@ import { savePermit, submitPermit } from "./actions";
 import { ApprovalLineEditor, finalizeLine } from "@/components/approval/ApprovalLineEditor";
 import { Button, FormMessage } from "@/components/ui";
 import { resolveLine, type DeptHead, type LineStep, type TemplateStep } from "@/lib/approval-line";
-import { GRADE_TABLE, SUPP_TYPES, emptyPerson, outsideHours, type PermitApply, type Person3 } from "@/lib/permit";
+import { GRADE_TABLE, SUPP_TYPES, WORK_TYPE_DESC, emptyPerson, outsideHours, type PermitApply, type Person3 } from "@/lib/permit";
 import { riskColor, riskTextColor } from "@/lib/jsa";
 import { fmtDate } from "@/lib/format";
 import type { ActionState } from "@/lib/types";
 import type { Person } from "@/lib/approval";
-import { CheckList, F, Hint, INPUT, Panel, Pill, Sub } from "./ui";
+import { CheckList, F, HelpTip, Hint, INPUT, Panel, Pill, Sub } from "./ui";
 
 export type JsaOption = { id: string; eval_no: string; eval_date: string; department_name: string | null; work_name: string; max_risk: number };
 
@@ -112,14 +112,17 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
       {/* 01 */}
       <Panel num="01" title="작업 기본정보">
         <F label="작업 종류" required>
-          <Radio value={p.work_type} options={["일반위험", "화기"]} labels={["일반위험작업", "화기작업"]} onChange={(v) => set({ work_type: v as PermitApply["work_type"] })} />
+          <Radio value={p.work_type} options={["일반위험", "화기"]} labels={["일반위험작업", "화기작업"]} tips={[WORK_TYPE_DESC.일반위험, WORK_TYPE_DESC.화기]} onChange={(v) => set({ work_type: v as PermitApply["work_type"] })} />
         </F>
         <Sub title="보충작업허가 (해당 시 모두 선택 — 아래에 관련 안전조치 항목이 추가로 표시됩니다)">
           <div className="flex flex-wrap gap-2">
             {SUPP_TYPES.map((s) => (
-              <Pill key={s.key} checked={has(s.key)} onChange={(v) => set({ supp: v ? [...p.supp, s.key] : p.supp.filter((x) => x !== s.key) })}>
-                {s.label}
-              </Pill>
+              <span key={s.key} className="inline-flex items-center gap-1">
+                <Pill checked={has(s.key)} onChange={(v) => set({ supp: v ? [...p.supp, s.key] : p.supp.filter((x) => x !== s.key) })}>
+                  {s.label}
+                </Pill>
+                <HelpTip text={s.desc} />
+              </span>
             ))}
           </div>
         </Sub>
@@ -342,18 +345,20 @@ export function PermitEditor({ id, permitNo, initial, departments, template, peo
   );
 }
 
-function Radio({ value, options, labels, onChange }: { value: string; options: string[]; labels?: string[]; onChange: (v: string) => void }) {
+function Radio({ value, options, labels, tips, onChange }: { value: string; options: string[]; labels?: string[]; tips?: string[]; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((o, i) => (
-        <button
-          key={o}
-          type="button"
-          onClick={() => onChange(o)}
-          className={`rounded-lg border px-3 py-1.5 text-sm ${value === o ? "border-brand-600 bg-brand-50 font-semibold text-brand-800" : "border-gray-300 bg-gray-50"}`}
-        >
-          {labels?.[i] ?? o}
-        </button>
+        <span key={o} className="inline-flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onChange(o)}
+            className={`rounded-lg border px-3 py-1.5 text-sm ${value === o ? "border-brand-600 bg-brand-50 font-semibold text-brand-800" : "border-gray-300 bg-gray-50"}`}
+          >
+            {labels?.[i] ?? o}
+          </button>
+          {tips?.[i] && <HelpTip text={tips[i]} />}
+        </span>
       ))}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CHK, type ChkGroup } from "@/lib/permit";
 
 export const INPUT = "w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 focus:border-brand-600 focus:ring-1 focus:ring-brand-600 focus:outline-none disabled:bg-gray-50 disabled:text-gray-600";
@@ -47,6 +47,54 @@ export function F({ label, required, hint, children }: { label: string; required
 
 export function Hint({ children }: { children: ReactNode }) {
   return <p className="text-xs leading-relaxed text-gray-500">{children}</p>;
+}
+
+// 작업명 옆 ? : 마우스를 올리거나(PC) 누르면(휴대폰) 정의가 위에 뜸 · 화면 밖으로 나가지 않게 위치를 맞춤
+export function HelpTip({ text }: { text: string }) {
+  const [pos, setPos] = useState<{ left: number; top: number; width: number } | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+  const open = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r) return;
+    const w = Math.min(224, window.innerWidth - 16);
+    setPos({ left: Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8)), top: r.top - 6, width: w });
+  };
+  const close = () => setPos(null);
+  useEffect(() => {
+    if (!pos) return;
+    const hide = () => setPos(null);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
+    return () => {
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("resize", hide);
+    };
+  }, [pos]);
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={`설명 : ${text}`}
+        onMouseEnter={open}
+        onMouseLeave={close}
+        onClick={() => (pos ? close() : open())}
+        onBlur={close}
+        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] leading-none font-bold text-white ${pos ? "bg-brand-600" : "bg-gray-400 hover:bg-brand-600"}`}
+      >
+        ?
+      </button>
+      {pos && (
+        <span
+          role="tooltip"
+          style={{ left: pos.left, top: pos.top, width: pos.width }}
+          className="pointer-events-none fixed z-50 -translate-y-full rounded-md bg-gray-900 px-2.5 py-1.5 text-xs leading-snug text-white shadow-lg"
+        >
+          {text}
+        </span>
+      )}
+    </>
+  );
 }
 
 export function Pill({ checked, onChange, children, disabled, tone, className = "" }: { checked: boolean; onChange?: (v: boolean) => void; children: ReactNode; disabled?: boolean; tone?: "ok"; className?: string }) {

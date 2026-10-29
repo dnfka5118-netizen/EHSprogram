@@ -2,7 +2,7 @@
 //
 //   1) npx next build && npx next start -p 3457      (다른 창에서 켜 둠)
 //   2) node scripts/mobile-check.mjs / /insp/ceo /permit/new#line
-//        경로 뒤 #menu = 메뉴 열기, #open = 접힌 칸(details) 모두 펼치기, #line = 허가서 상신 → 결재라인 지정 창 열기,
+//        경로 뒤 #menu = 메뉴 열기, #open = 접힌 칸(details) 모두 펼치기, #line = 허가서 상신 → 결재라인 지정 창 열기, #tip = 허가서 작업 종류 ? 설명 누르기 (TIP=번호),
 //        #place = 점검 등록에서 장소(PLACE) 고르고 자동 선택된 조치 부서 확인, #review = 유형 정리 묶음 계산 기다림, #type = 점검 등록에 문제점을 적어 유형 추천 확인 (TEXT 환경변수로 문구 변경)
 //      W=360 node scripts/mobile-check.mjs /insp/ceo   ← 폭 바꾸기
 //
@@ -61,6 +61,14 @@ try {
     await page.goto(BASE + path, { waitUntil: "networkidle2", timeout: 60000 });
     if (action === "open") await page.evaluate(() => document.querySelectorAll("details").forEach((d) => (d.open = true)));
     if (action === "menu") await page.click('button[aria-label="메뉴 열기"]');
+    if (action === "tip") {
+      // 작업 종류 ? 설명 : 오른쪽 끝 ? (고소작업) 을 눌러 말풍선이 화면 안에 뜨는지
+      const tips = await page.$$('button[aria-label^="설명 :"]');
+      const tip = tips[process.env.TIP ? Number(process.env.TIP) : tips.length - 1];
+      await tip.evaluate((b) => b.scrollIntoView({ block: "center" }));
+      await tip.click();
+      await new Promise((r) => setTimeout(r, 200));
+    }
     if (action === "line") {
       await clickText(page, "상신하기");
       await new Promise((r) => setTimeout(r, 800));
