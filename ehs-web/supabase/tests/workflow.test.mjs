@@ -24,7 +24,7 @@ await db.exec(`
   alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 `);
 
-for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql"]) {
+for (const file of ["0001_init.sql", "0002_seed.sql", "0003_notifications.sql", "0004_approvals.sql", "0005_jsa.sql", "0006_permit.sql", "0007_favorites.sql", "0008_inspector.sql", "0009_inspection_with_findings.sql", "0010_register_finding.sql", "0011_finding_examples.sql", "0012_self_assign.sql", "0013_org_hierarchy.sql", "0014_department_roles.sql", "0015_register_finding_on.sql", "0016_approval_cc_exec.sql", "0017_reminders_kpi.sql", "0018_supervisor_daily.sql", "0019_daily_substitute_backfill.sql", "0020_edit_finding.sql", "0021_daily_points.sql", "0022_chem_inspection.sql", "0023_chem_substitute.sql", "0024_rename_risk_adhoc.sql", "0025_approval_guard_permit_merge.sql", "0026_example_type_review.sql", "0027_location_default_dept.sql", "0028_suggestions.sql", "0029_daily_dept_report.sql", "0030_daily_team_head.sql", "0031_daily_overview_perm.sql", "0032_mail_digest.sql", "0033_report_by_dept_member.sql", "0034_notify_settings.sql", "0035_audit_log.sql", "0036_approver_parts.sql", "0037_part_approvers.sql", "0038_user_responsibilities.sql", "0039_report_photo_optional.sql", "0040_perf_indexes.sql", "0041_comment_edit.sql"]) {
   await db.exec(readFileSync(new URL(file, MIG), "utf8"));
 }
 
@@ -145,6 +145,16 @@ console.log("\n[삭제 / 코멘트]");
 await as(U.I); await expectError("지정 후 등록자 삭제 차단", `select delete_finding($1)`, [fid], "삭제할 수 없습니다");
 await as(U.C); await db.query(`select add_comment($1,'확인했습니다',false)`, [fid]);
 ok((await one(`select count(*)::int c from finding_comments where finding_id=$1`, [fid])).c === 1, "열람 권한자 코멘트 등록");
+const cm = (await one(`select id from finding_comments where finding_id=$1`, [fid])).id;
+await as(U.I); await expectError("남의 코멘트 수정 차단", `select edit_comment($1,'바꿈')`, [cm], "본인");
+await as(U.C); await db.query(`select edit_comment($1,'확인했습니다 (수정)')`, [cm]);
+ok((await one(`select body, updated_at is not null u from finding_comments where id=$1`, [cm])).u, "쓴 사람 코멘트 수정 · 수정 시각");
+ok((await one(`select detail from finding_events where finding_id=$1 and action='코멘트 수정'`, [fid])).detail.includes("확인했습니다"), "수정 전 내용이 처리 이력에 남음");
+await as(U.I); await expectError("남의 코멘트 삭제 차단", `select delete_comment($1)`, [cm], "본인");
+await as(U.A); await db.query(`select delete_comment($1)`, [cm]);
+ok((await one(`select count(*)::int c from finding_comments where finding_id=$1`, [fid])).c === 0, "관리자 코멘트 삭제");
+ok((await one(`select count(*)::int c from finding_events where finding_id=$1 and action='코멘트 삭제'`, [fid])).c === 1, "삭제 이력");
+await as(U.C); await db.query(`select add_comment($1,'확인했습니다',false)`, [fid]);
 const events = (await db.query(`select action from finding_events where finding_id=$1 order by created_at`, [fid])).rows.map((r) => r.action);
 console.log("  이력:", events.join(" → "));
 

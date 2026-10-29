@@ -99,6 +99,15 @@ export async function addComment(_prev: ActionState, formData: FormData): Promis
   return res;
 }
 
+// 지시사항·코멘트 수정 / 삭제 : 쓴 사람 본인 · 관리자 (0041)
+export async function editComment(findingId: string, commentId: string, body: string) {
+  return run("edit_comment", { p_comment: commentId, p_body: body }, findingId, "수정되었습니다.");
+}
+
+export async function deleteComment(findingId: string, commentId: string) {
+  return run("delete_comment", { p_comment: commentId }, findingId, "삭제되었습니다.");
+}
+
 // 사진 회전 저장 : 브라우저에서 돌린 원본·썸네일로 같은 경로를 덮어씀
 //   권한 : 관리자 · 등록자 · 조치담당자 · 조치 요청 부서 지정자/승인자 (저장소 쓰기는 확인 후 서비스 키로)
 export async function rotatePhoto(fd: FormData): Promise<ActionState> {

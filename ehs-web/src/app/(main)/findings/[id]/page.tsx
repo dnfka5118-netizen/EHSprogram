@@ -12,6 +12,7 @@ import { PlanForm } from "./PlanForm";
 import { ReportForm } from "./ReportForm";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { CommentForm } from "./CommentForm";
+import { CommentItem } from "./CommentItem";
 import { DeleteButton } from "./DeleteButton";
 import { SelfAssignButton } from "./SelfAssignButton";
 import { EditFindingButton } from "@/components/EditFindingButton";
@@ -233,13 +234,15 @@ export default async function FindingDetailPage({ params }: PageProps<"/findings
         {(commentRows ?? []).length > 0 && (
           <ul className="mb-4 space-y-2">
             {(commentRows ?? []).map((c) => (
-              <li key={c.id} className={`rounded-md p-3 text-sm ${c.is_directive ? "border border-red-200 bg-red-50" : "bg-gray-50"}`}>
-                <p className="mb-1 text-xs text-gray-500">
-                  {c.is_directive && <span className="mr-1 rounded bg-red-600 px-1.5 py-0.5 text-white">지시</span>}
-                  {(c as unknown as Named).profiles?.name} · {fmtDateTime(c.created_at)}
-                </p>
-                <p className="whitespace-pre-wrap text-gray-800">{c.body}</p>
-              </li>
+              <CommentItem
+                key={c.id}
+                findingId={f.id}
+                comment={c}
+                author={(c as unknown as Named).profiles?.name ?? ""}
+                when={fmtDateTime(c.created_at)}
+                editedWhen={c.updated_at ? fmtDateTime(c.updated_at) : null}
+                canEdit={isAdmin || c.user_id === profile.id}
+              />
             ))}
           </ul>
         )}
