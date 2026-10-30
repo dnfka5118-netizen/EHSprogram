@@ -1,8 +1,9 @@
 // AI 위험성평가 작성 (서버) : 입력(작업 설명 · 조건 · 장비 · 물질 또는 절차서) → 참고 자료 검색 → 초안
 //   /risk/ai (미리보기) 와 /risk/adhoc/new?ai=1 (새 JSA 채우기) 가 같은 계산을 씀
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildNameDraft, buildSopDraft, sopQuery, type Draft, type RiskRef } from "./risk-ref";
-import { conditionByKey, detectConditions } from "./risk-rules";
+import { buildNameDraft, buildSopDraft, sopQuery, type Draft, type Procedure, type RiskRef } from "./risk-ref";
+import { collectMeasures, sectionMeasures } from "./risk-measures";
+import { conditionByKey, detectConditions, guideCodesFor, PROCEDURES } from "./risk-rules";
 import type { SopStep } from "./sop";
 
 type Sp = Record<string, string | string[] | undefined>;
@@ -54,10 +55,36 @@ export async function loadAiDraft(supabase: SupabaseClient, i: AiInput): Promise
   const skelQ = sop ? sopQuery(sop.title, sop.process_name, sop.steps) : `${i.q} ${i.eq}`;
   const fullQ = sop ? `${skelQ} ${condWords}` : `${i.q} ${i.eq} ${i.mat} ${condWords}`;
   const search = (q: string, source: string, limit: number) => supabase.rpc("search_risk_refs", { p_q: q, p_source: source, p_limit: limit });
-  const res = await Promise.all([search(skelQ, "jsa", 15), search(skelQ, "ext", 10), search(fullQ, "sif", 8), search(fullQ, "kosha", 40)]);
-  const error = res.find((r) => r.error)?.error?.message;
+  // 장비·물질·조건과 연결된 KOSHA 지침은 장·절 전체를 가져와 대책 문장을 뽑음
+  const linked = guideCodesFor(context, conds.all);
+  const [res, linkedRes] = await Promise.all([
+    Promise.all([search(skelQ, "jsa", 15), search(skelQ, "ext", 10), search(fullQ, "sif", 8), search(fullQ, "kosha", 40)]),
+    linked.length
+      ? supabase.from("risk_refs").select("id, source, title, area, group_name, year, meta, steps").eq("source", "kosha").in("meta->>code", linked).order("id").limit(400)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const error = [...res, linkedRes].find((r) => r.error)?.error?.message;
   const [jsa, ext, sif, kosha] = res.map((r) => (r.data ?? []) as RiskRef[]);
+  const linkedRows = ((linkedRes.data ?? []) as Omit<RiskRef, "score">[]).map((r) => ({ ...r, score: 0 }));
   const refs = { jsa, ext, sif };
-  const draft = sop ? buildSopDraft(sop.steps, refs, conds.all, context) : buildNameDraft(i.q, refs, conds.all, context);
+
+  // 지침에 작업 순서가 있는 작업(이동식 크레인 · 지게차 · 드럼 세정) : 신규 작업일 때 그 순서를 단계로
+  const p = sop ? null : PROCEDURES.find((x) => x.detect.test(context));
+  const proc: Procedure | null = p
+    ? { code: p.code, covers: p.covers, steps: p.steps.map((s) => ({ name: s.name, main: s.main, measures: sectionMeasures(linkedRows, p.code, s.section, 4) })) }
+    : null;
+  const draft = sop ? buildSopDraft(sop.steps, refs, conds.all, context) : buildNameDraft(i.q, refs, conds.all, context, proc);
+
+  // 감소대책 모으기 : 과거 단계(뼈대 제외) · SIF · KOSHA (연결 지침 + 검색 상위)
+  const skeletonId = draft.base?.id;
+  const seen = new Set(linkedRows.map((r) => r.id));
+  collectMeasures(draft.steps, {
+    past: [...jsa.slice(0, 6), ...ext.slice(0, 4)].filter((r) => r.id !== skeletonId),
+    sif,
+    kosha: [...linkedRows, ...kosha.filter((r) => !seen.has(r.id))],
+    linked,
+    context,
+    main: sop ? undefined : i.q.split("\n")[0].slice(0, 200),
+  });
   return { draft, refs: { jsa, ext, sif, kosha }, conds: { picked: conds.picked, auto: conds.auto }, sop, error };
 }

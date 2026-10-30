@@ -266,3 +266,77 @@ export function detectConditions(text: string, chosen: string[]) {
   const auto = WORK_CONDITIONS.filter((c) => !picked.has(c.key) && c.detect.test(text)).map((c) => c.key);
   return { picked: [...picked], auto, all: [...picked, ...auto] };
 }
+
+// ---------------------------------------------------------------- 장비·물질 → KOSHA 지침 (대책 문장을 뽑을 지침)
+//   anchor : 이 낱말이 있는 단계에 그 지침 대책을 우선 붙임
+export const EQUIP_GUIDES: { re: RegExp; codes: string[] }[] = [
+  { re: /드릴|천공|타공|코어|앵커/, codes: ["B-M-38-2026"] },
+  { re: /그라인더|연삭|절단기|컷팅|커팅/, codes: ["B-M-39-2026"] },
+  { re: /사다리/, codes: ["A-G-4-2025"] },
+  { re: /고소작업대|렌탈|시저|붐리프트/, codes: ["X-44-2016"] },
+  { re: /이동식\s*크레인|카고|크레인\s*차|기중기/, codes: ["B-M-8-2025", "B-M-12-2025"] },
+  { re: /천장\s*크레인|호이스트|크레인/, codes: ["B-M-34-2026", "B-M-12-2025"] },
+  { re: /지게차/, codes: ["B-M-11-2025"] },
+  { re: /슬링|줄걸이|와이어/, codes: ["A-G-13-2026", "G-133-2020"] },
+  { re: /용접|용단|토치|산소\s*절단/, codes: ["A-G-14-2026", "A-G-11-2025", "E-76-2013"] },
+  { re: /스패너|렌치|해머|망치|수공구|드라이버/, codes: ["G-44-2011"] },
+  { re: /압축\s*공기|에어\s*건|에어\s*호스/, codes: ["G-17-2017"] },
+  { re: /질소|퍼지|purge|불활성/i, codes: ["C-C-85-2026"] },
+  { re: /맹판|블라인드|blind/i, codes: ["D-56-2016"] },
+  { re: /탱크로리|하역|출하/, codes: ["D-55-2016", "G-78-2021"] },
+  { re: /과산화수소|H2O2/i, codes: ["D-53-2013"] },
+  { re: /질산|산화성/, codes: ["C-C-28-2026"] },
+  { re: /드럼|소형\s*탱크|용기\s*세정/, codes: ["P-3-2012", "G-1-2023"] },
+  { re: /도장|페인트|스프레이/, codes: ["B-E-17-2026"] },
+];
+
+// 지침에 작업 순서가 정리된 작업 : 신규 작업(비슷한 우리 JSA 없음)일 때 이 순서를 단계로
+//   section : 단계마다 대책 문장을 뽑을 지침 장·절 (meta.section 글)
+export const PROCEDURES: { key: string; detect: RegExp; code: string; covers: string[]; steps: { name: string; section: RegExp; main?: boolean }[] }[] = [
+  {
+    key: "mobile-crane",
+    detect: /이동식\s*크레인|카고\s*크레인|크레인\s*차|기중기/,
+    code: "B-M-8-2025",
+    covers: ["heavy"],
+    steps: [
+      { name: "장비 반입 및 설치 (지반 확인 · 아웃트리거 전개)", section: /반입|설치/ },
+      { name: "작업 전 확인 (줄걸이 · 신호 · 작업반경 통제)", section: /작업\s*전|선정/ },
+      { name: "인양 작업", section: /작업\s*실시|운전원|작업\s*중/, main: true },
+      { name: "작업 종료 (훅 · 붐 정리 · 장비 철수)", section: /종료/ },
+    ],
+  },
+  {
+    key: "forklift",
+    detect: /지게차/,
+    code: "B-M-11-2025",
+    covers: ["heavy"],
+    steps: [
+      { name: "작업 전 확인 (지게차 점검 · 운행경로 확보)", section: /작업\s*전|안전점검|운행경로/ },
+      { name: "화물 적재 및 운반", section: /지면|주행|언덕/, main: true },
+      { name: "화물 내리기 및 적치", section: /적치|내리기/ },
+      { name: "주차 및 작업 종료", section: /주차|야간/ },
+    ],
+  },
+  {
+    key: "drum-clean",
+    detect: /드럼|소형\s*탱크|용기\s*세정/,
+    code: "P-3-2012",
+    covers: [],
+    steps: [
+      { name: "세정 전 안전조치 (격리 · 접지 · 보호구)", section: /안전조치|주의사항/ },
+      { name: "인화성 증기 제거", section: /증기\s*제거/ },
+      { name: "용기 내부 불활성화", section: /불활성/ },
+      { name: "액체 · 고체 잔유물 제거", section: /잔유물/, main: true },
+      { name: "세정 확인", section: /확인/ },
+    ],
+  },
+];
+
+// 대책 문장을 뽑을 지침 번호 : 장비·물질 낱말 + 작업 조건의 근거 지침
+export function guideCodesFor(text: string, conds: string[]) {
+  const codes = new Set<string>();
+  for (const g of EQUIP_GUIDES) if (g.re.test(text)) g.codes.forEach((c) => codes.add(c));
+  for (const k of conds) for (const m of conditionByKey(k)?.measures ?? []) if (m.ref && (!m.when || m.when.test(text))) codes.add(m.ref.replace(/^KOSHA\s*/, ""));
+  for (const p of PROCEDURES) if (p.detect.test(text)) codes.add(p.code);
+  return [...codes];
+}

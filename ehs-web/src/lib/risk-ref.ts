@@ -255,30 +255,37 @@ const plainStep = (content: string, basic?: string): DraftStep => ({
   from: null,
   basic,
 });
-function basicSteps(desc: string, conds: string[]): DraftStep[] {
+function basicSteps(desc: string, conds: string[], proc: Procedure | null): DraftStep[] {
   // 작업 전 안전조치 순서 : 전원·에너지 차단 → 약품 배출 → 밀폐 환기·측정 → 고소 → 굴착 → 인양 → 화기
   const ORDER = ["power", "energy", "chem", "confined", "height", "excavation", "heavy", "hot"];
-  const rules = WORK_CONDITIONS.filter((c) => conds.includes(c.key) && c.step)
+  const work = desc.split("\n")[0].slice(0, 200);
+  // 지침 순서가 있으면 본 작업 자리에 그 순서 (본 작업 단계 이름에 작업 설명을 붙임) · 그 순서가 다루는 조건 단계는 뺌
+  const main: DraftStep[] = proc ? proc.steps.map((s) => ({ ...plainStep(s.main ? `${s.name} — ${work}` : s.name), measures: [...s.measures] })) : [plainStep(work)];
+  const rules = WORK_CONDITIONS.filter((c) => conds.includes(c.key) && c.step && !proc?.covers.includes(c.key))
     .sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key))
     .map((c) => ruleToStep(c.step!, c.key));
   return [
     plainStep("작업 준비 (TBM · 안전작업허가 · 보호구 착용 · 작업구역 확보)", "prep"),
     ...rules,
-    plainStep(desc.split("\n")[0].slice(0, 200)),
+    ...main,
     plainStep("작업 종료 및 정리정돈 (잔재물 제거 · 설비 원상복구 확인)", "end"),
   ];
 }
 export type DraftRefs = { jsa: RiskRef[]; ext: RiskRef[]; sif: RiskRef[] };
 
 // 작업 설명으로 (절차서 없음) : 단계는 우리 JSA 그대로 (없으면 타사 → "신규 작업")
-export function buildNameDraft(desc: string, refs: DraftRefs, conds: string[], context: string): Draft {
+// 지침의 작업 순서 (신규 작업일 때 본 작업 대신) : 단계 이름 + 그 장·절의 대책
+export type ProcedureStep = { name: string; main?: boolean; measures: DraftMeasure[] };
+export type Procedure = { covers: string[]; code: string; steps: ProcedureStep[] };
+
+export function buildNameDraft(desc: string, refs: DraftRefs, conds: string[], context: string, proc: Procedure | null = null): Draft {
   const top = refs.jsa[0];
   // 비슷한 작업 = 점수가 높거나, 과거 작업명의 글자가 작업 설명에 대부분 들어 있음
   const same = top && (top.score >= NEW_SCORE || overlap(grams(top.title), grams(desc)) >= 0.6);
-  // 신규 작업 : 타사 JSA 가 충분히 비슷하면 그것, 아니면 기본 단계 (작업 준비 → 조건별 안전조치 단계 → 본 작업 → 정리)
+  // 신규 작업 : 타사 JSA 가 충분히 비슷하면 그것, 아니면 기본 단계 (작업 준비 → 조건별 안전조치 단계 → 본 작업(지침 순서가 있으면 그 순서) → 정리)
   const ext = refs.ext[0];
   const skeleton = same ? top : ext && (ext.score >= NEW_SCORE || overlap(grams(ext.title), grams(desc)) >= 0.6) ? ext : null;
-  const steps = skeleton ? skeleton.steps.map((s) => toDraftStep(skeleton.source, s)) : basicSteps(desc, conds);
+  const steps = skeleton ? skeleton.steps.map((s) => toDraftStep(skeleton.source, s)) : basicSteps(desc, conds, proc);
   supplementHazards(steps, [...refs.jsa.filter((r) => r !== skeleton).slice(0, 5), ...refs.ext.filter((r) => r !== skeleton).slice(0, 3)]);
   applyConditions(steps, conds, `${context} ${steps.map(stepText).join(" ")}`);
   const m = (k: string) => String(skeleton?.meta[k] ?? "");
